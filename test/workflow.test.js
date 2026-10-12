@@ -139,9 +139,9 @@ test('existing v1 database is backed up and migrated without losing customer rec
   });
   try {
     await f.setup(); let state = await f.admin('state'); assert.equal(state.accounts[0].note, 'Existing note'); assert.equal(state.members[0].email, 'legacyguest@example.com'); assert.equal(state.members[0].expiry_status, 'unknown'); assert.equal(state.families[0].service, 'youtube'); assert.equal(state.jobs.length, 1);
-    const backups = readdirSync(f.dir).filter(n => n.startsWith('before-v3-')); assert.equal(backups.length, 1);
+    const backups = readdirSync(f.dir).filter(n => n.startsWith('before-v4-')); assert.equal(backups.length, 1);
     const backup = new DatabaseSync(path.join(f.dir, backups[0])); assert.equal(backup.prepare('SELECT email FROM members').get().email, 'legacyguest@example.com'); assert.equal(backup.prepare('PRAGMA user_version').get().user_version, 0); backup.close();
-    await f.stop(); await f.start(); state = await f.admin('state'); assert.equal(state.members.length, 1); assert.equal(readdirSync(f.dir).filter(n => n.startsWith('before-v3-')).length, 1);
+    await f.stop(); await f.start(); state = await f.admin('state'); assert.equal(state.members.length, 1); assert.equal(readdirSync(f.dir).filter(n => n.startsWith('before-v4-')).length, 1);
   } finally { await f.close(); }
 });
 
@@ -248,7 +248,35 @@ test('upgrading v2 retains users, active sessions and old customer records while
     await f.stop();
     const old=new DatabaseSync(path.join(f.dir,'family.sqlite')); old.exec('ALTER TABLE members DROP COLUMN plan_months; PRAGMA user_version=2'); old.close();
     await f.start(); const state=await a('state'); assert.equal(state.user.username,'owner'); assert.equal(state.members[0].email,'guest@example.com'); assert.equal(state.members[0].contact,'Existing contact'); assert.equal(state.members[0].payment_status,'paid'); assert.equal(state.members[0].plan_months,0);
-    const backups=readdirSync(f.dir).filter(n=>n.startsWith('before-v3-')); assert.equal(backups.length,1);
+    const backups=readdirSync(f.dir).filter(n=>n.startsWith('before-v4-')); assert.equal(backups.length,1);
     const saved=new DatabaseSync(path.join(f.dir,backups[0])); assert.equal(saved.prepare('PRAGMA user_version').get().user_version,2); assert.equal(saved.prepare('SELECT username FROM users').get().username,'owner'); saved.close();
+  } finally { await f.close(); }
+});
+
+test('renewal payments are distinct from the current period; applying a paid renewal records history once', async () => {
+  const f=await fixture();
+  try {
+    await f.setup(); const a=f.admin;
+    const account=await a('accounts','POST',{email:'manager@example.com'},201); const family=await a('families','POST',{name:'Family',manager_id:account.id},201);
+    const member=await a('members','POST',{family_id:family.id,email:'guest@example.com',payment_status:'paid',amount:100000,plan_months:1,expires_at:'2026-11-01'},201);
+    const endpoint='members/'+member.id+'/renewal';
+    await a(endpoint,'PATCH',{revision:0,status:'awaiting_payment',amount:0,paid_at:'',note:'Nhắc qua Zalo'});
+    let m=(await a('state')).members[0]; assert.equal(m.payment_status,'paid'); assert.equal(m.expires_at,'2026-11-01'); assert.equal(m.renewal_status,'awaiting_payment'); assert.equal((await a('state')).reminders.renewal_waiting,1);
+    await a(endpoint+'/apply','POST',{revision:m.renewal_revision,expires_at:'2026-12-01',plan_months:1},400);
+    await a(endpoint,'PATCH',{revision:m.renewal_revision,status:'paid',amount:0,paid_at:'2026-01-01'},400);
+    await a(endpoint,'PATCH',{revision:m.renewal_revision,status:'paid',amount:150000,paid_at:'2099-01-01'},400);
+    await a(endpoint,'PATCH',{revision:m.renewal_revision,status:'partial',amount:50000,paid_at:'2026-01-01',note:'Trả một phần'});
+    m=(await a('state')).members[0]; assert.equal(m.renewal_status,'partial'); assert.equal(m.expires_at,'2026-11-01');
+    await a(endpoint,'PATCH',{revision:m.renewal_revision,status:'paid',amount:150000,paid_at:'2026-01-02',note:'Đã nhận đủ'});
+    const stale=m.renewal_revision; m=(await a('state')).members[0]; assert.equal((await a('state')).reminders.renewal_paid_pending,1);
+    await a(endpoint,'PATCH',{revision:stale,status:'declined',amount:0,paid_at:''},409);
+    await a(endpoint+'/apply','POST',{revision:m.renewal_revision,expires_at:'2026-11-01',plan_months:1},400);
+    const payload={revision:m.renewal_revision,expires_at:'2027-02-01',plan_months:3};
+    await a(endpoint+'/apply','POST',payload); await a(endpoint+'/apply','POST',payload,409);
+    const history=(await a('members/'+member.id+'/renewal-history')).history; assert.equal(history.length,1); assert.equal(history[0].old_expires_at,'2026-11-01'); assert.equal(history[0].new_expires_at,'2027-02-01'); assert.equal(history[0].amount,150000); assert.equal(history[0].created_by,'owner');
+    m=(await a('state')).members[0]; assert.equal(m.expires_at,'2027-02-01'); assert.equal(m.plan_months,3); assert.equal(m.payment_status,'paid'); assert.equal(m.amount,150000); assert.equal(m.renewal_status,'not_contacted'); assert.equal(m.renewal_amount,0);
+    await f.stop(); await f.start(); assert.equal((await a('members/'+member.id+'/renewal-history')).history.length,1);
+    await a('users','POST',{username:'viewer',role:'viewer',password:'abcdefg'},201); const viewer=f.client(); await viewer('auth/login','POST',{username:'viewer',password:'abcdefg'}); await viewer('members/'+member.id+'/renewal-history'); await viewer(endpoint,'PATCH',{revision:m.renewal_revision,status:'reminded',amount:0,paid_at:''},403);
+    await a('members/'+member.id,'DELETE'); const db=new DatabaseSync(path.join(f.dir,'family.sqlite')); const saved=db.prepare('SELECT * FROM renewal_history').get(); assert.equal(saved.member_id,null); assert.equal(saved.email,'guest@example.com'); db.close();
   } finally { await f.close(); }
 });

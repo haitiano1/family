@@ -1,4 +1,4 @@
-# Fam Manager 0.3
+# Fam Manager 0.3.1
 
 Ứng dụng Windows/cục bộ quản lý khách hàng, hạn sử dụng và hồ sơ Google Family. Mặc định dịch vụ là **YouTube Premium**. Node.js 24 trở lên; không cần cài thư viện ngoài.
 
@@ -20,7 +20,7 @@ Những lần sau chỉ chạy `START-WINDOWS.cmd` và đăng nhập. Đóng c�
 2. Sao chép **toàn bộ thư mục ứng dụng cũ** sang thư mục khác để làm bản sao lưu, bao gồm `data`.
 3. Tải ZIP mới từ GitHub và giải nén vào một thư mục riêng.
 4. Mở thư mục mới, chọn tất cả tệp/thư mục bên trong và **Copy**. Mở thư mục ứng dụng cũ chứa `START-WINDOWS.cmd`, chọn **Paste**, rồi chọn thay thế các tệp trùng tên. Gói GitHub không chứa `data`, nên thư mục dữ liệu cũ được giữ lại. Không xóa thư mục ứng dụng cũ hoặc `data`.
-5. Chạy lại `START-WINDOWS.cmd` từ thư mục ứng dụng cũ. Bản mới tự nâng cấp dữ liệu, tạo thêm bản sao lưu `data/before-v3-*.sqlite` trước khi nâng cấp. Tài khoản ứng dụng và hồ sơ cũ được giữ nguyên.
+5. Chạy lại `START-WINDOWS.cmd` từ thư mục ứng dụng cũ. Bản mới tự nâng cấp dữ liệu, tạo thêm bản sao lưu `data/before-v4-*.sqlite` trước khi nâng cấp. Tài khoản ứng dụng và hồ sơ cũ được giữ nguyên.
 6. Nếu chưa có tài khoản ứng dụng, tạo quản trị viên bằng tên đăng nhập và mật khẩu theo hướng dẫn trên; không cần mã khởi tạo. Nếu đã có, đăng nhập như trước. Mở trang ứng dụng, nhấn **Ctrl+F5** để tải giao diện mới nếu còn hiển thị bản cũ.
 7. Kiểm tra lại tài khoản, Family và khách đã nhập trước đó.
 
@@ -32,9 +32,22 @@ Bản sao lưu trước nâng cấp không chứa người dùng mới hoặc c�
 - **Family**: thêm/sửa tên nhóm, tài khoản quản lý, dịch vụ và ghi chú. Một hồ sơ chứa manager và tối đa 5 khách.
 - Mở Family → **Thêm khách**: email, tên, liên hệ, ngày vào, ngày hết hạn, thanh toán, số tiền đã ghi nhận và ghi chú.
 - **Khách & Gia hạn**: tìm khách, lọc sắp hết hạn, đã quá hạn, chưa thanh toán đủ hoặc chưa đặt hạn.
-- **Sửa / Gia hạn**: thay ngày hết hạn và trạng thái thanh toán và gói 1/2/3/6/12 tháng; lịch sử được lưu trong nhật ký.
+- **Sửa / Gia hạn**: chỉnh hồ sơ, gói và thanh toán kỳ hiện tại. **Gia hạn**: theo dõi việc nhắc khách và tiền nhận cho lần tiếp theo; **Xác nhận hạn mới** hoàn tất và lưu lịch sử riêng.
 - Nhắc gia hạn ở **Tổng quan** tính theo ngày Việt Nam. Hạn có hiệu lực hết ngày đã nhập; cảnh báo sắp hết hạn từ hôm nay đến 7 ngày tiếp theo. Ngày sau hạn mới là quá hạn.
 - Cảnh báo chỉ hiển thị khi mở ứng dụng, không gửi email/SMS/thông báo nền. Không tự động thu tiền hoặc kick khách. Khách cũ chưa có ngày hết hạn được giữ nguyên và hiển thị “Chưa đặt hạn”.
+
+## Trạng thái thanh toán gia hạn
+
+Trong **Khách & Gia hạn**, thanh toán kỳ hiện tại và gia hạn tiếp theo là hai cột riêng. Khách đã trả tiền kỳ hiện tại không đồng nghĩa đã trả tiền cho kỳ tiếp theo.
+
+1. Bấm **Gia hạn** ở dòng khách. Chọn **Chưa nhắc gia hạn**, **Đã nhắc khách**, **Chờ thanh toán**, **Đã trả một phần**, **Đã thanh toán gia hạn** hoặc **Không gia hạn**.
+2. Ghi số tiền đã nhận, ngày nhận tiền và ghi chú. Với trả một phần/đã thanh toán, cần số tiền lớn hơn 0 và ngày nhận tiền không ở tương lai. Đây là dữ liệu bạn ghi nhận, không kết nối ngân hàng hoặc kiểm tra chuyển khoản.
+3. **Lưu** chỉ đổi trạng thái, chưa tăng hạn. Khách trả một phần vẫn ở hạn hiện tại. Có bộ lọc chờ tiền/trả một phần, đã nhận tiền nhưng chưa cập nhật hạn, và không gia hạn.
+4. Khi đã thanh toán đủ, bấm **Xác nhận hạn mới**, chọn gói và nhập ngày hết hạn mới sau hạn hiện tại, rồi xác nhận.
+5. Hệ thống lưu hạn cũ/hạn mới, gói, số tiền, ngày nhận, ghi chú và người thực hiện trong **Lịch sử**; cập nhật thanh toán/số tiền của kỳ hiện tại bằng lần vừa gia hạn. Việc tăng hạn ở đây không đổi đăng ký/gói trên Google.
+6. Sau xác nhận, lần gia hạn tiếp theo trở về **Chưa nhắc**, số tiền/ngày nhận tạm được làm trống; lần đã hoàn tất vẫn có trong **Lịch sử**. Số tiền ở cột kỳ hiện tại là của kỳ hiện tại, không phải tổng doanh thu.
+
+Không tự động nhắc qua Zalo/Facebook hoặc kick khách. Nhân viên và quản trị viên được ghi nhận gia hạn; tài khoản chỉ xem được đọc lịch sử. Khách nhập từ CSV ban đầu có trạng thái gia hạn Chưa nhắc; cột Ngày pay đếm ngược không suy ra thanh toán. Nhập lại CSV hay sửa hồ sơ không xóa trạng thái/lịch sử gia hạn đã ghi nhận; nếu thông tin khách thay đổi khi hộp thoại đang mở, phải tải lại để tránh xác nhận nhầm. Chỉnh ngày hết hạn trực tiếp trong Sửa hồ sơ chỉ là sửa dữ liệu, không tạo lịch sử gia hạn hoàn tất.
 
 ## Nhập khách từ Google Sheets
 

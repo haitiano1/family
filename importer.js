@@ -113,7 +113,7 @@ export function initImporter(db, { fail, email, text, memberData, log }) {
         }
         for (const row of plan.items) {
           if (row.status === 'create') db.prepare('INSERT INTO members(family_id,email,customer_name,contact,joined_at,expires_at,payment_status,amount,note,plan_months) VALUES (?,?,?,?,?,?,?,?,?,?)').run(groupIds.get(row.group_key) || Number(row.group_key),...row.values);
-          else if (row.status === 'update') db.prepare('UPDATE members SET email=?,customer_name=?,contact=?,joined_at=?,expires_at=?,payment_status=?,amount=?,note=?,plan_months=? WHERE id=?').run(...row.values,row.member_id);
+          else if (row.status === 'update') db.prepare('UPDATE members SET email=?,customer_name=?,contact=?,joined_at=?,expires_at=?,payment_status=?,amount=?,note=?,plan_months=?,renewal_revision=renewal_revision+1 WHERE id=?').run(...row.values,row.member_id);
         }
         log(`${user.username}: nhập CSV ${plan.summary.create} khách mới, ${plan.summary.update} cập nhật, ${plan.summary.skip} bỏ qua, ${plan.summary.new_families} Family mới`);
       }
