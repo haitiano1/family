@@ -1,4 +1,4 @@
-# Fam Manager 0.3.1
+# Fam Manager 0.3.2
 
 Ứng dụng Windows/cục bộ quản lý khách hàng, hạn sử dụng và hồ sơ Google Family. Mặc định dịch vụ là **YouTube Premium**. Node.js 24 trở lên; không cần cài thư viện ngoài.
 
@@ -20,7 +20,7 @@ Những lần sau chỉ chạy `START-WINDOWS.cmd` và đăng nhập. Đóng c�
 2. Sao chép **toàn bộ thư mục ứng dụng cũ** sang thư mục khác để làm bản sao lưu, bao gồm `data`.
 3. Tải ZIP mới từ GitHub và giải nén vào một thư mục riêng.
 4. Mở thư mục mới, chọn tất cả tệp/thư mục bên trong và **Copy**. Mở thư mục ứng dụng cũ chứa `START-WINDOWS.cmd`, chọn **Paste**, rồi chọn thay thế các tệp trùng tên. Gói GitHub không chứa `data`, nên thư mục dữ liệu cũ được giữ lại. Không xóa thư mục ứng dụng cũ hoặc `data`.
-5. Chạy lại `START-WINDOWS.cmd` từ thư mục ứng dụng cũ. Bản mới tự nâng cấp dữ liệu, tạo thêm bản sao lưu `data/before-v4-*.sqlite` trước khi nâng cấp. Tài khoản ứng dụng và hồ sơ cũ được giữ nguyên.
+5. Chạy lại `START-WINDOWS.cmd` từ thư mục ứng dụng cũ. Bản mới tự nâng cấp dữ liệu, tạo thêm bản sao lưu `data/before-v6-*.sqlite` trước khi nâng cấp. Tài khoản ứng dụng và hồ sơ cũ được giữ nguyên.
 6. Nếu chưa có tài khoản ứng dụng, tạo quản trị viên bằng tên đăng nhập và mật khẩu theo hướng dẫn trên; không cần mã khởi tạo. Nếu đã có, đăng nhập như trước. Mở trang ứng dụng, nhấn **Ctrl+F5** để tải giao diện mới nếu còn hiển thị bản cũ.
 7. Kiểm tra lại tài khoản, Family và khách đã nhập trước đó.
 
@@ -33,7 +33,7 @@ Bản sao lưu trước nâng cấp không chứa người dùng mới hoặc c�
 - Mở Family → **Thêm khách**: email, tên, liên hệ, ngày vào, ngày hết hạn, thanh toán, số tiền đã ghi nhận và ghi chú.
 - **Khách & Gia hạn**: tìm khách, lọc sắp hết hạn, đã quá hạn, chưa thanh toán đủ hoặc chưa đặt hạn.
 - **Sửa / Gia hạn**: chỉnh hồ sơ, gói và thanh toán kỳ hiện tại. **Gia hạn**: theo dõi việc nhắc khách và tiền nhận cho lần tiếp theo; **Xác nhận hạn mới** hoàn tất và lưu lịch sử riêng.
-- Nhắc gia hạn ở **Tổng quan** tính theo ngày Việt Nam. Hạn có hiệu lực hết ngày đã nhập; cảnh báo sắp hết hạn từ hôm nay đến 7 ngày tiếp theo. Ngày sau hạn mới là quá hạn.
+- Nhắc gia hạn ở **Tổng quan** tính theo ngày Việt Nam. Hạn có hiệu lực hết ngày đã nhập; cảnh báo sắp hết hạn từ hôm nay đến 2 ngày tiếp theo. Ngày sau hạn mới là quá hạn.
 - Cảnh báo chỉ hiển thị khi mở ứng dụng, không gửi email/SMS/thông báo nền. Không tự động thu tiền hoặc kick khách. Khách cũ chưa có ngày hết hạn được giữ nguyên và hiển thị “Chưa đặt hạn”.
 
 ## Trạng thái thanh toán gia hạn
@@ -42,12 +42,22 @@ Trong **Khách & Gia hạn**, thanh toán kỳ hiện tại và gia hạn tiếp
 
 1. Bấm **Gia hạn** ở dòng khách. Chọn **Chưa nhắc gia hạn**, **Đã nhắc khách**, **Chờ thanh toán**, **Đã trả một phần**, **Đã thanh toán gia hạn** hoặc **Không gia hạn**.
 2. Ghi số tiền đã nhận, ngày nhận tiền và ghi chú. Với trả một phần/đã thanh toán, cần số tiền lớn hơn 0 và ngày nhận tiền không ở tương lai. Đây là dữ liệu bạn ghi nhận, không kết nối ngân hàng hoặc kiểm tra chuyển khoản.
-3. **Lưu** chỉ đổi trạng thái, chưa tăng hạn. Khách trả một phần vẫn ở hạn hiện tại. Có bộ lọc chờ tiền/trả một phần, đã nhận tiền nhưng chưa cập nhật hạn, và không gia hạn.
-4. Khi đã thanh toán đủ, bấm **Xác nhận hạn mới**, chọn gói và nhập ngày hết hạn mới sau hạn hiện tại, rồi xác nhận.
-5. Hệ thống lưu hạn cũ/hạn mới, gói, số tiền, ngày nhận, ghi chú và người thực hiện trong **Lịch sử**; cập nhật thanh toán/số tiền của kỳ hiện tại bằng lần vừa gia hạn. Việc tăng hạn ở đây không đổi đăng ký/gói trên Google.
+3. Chọn gói gia hạn. Mặc định bật **Tự cập nhật ngày mua và hạn khi đã thanh toán đủ**. Khi trạng thái Đã thanh toán gia hạn, bấm **Lưu gia hạn** sẽ ghi tiền, tự cập nhật ngày mua/hạn và lưu lịch sử trong một lần. Chờ tiền/trả một phần chỉ ghi nhận trạng thái, không đổi ngày. Bỏ dấu chọn nếu chỉ muốn ghi nhận tiền trước, chưa tăng hạn.
+4. Với khách đã trả đủ tiền nhưng chưa tăng hạn, vẫn có **Xác nhận hạn mới**: chọn gói và xem trước ngày tự tính rồi xác nhận. Ngày mua mới là ngày bắt đầu kỳ mới, không phải ngày nhận tiền. Nếu còn hạn, nối kỳ từ hạn cũ; nếu đã hết hạn trước ngày nhận tiền, bắt đầu từ ngày nhận tiền. Ví dụ kỳ 05/10/2026–05/01/2027, gia hạn sớm gói 3 tháng thành 05/01/2027–05/04/2027. Ngày cuối tháng được giới hạn đúng số ngày của tháng, kể cả năm nhuận.
+5. Hệ thống lưu ngày mua cũ/mới, hạn cũ/mới, gói, số tiền, ngày nhận tiền riêng, ghi chú và người thực hiện trong **Lịch sử**; cập nhật thanh toán/số tiền của kỳ hiện tại bằng lần vừa gia hạn. Việc tăng hạn ở đây không đổi đăng ký/gói trên Google.
 6. Sau xác nhận, lần gia hạn tiếp theo trở về **Chưa nhắc**, số tiền/ngày nhận tạm được làm trống; lần đã hoàn tất vẫn có trong **Lịch sử**. Số tiền ở cột kỳ hiện tại là của kỳ hiện tại, không phải tổng doanh thu.
 
 Không tự động nhắc qua Zalo/Facebook hoặc kick khách. Nhân viên và quản trị viên được ghi nhận gia hạn; tài khoản chỉ xem được đọc lịch sử. Khách nhập từ CSV ban đầu có trạng thái gia hạn Chưa nhắc; cột Ngày pay đếm ngược không suy ra thanh toán. Nhập lại CSV hay sửa hồ sơ không xóa trạng thái/lịch sử gia hạn đã ghi nhận; nếu thông tin khách thay đổi khi hộp thoại đang mở, phải tải lại để tránh xác nhận nhầm. Chỉnh ngày hết hạn trực tiếp trong Sửa hồ sơ chỉ là sửa dữ liệu, không tạo lịch sử gia hạn hoàn tất.
+
+## Nhắc khách trước 2 ngày và khách lưu trữ
+
+- **Tổng quan** và bộ lọc sắp hết hạn hiển thị khách còn từ 0 đến 2 ngày, tính theo ngày Việt Nam. Quá hạn hiển thị riêng. Không gửi tin tự động.
+- Bấm **Nhắc hạn** ở dòng khách để tạo mẫu tin có tên, email và hạn hiện tại. Chọn **Sao chép**, rồi dán và tự gửi qua Zalo/Facebook. Sao chép không tự đánh dấu đã gửi; sau khi gửi bạn có thể chọn trạng thái Đã nhắc khách.
+- Khách chọn **Không gia hạn** được chuyển sang **Khách lưu trữ** sau 7 ngày lịch kể từ ngày chọn theo ngày Việt Nam, dù ngày hết hạn là ngày nào. Đổi sang trạng thái khác trước thời điểm đó sẽ hủy lịch lưu trữ. Khách đã mang trạng thái Không gia hạn từ bản cũ, chưa có ngày chọn, bắt đầu đếm 7 ngày từ lần nâng cấp này.
+- Việc chuyển lưu trữ được kiểm tra khi khởi động, khi tải dữ liệu và mỗi phút khi ứng dụng chạy. Nếu ứng dụng đóng, các khách đủ thời gian được chuyển khi mở lại. Không tự kick khách hoặc xóa tài khoản Google.
+- Dữ liệu không bị mất: bản chụp toàn bộ hồ sơ và lịch sử ở cùng cơ sở dữ liệu **data/family.sqlite**. Tab **Khách lưu trữ** có **Xem dữ liệu** và **Khôi phục**. Tệp CSV gốc không cần lưu để khôi phục.
+- Khôi phục vào một Family hiện có và còn chỗ; thông tin khách, hạn, thanh toán và lịch sử được giữ, trạng thái gia hạn tiếp theo trở về Chưa nhắc. Nhân viên/quản trị viên được khôi phục; người chỉ xem có thể đọc dữ liệu lưu trữ. Lưu trữ giải phóng chỗ trong hồ sơ nội bộ, không chứng minh nhóm Google đã trống chỗ.
+- Không xóa thư mục data hoặc đưa nó lên GitHub. Sao lưu khi ứng dụng đã dừng. Lịch sử ngày mua của các lần gia hạn trước bản 0.3.2 có thể trống vì bản cũ chưa lưu thông tin đó.
 
 ## Nhập khách từ Google Sheets
 
@@ -55,7 +65,7 @@ Không tự động nhắc qua Zalo/Facebook hoặc kick khách. Nhân viên và
 2. Trong Google Sheets, mở tab Family muốn nhập: **Tệp → Tải xuống → Giá trị được phân tách bằng dấu phẩy (.csv)**. Mỗi tệp chỉ chứa tab đang mở.
 3. Vào **Khách & Gia hạn → Nhập khách từ CSV**, chọn tệp vừa tải.
 4. Ứng dụng nhận dạng bảng cũ có email quản lý ở ô đầu, mật khẩu ở ô thứ hai, rồi Gói mua / Ngày mua / Ngày đến hạn. Ô mật khẩu đầu bảng được bỏ; cột tên và email khách phía dưới được giữ nguyên. Các cột mang tên pass/password/mật khẩu không cho chọn. Chỉ cột được chọn mới gửi tới máy ứng dụng; không lưu tệp CSV gốc.
-5. Kiểm tra ghép cột: tên khách → Tên khách, mail → Email khách, gói mua → Gói mua, ngày mua → Ngày vào, ngày đến hạn → Ngày hết hạn, Contact → Liên hệ. **Ngày pay đếm ngược không nhập**; số ngày còn lại tính lại từ hạn theo ngày Việt Nam. Không gán cột này cho thanh toán hoặc số tiền.
+5. Kiểm tra ghép cột: tên khách → Tên khách, mail → Email khách, gói mua → Gói mua, ngày mua → Ngày mua, ngày đến hạn → Ngày hết hạn, Contact → Liên hệ. **Ngày pay đếm ngược không nhập**; số ngày còn lại tính lại từ hạn theo ngày Việt Nam. Không gán cột này cho thanh toán hoặc số tiền.
 6. Nếu có Family trùng email quản lý, hệ thống đề xuất Family đó. Nếu chưa có, quản trị viên có thể bật **Cho phép tạo hồ sơ Family/tài khoản quản lý còn thiếu**, kiểm tra email quản lý mặc định và nhập tên Family. Không tạo nhóm trên Google. CSV nhiều Family cần cột tên Family và/hoặc email quản lý; mỗi dòng phải xác định được nhóm. Nếu tên Family trùng nhau thì cần email quản lý để phân biệt.
 7. Chọn **Bỏ qua** khách trùng (mặc định) hoặc **Cập nhật cột đã chọn**. Khi cập nhật, cột không chọn và ô trống giữ nguyên thông tin cũ; không chuyển khách qua Family khác. Email trùng trong cùng Family của CSV giữ dòng đầu; email ở Family khác là hồ sơ riêng.
 8. Bấm **Xem trước dữ liệu**. Kiểm tra số khách, Family mới, gói, ngày mua, ngày hết hạn và dòng lỗi, rồi chọn **Xác nhận nhập**. Xem trước không ghi cơ sở dữ liệu. Nếu có dòng lỗi hoặc Family quá 5 khách thì không nhập dòng nào; sửa tệp và xem trước lại. Nếu dữ liệu ứng dụng thay đổi sau xem trước, phải xem trước lại.

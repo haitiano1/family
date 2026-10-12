@@ -3,6 +3,7 @@ import { DatabaseSync } from 'node:sqlite';
 import { mkdirSync, readFileSync, existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
+import { initArchive } from './archive.js';
 import { initRenewals } from './renewal.js';
 import { initImporter } from './importer.js';
 import { initAuth } from './auth.js';
@@ -15,9 +16,9 @@ const file = path.join(dir, 'family.sqlite');
 const existing = existsSync(file);
 const db = new DatabaseSync(file);
 const currentVersion = db.prepare('PRAGMA user_version').get().user_version;
-if (currentVersion > 4) throw new Error('Database is newer than this application. Use the latest application version.');
-if (existing && currentVersion < 4) {
-  const backup = path.join(dir, `before-v4-${Date.now()}.sqlite`);
+if (currentVersion > 6) throw new Error('Database is newer than this application. Use the latest application version.');
+if (existing && currentVersion < 6) {
+  const backup = path.join(dir, `before-v6-${Date.now()}.sqlite`);
   db.exec(`VACUUM INTO '${backup.replaceAll("'", "''")}'`);
   console.log('Saved pre-upgrade database backup in the data directory.');
 }
@@ -29,7 +30,7 @@ CREATE TABLE IF NOT EXISTS jobs (id INTEGER PRIMARY KEY, action TEXT NOT NULL, t
 CREATE TABLE IF NOT EXISTS logs (id INTEGER PRIMARY KEY, message TEXT NOT NULL, created_at TEXT NOT NULL);`);
 const additions = {
   families: { service: "TEXT NOT NULL DEFAULT 'youtube'", note: "TEXT NOT NULL DEFAULT ''" },
-  members: { customer_name: "TEXT NOT NULL DEFAULT ''", contact: "TEXT NOT NULL DEFAULT ''", joined_at: "TEXT NOT NULL DEFAULT ''", expires_at: "TEXT NOT NULL DEFAULT ''", payment_status: "TEXT NOT NULL DEFAULT 'unpaid'", amount: 'INTEGER NOT NULL DEFAULT 0', plan_months: 'INTEGER NOT NULL DEFAULT 0', note: "TEXT NOT NULL DEFAULT ''", renewal_status: "TEXT NOT NULL DEFAULT 'not_contacted'", renewal_amount: 'INTEGER NOT NULL DEFAULT 0', renewal_paid_at: "TEXT NOT NULL DEFAULT ''", renewal_note: "TEXT NOT NULL DEFAULT ''", renewal_revision: 'INTEGER NOT NULL DEFAULT 0' },
+  members: { customer_name: "TEXT NOT NULL DEFAULT ''", contact: "TEXT NOT NULL DEFAULT ''", joined_at: "TEXT NOT NULL DEFAULT ''", expires_at: "TEXT NOT NULL DEFAULT ''", payment_status: "TEXT NOT NULL DEFAULT 'unpaid'", amount: 'INTEGER NOT NULL DEFAULT 0', plan_months: 'INTEGER NOT NULL DEFAULT 0', note: "TEXT NOT NULL DEFAULT ''", renewal_status: "TEXT NOT NULL DEFAULT 'not_contacted'", renewal_amount: 'INTEGER NOT NULL DEFAULT 0', renewal_paid_at: "TEXT NOT NULL DEFAULT ''", renewal_note: "TEXT NOT NULL DEFAULT ''", renewal_revision: 'INTEGER NOT NULL DEFAULT 0', declined_at: "TEXT NOT NULL DEFAULT ''" },
   jobs: { account_id: 'INTEGER', family_id: 'INTEGER', email: "TEXT NOT NULL DEFAULT ''", service: "TEXT NOT NULL DEFAULT 'youtube'", manager_email: "TEXT NOT NULL DEFAULT ''", completed_at: 'TEXT', completed_by: 'TEXT' }
 };
 db.exec('BEGIN');
@@ -39,7 +40,13 @@ try {
     for (const [name, type] of Object.entries(columns)) if (!known.has(name)) db.exec(`ALTER TABLE ${table} ADD COLUMN ${name} ${type}`);
   }
   db.exec(`CREATE TABLE IF NOT EXISTS renewal_history (id INTEGER PRIMARY KEY, member_id INTEGER REFERENCES members(id) ON DELETE SET NULL, email TEXT NOT NULL,customer_name TEXT NOT NULL,family_name TEXT NOT NULL,old_expires_at TEXT NOT NULL,new_expires_at TEXT NOT NULL,plan_months INTEGER NOT NULL,amount INTEGER NOT NULL,paid_at TEXT NOT NULL,note TEXT NOT NULL,created_at TEXT NOT NULL,created_by TEXT NOT NULL);
-  PRAGMA user_version=4; COMMIT`);
+  `);
+  const historyColumns = new Set(db.prepare('PRAGMA table_info(renewal_history)').all().map(c => c.name));
+  for (const name of ['old_purchase_at','new_purchase_at']) if (!historyColumns.has(name)) db.exec(`ALTER TABLE renewal_history ADD COLUMN ${name} TEXT NOT NULL DEFAULT ''`);
+  if (!historyColumns.has('archive_id')) db.exec('ALTER TABLE renewal_history ADD COLUMN archive_id INTEGER');
+  if (currentVersion < 6) db.prepare("UPDATE members SET declined_at=? WHERE renewal_status='declined' AND declined_at=''").run(new Date().toISOString());
+  db.exec(`CREATE TABLE IF NOT EXISTS archived_customers (id INTEGER PRIMARY KEY,original_member_id INTEGER NOT NULL,email TEXT NOT NULL,customer_name TEXT NOT NULL,family_name TEXT NOT NULL,manager_email TEXT NOT NULL,snapshot TEXT NOT NULL,archived_at TEXT NOT NULL,reason TEXT NOT NULL,restored_at TEXT,restored_by TEXT,restored_member_id INTEGER);
+  PRAGMA user_version=6; COMMIT`);
 } catch (error) { db.exec('ROLLBACK'); throw error; }
 const all = (sql, ...args) => db.prepare(sql).all(...args);
 const one = (sql, ...args) => db.prepare(sql).get(...args);
@@ -69,6 +76,9 @@ function memberData(data) {
   const plan = Number(data.plan_months || 0); if (![0,1,2,3,6,12].includes(plan)) fail('Gói mua cần là 1, 2, 3, 6 hoặc 12 tháng.');
   return [email(data.email), text(data.customer_name, 200), text(data.contact, 1000), joined, expires, payment, amount, text(data.note), plan];
 }
+const archive = initArchive(db, { fail,log, mode:'declined' });
+archive.sweep();
+const housekeeper = setInterval(() => { try { archive.sweep(); } catch { console.error('Archive sweep failed. Retry on the next interval.'); } },60000); housekeeper.unref();
 const renewMember = initRenewals(db, { fail, text, calendarDate, log });
 const importCustomers = initImporter(db, { fail, email, text, memberData, log });
 async function body(req, limit = 16384) {
@@ -102,6 +112,10 @@ const server = http.createServer(async (req, res) => {
       const data = await body(req, 2000000);
       return send(res, 200, importCustomers(data, user, url.pathname.endsWith('/commit')));
     }
+    if (req.method === 'POST' && /^\/api\/archives\/\d+\/restore$/.test(url.pathname)) {
+      const data = await body(req); return send(res,200,archive.restore(Number(url.pathname.split('/')[3]),data.family_id,user));
+    }
+    if (req.method === 'GET' && /^\/api\/archives\/\d+\/history$/.test(url.pathname)) return send(res,200,{ history:all('SELECT * FROM renewal_history WHERE archive_id=? ORDER BY id DESC',Number(url.pathname.split('/')[3])) });
     if (req.method === 'GET' && /^\/api\/members\/\d+\/renewal-history$/.test(url.pathname)) {
       const id = Number(url.pathname.split('/')[3]);
       if (!one('SELECT id FROM members WHERE id=?', id)) fail('Không tìm thấy khách.', 404);
@@ -113,11 +127,12 @@ const server = http.createServer(async (req, res) => {
       return send(res, 200, renewMember(Number(url.pathname.split('/')[3]), await body(req), user, apply));
     }
     if (req.method === 'GET' && url.pathname === '/api/state') {
+      archive.sweep();
       const members = all('SELECT m.*,f.name AS family_name,f.service,a.email AS manager_email FROM members m JOIN families f ON f.id=m.family_id JOIN accounts a ON a.id=f.manager_id ORDER BY m.id DESC').map(m => ({ ...m, ...expiry(m.expires_at) }));
       return send(res, 200, {
         accounts: all('SELECT a.*, f.id AS family_id, f.name AS family_name, f.service FROM accounts a LEFT JOIN families f ON f.manager_id=a.id ORDER BY a.id DESC'),
         families: all('SELECT f.*, a.email AS manager_email FROM families f JOIN accounts a ON a.id=f.manager_id ORDER BY f.id DESC'),
-        members, jobs: all('SELECT * FROM jobs ORDER BY id DESC LIMIT 100').map(j => ({ ...j, guide: googleGuide(j.action, j.service) })),
+        members, archives:archive.list(), archive_mode:archive.mode, jobs: all('SELECT * FROM jobs ORDER BY id DESC LIMIT 100').map(j => ({ ...j, guide: googleGuide(j.action, j.service) })),
         logs: all('SELECT * FROM logs ORDER BY id DESC LIMIT 100'), integration: false, google_mode: 'manual', today: today(),
         reminders: { expired: members.filter(m => m.expiry_status === 'expired').length, due_soon: members.filter(m => m.expiry_status === 'due_soon').length, unpaid: members.filter(m => ['unpaid','partial'].includes(m.payment_status)).length, renewal_waiting: members.filter(m => ['awaiting_payment','partial'].includes(m.renewal_status)).length, renewal_paid_pending: members.filter(m => m.renewal_status === 'paid').length },
         user: { id: user.id, username: user.username, role: user.role }
@@ -200,7 +215,7 @@ const server = http.createServer(async (req, res) => {
       run(`DELETE FROM ${table} WHERE id=?`, id); log(`${user.username}: xóa hồ sơ nội bộ ${table} #${id}`); return send(res, 200, { ok: true });
     }
     if (req.method === 'GET') {
-      const assets = { '/': ['index.html','text/html'], '/app.js': ['app.js','text/javascript'], '/style.css': ['style.css','text/css'], '/csv.js': ['csv.js','text/javascript'] };
+      const assets = { '/': ['index.html','text/html'], '/app.js': ['app.js','text/javascript'], '/style.css': ['style.css','text/css'], '/csv.js': ['csv.js','text/javascript'], '/domain.js': ['../domain.js','text/javascript'] };
       const asset = assets[url.pathname]; if (!asset) return send(res, 404, { error: 'Không tìm thấy.' });
       res.writeHead(200, { 'Content-Type': asset[1] + '; charset=utf-8', 'Cache-Control': 'no-store', 'Content-Security-Policy': "default-src 'self'; style-src 'self'; script-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'" });
       return res.end(readFileSync(path.join(root, 'public', asset[0])));

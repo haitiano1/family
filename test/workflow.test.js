@@ -139,18 +139,18 @@ test('existing v1 database is backed up and migrated without losing customer rec
   });
   try {
     await f.setup(); let state = await f.admin('state'); assert.equal(state.accounts[0].note, 'Existing note'); assert.equal(state.members[0].email, 'legacyguest@example.com'); assert.equal(state.members[0].expiry_status, 'unknown'); assert.equal(state.families[0].service, 'youtube'); assert.equal(state.jobs.length, 1);
-    const backups = readdirSync(f.dir).filter(n => n.startsWith('before-v4-')); assert.equal(backups.length, 1);
+    const backups = readdirSync(f.dir).filter(n => n.startsWith('before-v6-')); assert.equal(backups.length, 1);
     const backup = new DatabaseSync(path.join(f.dir, backups[0])); assert.equal(backup.prepare('SELECT email FROM members').get().email, 'legacyguest@example.com'); assert.equal(backup.prepare('PRAGMA user_version').get().user_version, 0); backup.close();
-    await f.stop(); await f.start(); state = await f.admin('state'); assert.equal(state.members.length, 1); assert.equal(readdirSync(f.dir).filter(n => n.startsWith('before-v4-')).length, 1);
+    await f.stop(); await f.start(); state = await f.admin('state'); assert.equal(state.members.length, 1); assert.equal(readdirSync(f.dir).filter(n => n.startsWith('before-v6-')).length, 1);
   } finally { await f.close(); }
 });
 
-test('expiry rules use inclusive end date and the next seven calendar days', () => {
+test('expiry rules use inclusive end date and the next two calendar days', () => {
   assert.deepEqual(expiry('', '2026-10-12'), { expiry_status: 'unknown', days_left: null });
   assert.deepEqual(expiry('2026-10-11', '2026-10-12'), { expiry_status: 'expired', days_left: -1 });
   assert.deepEqual(expiry('2026-10-12', '2026-10-12'), { expiry_status: 'due_soon', days_left: 0 });
-  assert.deepEqual(expiry('2026-10-19', '2026-10-12'), { expiry_status: 'due_soon', days_left: 7 });
-  assert.deepEqual(expiry('2026-10-20', '2026-10-12'), { expiry_status: 'active', days_left: 8 });
+  assert.deepEqual(expiry('2026-10-14', '2026-10-12'), { expiry_status: 'due_soon', days_left: 2 });
+  assert.deepEqual(expiry('2026-10-15', '2026-10-12'), { expiry_status: 'active', days_left: 3 });
 });
 
 test('login attempts are rate limited and cannot create unbounded sessions', async () => {
@@ -248,7 +248,7 @@ test('upgrading v2 retains users, active sessions and old customer records while
     await f.stop();
     const old=new DatabaseSync(path.join(f.dir,'family.sqlite')); old.exec('ALTER TABLE members DROP COLUMN plan_months; PRAGMA user_version=2'); old.close();
     await f.start(); const state=await a('state'); assert.equal(state.user.username,'owner'); assert.equal(state.members[0].email,'guest@example.com'); assert.equal(state.members[0].contact,'Existing contact'); assert.equal(state.members[0].payment_status,'paid'); assert.equal(state.members[0].plan_months,0);
-    const backups=readdirSync(f.dir).filter(n=>n.startsWith('before-v4-')); assert.equal(backups.length,1);
+    const backups=readdirSync(f.dir).filter(n=>n.startsWith('before-v6-')); assert.equal(backups.length,1);
     const saved=new DatabaseSync(path.join(f.dir,backups[0])); assert.equal(saved.prepare('PRAGMA user_version').get().user_version,2); assert.equal(saved.prepare('SELECT username FROM users').get().username,'owner'); saved.close();
   } finally { await f.close(); }
 });
@@ -278,5 +278,37 @@ test('renewal payments are distinct from the current period; applying a paid ren
     await f.stop(); await f.start(); assert.equal((await a('members/'+member.id+'/renewal-history')).history.length,1);
     await a('users','POST',{username:'viewer',role:'viewer',password:'abcdefg'},201); const viewer=f.client(); await viewer('auth/login','POST',{username:'viewer',password:'abcdefg'}); await viewer('members/'+member.id+'/renewal-history'); await viewer(endpoint,'PATCH',{revision:m.renewal_revision,status:'reminded',amount:0,paid_at:''},403);
     await a('members/'+member.id,'DELETE'); const db=new DatabaseSync(path.join(f.dir,'family.sqlite')); const saved=db.prepare('SELECT * FROM renewal_history').get(); assert.equal(saved.member_id,null); assert.equal(saved.email,'guest@example.com'); db.close();
+  } finally { await f.close(); }
+});
+
+test('one renewal save updates cycle dates automatically and preserves the separate receipt date', async () => {
+  const f=await fixture();
+  try {
+    await f.setup(); const a=f.admin; const account=await a('accounts','POST',{email:'manager@example.com'},201); const family=await a('families','POST',{name:'Family',manager_id:account.id},201);
+    const member=await a('members','POST',{family_id:family.id,email:'guest@example.com',joined_at:'2026-10-05',expires_at:'2027-01-05',plan_months:3,payment_status:'paid'},201);
+    const applied=await a('members/'+member.id+'/renewal','PATCH',{revision:0,status:'paid',amount:150000,paid_at:'2026-10-10',plan_months:3,apply_now:true});
+    assert.equal(applied.applied,true); assert.equal(applied.purchase_date,'2027-01-05'); assert.equal(applied.expires_at,'2027-04-05');
+    const m=(await a('state')).members[0]; assert.equal(m.joined_at,'2027-01-05'); assert.equal(m.expires_at,'2027-04-05');
+    const history=(await a('members/'+member.id+'/renewal-history')).history; assert.equal(history[0].old_purchase_at,'2026-10-05'); assert.equal(history[0].new_purchase_at,'2027-01-05'); assert.equal(history[0].paid_at,'2026-10-10');
+    await a('members/'+member.id+'/renewal','PATCH',{revision:m.renewal_revision,status:'partial',amount:10000,paid_at:'2026-10-11',plan_months:1,apply_now:true},400);
+    assert.equal((await a('state')).members[0].joined_at,'2027-01-05');
+  } finally { await f.close(); }
+});
+
+test('declined customers archive after seven days from selection, keep their history, and can be restored', async () => {
+  const f=await fixture();
+  try {
+    await f.setup(); const a=f.admin; const account=await a('accounts','POST',{email:'manager@example.com'},201); const family=await a('families','POST',{name:'Family',manager_id:account.id},201);
+    const member=await a('members','POST',{family_id:family.id,email:'guest@example.com',customer_name:'Customer',contact:'Zalo note',joined_at:'2025-01-01',expires_at:'2025-02-01',plan_months:1},201);
+    await a('members/'+member.id+'/renewal','PATCH',{revision:0,status:'paid',amount:100000,paid_at:'2026-01-01',plan_months:1,apply_now:true});
+    let m=(await a('state')).members[0]; await a('members/'+member.id+'/renewal','PATCH',{revision:m.renewal_revision,status:'declined',amount:0,paid_at:'',note:'Khách dừng'});
+    let state=await a('state'); assert.equal(state.members.length,1); assert.equal(state.archives.length,0); assert.equal(state.archive_mode,'declined');
+    const db=new DatabaseSync(path.join(f.dir,'family.sqlite')); db.prepare('UPDATE members SET declined_at=? WHERE id=?').run('2026-01-01T00:00:00Z',member.id); db.close();
+    state=await a('state'); assert.equal(state.members.length,0); assert.equal(state.archives.length,1); const record=state.archives[0]; assert.equal(record.member.contact,'Zalo note'); assert.equal(record.member.renewal_note,'Khách dừng');
+    assert.equal((await a('archives/'+record.id+'/history')).history.length,1);
+    await f.stop(); await f.start(); assert.equal((await a('state')).archives.length,1);
+    const restored=await a('archives/'+record.id+'/restore','POST',{family_id:family.id}); state=await a('state'); assert.equal(state.archives.length,0); assert.equal(state.members.length,1); assert.equal(state.members[0].renewal_status,'not_contacted'); assert.equal(state.members[0].declined_at,''); assert.equal(state.members[0].contact,'Zalo note');
+    assert.equal((await a('members/'+restored.member_id+'/renewal-history')).history.length,1);
+    await a('archives/'+record.id+'/restore','POST',{family_id:family.id},409);
   } finally { await f.close(); }
 });
