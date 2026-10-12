@@ -94,12 +94,13 @@ function initializeSchema(PDO $db): void {
     if ($tables && !in_array('app_meta',$tables,true)) fail('Database đang chứa dữ liệu khác. Tạo database trống riêng cho Family.',503);
     if (in_array('app_meta',$tables,true)) {
         $version=one($db,"SELECT value FROM app_meta WHERE name='schema_version'");
-        if (($version['value']??'')==='2') return;
-        if ($version && !in_array($version['value'],['1'],true)) fail('Database dùng phiên bản khác. Hãy dùng mã nguồn tương ứng.',503);
+        if (($version['value']??'')==='3') return;
+        if ($version && !in_array($version['value'],['1','2'],true)) fail('Database dùng phiên bản khác. Hãy dùng mã nguồn tương ứng.',503);
     }
     foreach(explode(';',file_get_contents(__DIR__.'/schema.sql')) as $sql) if (trim($sql)) $db->exec($sql);
     foreach(explode(';',file_get_contents(__DIR__.'/features.sql')) as $sql)if(trim($sql))$db->exec($sql);
-    q($db,"INSERT INTO app_meta(name,value) VALUES ('schema_version','2') ON DUPLICATE KEY UPDATE value='2'");
+    foreach(['families'=>['trial_date'],'issues'=>['trial_date','reported_on']]as $table=>$fields){$known=array_column(all($db,"SHOW COLUMNS FROM `$table`"),'Field');foreach($fields as $field)if(!in_array($field,$known,true))$db->exec("ALTER TABLE `$table` ADD COLUMN `$field` VARCHAR(10) NOT NULL DEFAULT ''");}
+    q($db,"INSERT INTO app_meta(name,value) VALUES ('schema_version','3') ON DUPLICATE KEY UPDATE value='3'");
 }
 function errorReply(Throwable $e): never {
     if ($e instanceof FamilyError) reply(['error'=>$e->getMessage()],$e->status);

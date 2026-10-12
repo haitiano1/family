@@ -1,4 +1,4 @@
-# YouTube Family — Quản lý khách hàng 0.6
+# YouTube Family — Quản lý khách hàng 0.7
 
 Ứng dụng quản lý cho cá nhân: **mở web là vào Tổng quan**, không cần tài khoản đăng nhập. Tập trung quản lý khách YouTube, Family, gia hạn và sản phẩm bán thêm. Không còn các mục admin, bảo mật tài khoản, Jobs hoặc thao tác Google. Có bản **PHP + MySQL dành cho Hostinger Premium** và bản Node.js chạy Windows/VPS. Có thể thêm biểu tượng vào màn hình chính iPhone; xem [hướng dẫn Hostinger](HOSTINGER.md). Bản hosting dùng một mật khẩu truy cập chung, không có tài khoản/role admin.
 
@@ -23,7 +23,7 @@ Lần sau chạy lại START-WINDOWS.cmd và mở cùng địa chỉ. Nếu `EAD
 3. Tải ZIP mới, giải nén riêng và sao chép toàn bộ nội dung bên trong thư mục mới sang thư mục ứng dụng cũ. Thay thế tệp trùng tên, **giữ nguyên thư mục data**.
 4. Chạy START-WINDOWS.cmd và nhấn **Ctrl+F5** trên trình duyệt.
 
-Dữ liệu khách, Family, Contact, thanh toán, gia hạn, lưu trữ và bản sao cũ được giữ. Startup nâng cấp SQLite bằng thay đổi cộng thêm, sao lưu trước nâng cấp vào `data/before-v10-*.sqlite`. Dữ liệu admin/Jobs cũ, nếu có, vẫn nằm trong bản dữ liệu cũ nhưng không được ứng dụng mới sử dụng hoặc trả qua API. Không cần tạo admin hoặc đăng nhập sau cập nhật. Bookmark cũ đến các trang đã bỏ được đưa về Tổng quan.
+Dữ liệu khách, Family, Contact, thanh toán, gia hạn, lưu trữ và bản sao cũ được giữ. Startup nâng cấp SQLite bằng thay đổi cộng thêm, sao lưu trước nâng cấp vào `data/before-v11-*.sqlite`. Dữ liệu admin/Jobs cũ, nếu có, vẫn nằm trong bản dữ liệu cũ nhưng không được ứng dụng mới sử dụng hoặc trả qua API. Không cần tạo admin hoặc đăng nhập sau cập nhật. Bookmark cũ đến các trang đã bỏ được đưa về Tổng quan.
 
 ## Chuyển dữ liệu từ bản Windows cũ mà không cập nhật ứng dụng
 
@@ -34,7 +34,7 @@ Bạn vẫn dùng **IMPORT-CSV-WINDOWS.cmd** trong thư mục cũ để nhập C
 3. Đóng server, nhấp đúp **EXPORT-BACKUP-WINDOWS.cmd**. Khi có **Export complete**, một file `family-backup-…json` xuất hiện ngay trong thư mục đó; cửa sổ báo số khách/Family/lịch sử/lưu trữ/sản phẩm.
 4. Mở website Family trên Hostinger → **Sao lưu / Chuyển dữ liệu**, chọn JSON vừa tạo → **Khôi phục dữ liệu** vào ứng dụng trống.
 
-Exporter tự chạy bằng Node24+, không dùng source app khác, mở SQLite **read-only**, không upgrade/thay đổi database gốc, không ghi đè file backup có sẵn. Hỗ trợ schema cũ0–10; bảng/field không tồn tại được bổ sung vào JSON bằng ô trống/default cần thiết, không đoán ngày mua/hạn. Admin/jobs/mật khẩu ứng dụng cũ không được chuyển. Original Contact/notes/history/archive snapshots được giữ. Không tải file SQLite/JSON chứa khách vào File Manager hoặc GitHub; nhập JSON qua ứng dụng đã mở bằng mật khẩu. Hai bản Windows/hosting không tự đồng bộ; dùng địa chỉ hosting sau chuyển.
+Exporter tự chạy bằng Node24+, không dùng source app khác, mở SQLite **read-only**, không upgrade/thay đổi database gốc, không ghi đè file backup có sẵn. Hỗ trợ schema cũ0–11; bảng/field không tồn tại được bổ sung vào JSON bằng ô trống/default cần thiết, không đoán ngày mua/hạn. Admin/jobs/mật khẩu ứng dụng cũ không được chuyển. Original Contact/notes/history/archive snapshots được giữ. Không tải file SQLite/JSON chứa khách vào File Manager hoặc GitHub; nhập JSON qua ứng dụng đã mở bằng mật khẩu. Hai bản Windows/hosting không tự đồng bộ; dùng địa chỉ hosting sau chuyển.
 
 ## Khách hàng và Family
 
@@ -64,9 +64,17 @@ Sau gia hạn, lần tiếp theo trở về Chưa nhắc; lịch sử không m�
 
 Bảng **Chờ fix → Đang fix → Đã fix** hỗ trợ kéo thả, chọn trạng thái và nút Đã fix trên iPhone. Khi hoàn tất, bắt buộc chọn **Giữ nguyên mail** hoặc **Đổi sang mail mới**. Đổi cập nhật đúng hồ sơ quản lý/khách đã báo lỗi trong cùng lần lưu; thẻ Done ghi rõ mail cũ→mới và giữ mail báo lỗi ban đầu. Không đổi ngày mua/hạn/Contact/thanh toán. Mail trùng hoặc hồ sơ đã thay đổi/xóa sẽ không gây cập nhật một phần; trạng thái và đổi mail cùng rollback. Lỗi vẫn được giữ khi Family bị xóa. Thay đổi đồng thời có revision guard, cần tải lại khi có xung đột.
 
-**Nhật ký** tìm kiếm/phân trang, lưu thời gian/người thao tác/nội dung và **Xem chi tiết trước-sau** cho các thay đổi từ bản này. Ghi thêm/sửa/xóa/import/gia hạn/lưu trữ/khôi phục/sửa lỗi/đổi mail; không ghi refresh/xem trang. Khi xóa Family, dữ liệu khách xóa theo và thay đổi liên kết lịch sử được giữ trong sự kiện đó. Log cũ vẫn đọc được; dữ liệu trước-sau không thể tạo lại cho thao tác đã xảy ra trước bản cập nhật. Nhật ký hiện giúp đối chiếu, chưa có hoàn tác tự động. Bản sao lưu v2 giữ cả bảng lỗi và nhật ký, vẫn nhận v1.
+**Nhật ký** tìm kiếm/phân trang, lưu thời gian/người thao tác/nội dung và **Xem chi tiết trước-sau** cho các thay đổi từ bản này. Ghi thêm/sửa/xóa/import/gia hạn/lưu trữ/khôi phục/sửa lỗi/đổi mail; không ghi refresh/xem trang. Khi xóa Family, dữ liệu khách xóa theo và thay đổi liên kết lịch sử được giữ trong sự kiện đó. Log cũ vẫn đọc được; dữ liệu trước-sau không thể tạo lại cho thao tác đã xảy ra trước bản cập nhật. Nhật ký hiện giúp đối chiếu, chưa có hoàn tác tự động. Bản sao lưu v3 giữ cả bảng lỗi/nhật ký/ngày trial, vẫn nhận v1/v2.
 
-Cập nhật Hostinger bằng [gói cập nhật riêng](https://github.com/haitiano1/family/raw/refs/heads/main/downloads/family-hostinger-update.zip) và [hướng dẫn](hosting/php/UPDATE.md), giữ nguyên config.php/database. Không cần nhập lại khách. MySQL nâng cấp1→2 bằng tạo bảng thêm; Node schema10 sao lưu trước nâng cấp. Các bản app cũ không dùng được dữ liệu Node schema10; exporter độc lập hỗ trợ đến10.
+Cập nhật Hostinger bằng [gói cập nhật riêng](https://github.com/haitiano1/family/raw/refs/heads/main/downloads/family-hostinger-update.zip) và [hướng dẫn](hosting/php/UPDATE.md), giữ nguyên config.php/database. Không cần nhập lại khách. MySQL nâng cấp1/2→3 bằng thêm bảng/cột; Node schema11 sao lưu trước nâng cấp. Các bản app cũ không dùng được dữ liệu Node schema11; exporter độc lập hỗ trợ đến11.
+
+## Ngày trial và case đã fix (bản0.7)
+
+Trong **Family → Sửa → Ngày trial**, tự nhập ngày bắt đầu trial của mail quản lý; cột Ngày trial và trang chi tiết Family hiển thị ngày này. Không suy ra từ ngày mua/hạn của khách. Để trống nếu chưa biết; sửa hồ sơ mà không gửi trial_date qua API giữ nguyên ngày đã nhập, gửi chuỗi rỗng để bỏ ngày.
+
+Khi **Báo lỗi**, hệ thống tự lưu **Ngày lỗi** theo ngày Việt Nam và chụp **Ngày trial của Family** ở thời điểm đó, áp dụng cho mail quản lý hoặc mail khách được chọn trong nhóm. Thẻ ở cả Chờ fix/Đang fix/Đã fix hiện hai ngày và số ngày sử dụng. Ví dụ10/08/2026→15/08/2026 là **5 ngày**; cùng ngày là0. Số ngày chốt lúc báo, không tăng theo thời gian/chuyển cột/sửa trial trong Family. Case cũ giữ ngày báo từ thời gian tạo; không đoán ngày trial cũ bằng ngày mới nhập. Chưa có trial hoặc trial ở tương lai thì chưa có số ngày sử dụng. Ngày trial do người dùng điền, không phải kiểm tra trial Google.
+
+Case ở **Đã fix** có **Xóa case** và hộp xác nhận. Chỉ xóa thẻ lỗi; hồ sơ Family/mail/khách vẫn giữ, nhật ký giữ đầy đủ case trước khi xóa. Case đang fix hoặc đã thay đổi trên thiết bị khác không bị xóa từ phiên bản cũ. Bản0.7 tăng chữ trên màn hình điện thoại: nội dung chính16px, ghi chú/nút14px, ô nhập16px để dễ đọc và tránh zoom khi nhập trên iPhone.
 
 ## Sản phẩm khác
 

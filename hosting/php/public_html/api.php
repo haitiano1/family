@@ -22,6 +22,7 @@ try {
     if(preg_match('~^/api/issues(?:/(\d+))?$~D',$route,$p)&&in_array($method,['POST','PATCH'],true)){
         $id=isset($p[1])?(int)$p[1]:null;if(($method==='POST'&&$id)||($method==='PATCH'&&!$id))fail('Không tìm thấy.',404);reply(saveIssue($db,$id,body()),$id?200:201);
     }
+    if(preg_match('~^/api/issues/(\d+)$~D',$route,$p)&&$method==='DELETE')reply(deleteIssue($db,(int)$p[1],body()));
     if($route==='/api/backup'&&$method==='GET'){header('Content-Disposition: attachment; filename="family-backup-'.today().'.json"');reply(backup($db));}
     if($route==='/api/restore'&&$method==='POST')reply(restoreBackup($db,body(32000000)));
     if($route==='/api/state'&&$method==='GET'){
@@ -48,10 +49,10 @@ try {
     if(preg_match('~^/api/families(?:/(\d+))?$~D',$route,$p)&&in_array($method,['POST','PATCH'],true)){
         $id=isset($p[1])?(int)$p[1]:null;if(($method==='POST'&&$id)||($method==='PATCH'&&!$id))fail('Không tìm thấy.',404);$d=body();$name=text($d['name']??'',200);if(!$name)fail('Tên không được để trống.');$service=$d['service']??'youtube';if(!in_array($service,['youtube','google_one','google_ai','other'],true))fail('Dịch vụ không hợp lệ.');$note=text($d['note']??'');
         $result=transaction($db,function()use($db,$id,$d,$name,$service,$note){
-            if($id&&!one($db,'SELECT id FROM families WHERE id=?',[$id]))fail('Không tìm thấy Family.',404);$address=!empty($d['manager_email'])?email($d['manager_email']):null;$manager=$address?one($db,'SELECT * FROM accounts WHERE email=?',[$address]):one($db,'SELECT * FROM accounts WHERE id=?',[(int)($d['manager_id']??0)]);
+            $old=$id?one($db,'SELECT * FROM families WHERE id=?',[$id]):null;if($id&&!$old)fail('Không tìm thấy Family.',404);$trial=calendarDate($d['trial_date']??$old['trial_date']??'');$address=!empty($d['manager_email'])?email($d['manager_email']):null;$manager=$address?one($db,'SELECT * FROM accounts WHERE email=?',[$address]):one($db,'SELECT * FROM accounts WHERE id=?',[(int)($d['manager_id']??0)]);
             if(!$manager&&$address){q($db,'INSERT INTO accounts(email,note,created_at) VALUES (?,?,?)',[$address,'',stamp()]);$manager=['id'=>(int)$db->lastInsertId(),'email'=>$address];}if(!$manager)fail('Nhập email quản lý Family hợp lệ.');
-            if($id){if(one($db,'SELECT id FROM members WHERE family_id=? AND email=?',[$id,$manager['email']]))fail('Email quản lý trùng một khách trong nhóm.');q($db,'UPDATE families SET name=?,manager_id=?,service=?,note=? WHERE id=?',[$name,$manager['id'],$service,$note,$id]);logEntry($db,"Cá nhân: sửa Family #$id");return ['ok'=>true];}
-            q($db,'INSERT INTO families(name,manager_id,service,note,created_at) VALUES (?,?,?,?,?)',[$name,$manager['id'],$service,$note,stamp()]);$new=(int)$db->lastInsertId();logEntry($db,"Cá nhân: tạo Family $name");return ['id'=>$new];
+            if($id){if(one($db,'SELECT id FROM members WHERE family_id=? AND email=?',[$id,$manager['email']]))fail('Email quản lý trùng một khách trong nhóm.');q($db,'UPDATE families SET name=?,manager_id=?,service=?,note=?,trial_date=? WHERE id=?',[$name,$manager['id'],$service,$note,$trial,$id]);logEntry($db,"Cá nhân: sửa Family #$id");return ['ok'=>true];}
+            q($db,'INSERT INTO families(name,manager_id,service,note,created_at,trial_date) VALUES (?,?,?,?,?,?)',[$name,$manager['id'],$service,$note,stamp(),$trial]);$new=(int)$db->lastInsertId();logEntry($db,"Cá nhân: tạo Family $name");return ['id'=>$new];
         });reply($result,$id?200:201);
     }
     if(preg_match('~^/api/members(?:/(\d+))?$~D',$route,$p)&&in_array($method,['POST','PATCH'],true)){

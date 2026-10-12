@@ -9,6 +9,12 @@ export function expiry(value, current = today()) {
   return { expiry_status: days < 0 ? 'expired' : days <= 2 ? 'due_soon' : 'active', days_left: days };
 }
 export const services = ['google_one', 'google_ai', 'youtube', 'other'];
+// Calendar days elapsed at the report date; the first day is day zero.
+export function trialUsageDays(trialDate, reportedOn) {
+  if (![trialDate,reportedOn].every(value=>typeof value==='string'&&/^\d{4}-\d{2}-\d{2}$/.test(value)&&Number.isFinite(Date.parse(value))&&new Date(value).toISOString().slice(0,10)===value)) return null;
+  const days=Math.round((Date.parse(reportedOn)-Date.parse(trialDate))/86400000);
+  return days>=0?days:null;
+}
 // Add calendar months, clamping to the last valid day instead of overflowing February.
 export function renewalDates(previousExpiry, purchaseDate, months) {
   if (!Number.isInteger(Number(months)) || Number(months) < 1 || Number(months) > 120) throw new Error('Chọn gói gia hạn từ 1 đến 120 tháng.');

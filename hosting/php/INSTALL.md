@@ -73,11 +73,13 @@ Gia hạn YouTube luôn nối từ hạn cũ, kể cả trả muộn. Khách ch�
 
 ## 6. Cập nhật và sao lưu
 
-Bản0.6 thêm tìm kiếm Family, Báo lỗi, bảng Chờ fix/Đang fix/Đã fix và Nhật ký trước/sau. Khi Đã fix, chọn Giữ nguyên hoặc Đổi mail; việc đổi đúng mail quản lý/khách và hoàn tất lỗi được lưu trong cùng transaction. Mail ban đầu và nội dung “Đã đổi từ A sang B” được giữ, các ngày/Contact/thanh toán của khách không bị thay đổi. Có chọn trạng thái trên thẻ để dùng iPhone, không bắt buộc kéo thả.
+Bản0.7 giữ tìm kiếm Family, Báo lỗi, bảng Chờ fix/Đang fix/Đã fix và Nhật ký trước/sau. Khi Đã fix, chọn Giữ nguyên hoặc Đổi mail; việc đổi đúng mail quản lý/khách và hoàn tất lỗi được lưu trong cùng transaction. Mail ban đầu và nội dung “Đã đổi từ A sang B” được giữ, các ngày/Contact/thanh toán của khách không bị thay đổi. Có chọn trạng thái trên thẻ để dùng iPhone, không bắt buộc kéo thả.
 
-Nhật ký chi tiết ghi từ lúc cập nhật, giữ log cũ dưới dạng nội dung. Ghi các thao tác thêm/sửa/xóa/nhập/gia hạn/lưu trữ/khôi phục và chuyển trạng thái/đổi mail khi fix; refresh/xem trang không ghi thêm. Xóa Family lưu cả khách bị xóa theo vào nhật ký. Có tìm kiếm/phân trang/Xem chi tiết trước-sau. Nhật ký hỗ trợ đối chiếu và giữ thông tin, chưa có nút hoàn tác tự động. Bản sao lưu v2 có lỗi/nhật ký; vẫn nhận JSON v1 từ bản cũ.
+Bản0.7 thêm Ngày trial trong Family → Sửa, tự lưu Ngày lỗi khi báo lỗi theo giờ Việt Nam và số ngày sử dụng (10/08→15/08 =5 ngày). Ngày trial lấy từ hồ sơ Family tại thời điểm báo, không đổi lại cho case cũ khi sửa Family. Case Đã fix có Xóa case và nhật ký giữ dữ liệu trước xóa. Chữ trên điện thoại được tăng cỡ.
 
-Để cập nhật website đã cài, xem [UPDATE.md](https://github.com/haitiano1/family/blob/main/hosting/php/UPDATE.md) và tải family-hostinger-update.zip. MySQL schema1 nâng cấp cộng thêm lên2 tự động; giữ database và config.php. SQLite phát triển lên10 có backup before-v10.
+Nhật ký chi tiết ghi từ lúc cập nhật, giữ log cũ dưới dạng nội dung. Ghi các thao tác thêm/sửa/xóa/nhập/gia hạn/lưu trữ/khôi phục và chuyển trạng thái/đổi mail khi fix; refresh/xem trang không ghi thêm. Xóa Family lưu cả khách bị xóa theo vào nhật ký. Có tìm kiếm/phân trang/Xem chi tiết trước-sau. Nhật ký hỗ trợ đối chiếu và giữ thông tin, chưa có nút hoàn tác tự động. Bản sao lưu v3 có lỗi/nhật ký/ngày trial; vẫn nhận JSON v1/v2 từ bản cũ.
+
+Để cập nhật website đã cài, xem [UPDATE.md](https://github.com/haitiano1/family/blob/main/hosting/php/UPDATE.md) và tải family-hostinger-update.zip. MySQL schema1/2 nâng cấp cộng thêm lên3 tự động; giữ database và config.php. SQLite phát triển lên11 có backup before-v11.
 
 Dữ liệu nằm trong database MySQL riêng, không nằm trong thư mục file giao diện. Tải sao lưu JSON qua ứng dụng trước cập nhật và định kỳ. Cập nhật bằng gói PHP mới đúng website Family, giữ config.php và database; không xóa database.
 

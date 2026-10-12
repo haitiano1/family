@@ -56,9 +56,9 @@ function restoreArchive(PDO $db,int $id,array $d): array {
 }
 const BASE_BACKUP_TABLES=['accounts','families','members','archived_customers','renewal_history','other_purchases','logs'];
 const BACKUP_TABLES=[...BASE_BACKUP_TABLES,'issues','audit_events'];
-function backup(PDO $db): array {return ['format'=>'family-customer-backup','version'=>2,'created_at'=>stamp(),'tables'=>array_combine(BACKUP_TABLES,array_map(fn($t)=>all($db,"SELECT * FROM `$t` ORDER BY id"),BACKUP_TABLES))];}
+function backup(PDO $db): array {return ['format'=>'family-customer-backup','version'=>3,'created_at'=>stamp(),'tables'=>array_combine(BACKUP_TABLES,array_map(fn($t)=>all($db,"SELECT * FROM `$t` ORDER BY id"),BACKUP_TABLES))];}
 function restoreBackup(PDO $db,array $d): array {
-    if (($d['format']??'')!=='family-customer-backup' || !in_array($d['version']??null,[1,2],true) || !is_array($d['tables']??null)) fail('File sao lưu khách hàng không hợp lệ.');
+    if (($d['format']??'')!=='family-customer-backup' || !in_array($d['version']??null,[1,2,3],true) || !is_array($d['tables']??null)) fail('File sao lưu khách hàng không hợp lệ.');
     if($d['version']===1){$d['tables']['issues']=$d['tables']['issues']??[];$d['tables']['audit_events']=$d['tables']['audit_events']??[];}
     foreach(BACKUP_TABLES as $t) {if (!is_array($d['tables'][$t]??null) || !array_is_list($d['tables'][$t])) fail('File sao lưu thiếu bảng dữ liệu.');if (!in_array($t,['logs','audit_events'],true) && one($db,"SELECT COUNT(*) AS n FROM `$t`")['n']) fail('Chỉ khôi phục vào ứng dụng đang trống để không ghi đè dữ liệu hiện có.',409);}
     try {return transaction($db,function()use($db,$d){
@@ -67,6 +67,7 @@ function restoreBackup(PDO $db,array $d): array {
             $columns=array_column(all($db,"SHOW COLUMNS FROM `$t`"),'Field');if(in_array($t,['logs','audit_events'],true)&&one($db,"SELECT COUNT(*) AS n FROM `$t`")['n'])$columns=array_values(array_filter($columns,fn($c)=>$c!=='id'));$sql="INSERT INTO `$t` (`".implode('`,`',$columns).'`) VALUES ('.implode(',',array_fill(0,count($columns),'?')).')';
             foreach($d['tables'][$t] as $row) {
                 if (!is_array($row)) fail('Dữ liệu sao lưu sai định dạng.');
+                if($d['version']<3)$row=[...($t==='families'?['trial_date'=>'']:($t==='issues'?['trial_date'=>'','reported_on'=>'']:[])),...$row];
                 foreach($columns as $c) if (!array_key_exists($c,$row) || (!is_null($row[$c]) && !is_string($row[$c]) && !is_int($row[$c]) && !is_float($row[$c]))) fail('Dữ liệu sao lưu thiếu trường hoặc sai định dạng.');
                 if ($t==='archived_customers') {json_decode($row['snapshot'],true,512,JSON_THROW_ON_ERROR);}
                 q($db,$sql,array_map(fn($c)=>$row[$c],$columns));

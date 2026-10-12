@@ -90,9 +90,9 @@ test('existing v1 database is backed up and migrated without losing customer rec
   });
   try {
     await f.setup(); let state = await f.admin('state'); assert.equal(state.accounts[0].note, 'Existing note'); assert.equal(state.members[0].email, 'legacyguest@example.com'); assert.equal(state.members[0].expiry_status, 'unknown'); assert.equal(state.families[0].service, 'youtube'); assert.equal('jobs' in state,false);
-    const backups = readdirSync(f.dir).filter(n => n.startsWith('before-v10-')); assert.equal(backups.length, 1);
+    const backups = readdirSync(f.dir).filter(n => n.startsWith('before-v11-')); assert.equal(backups.length, 1);
     const backup = new DatabaseSync(path.join(f.dir, backups[0])); assert.equal(backup.prepare('SELECT email FROM members').get().email, 'legacyguest@example.com'); assert.equal(backup.prepare('PRAGMA user_version').get().user_version, 0); backup.close();
-    await f.stop(); await f.start(); state = await f.admin('state'); assert.equal(state.members.length, 1); assert.equal(readdirSync(f.dir).filter(n => n.startsWith('before-v10-')).length, 1);
+    await f.stop(); await f.start(); state = await f.admin('state'); assert.equal(state.members.length, 1); assert.equal(readdirSync(f.dir).filter(n => n.startsWith('before-v11-')).length, 1);
   } finally { await f.close(); }
 });
 
@@ -148,7 +148,7 @@ test('upgrading v2 retains customer records while adding current fields', async 
     await f.stop();
     const old=new DatabaseSync(path.join(f.dir,'family.sqlite')); old.exec('ALTER TABLE members DROP COLUMN plan_months; PRAGMA user_version=2'); old.close();
     await f.start(); const state=await a('state'); assert.equal('user' in state,false); assert.equal(state.members[0].email,'guest@example.com'); assert.equal(state.members[0].contact,'Existing contact'); assert.equal(state.members[0].payment_status,'paid'); assert.equal(state.members[0].plan_months,0);
-    const backups=readdirSync(f.dir).filter(n=>n.startsWith('before-v10-')); assert.equal(backups.length,1);
+    const backups=readdirSync(f.dir).filter(n=>n.startsWith('before-v11-')); assert.equal(backups.length,1);
     const saved=new DatabaseSync(path.join(f.dir,backups[0])); assert.equal(saved.prepare('PRAGMA user_version').get().user_version,2); assert.equal(saved.prepare('SELECT email FROM members').get().email,'guest@example.com'); saved.close();
   } finally { await f.close(); }
 });
@@ -370,5 +370,39 @@ test('journal snapshots preserve edited fields and deleted Family/customer data;
   const total=(await a('journal')).total;await a('members/'+member.id,'PATCH',{email:'bad'},400);assert.equal((await a('journal')).total,total);
   await a('families/'+family.id,'DELETE');journal=await a('journal?search=manager@example.com');const deleted=journal.entries.find(e=>e.action==='Xóa Family');assert.ok(deleted);const deletedDetail=await a('journal/audit/'+deleted.id);assert.equal(deletedDetail.changes.find(c=>c.table==='families').before.name,'Audit Family');assert.equal(deletedDetail.changes.find(c=>c.table==='members').before.contact,'Edited contact');assert.equal(deletedDetail.changes.find(c=>c.table==='members').after,null);
   assert.equal((await a('state')).members.length,0);await f.stop();await f.start();assert.ok((await a('journal?search=guest@example.com')).total>0);
+ }finally{await f.close();}
+});
+
+test('Family trial date snapshots stay fixed at report time; only done cases can be deleted and journal retains them',async()=>{
+ const f=await fixture();try{
+  const a=f.admin,current=(await a('state')).today,trial=new Date(Date.parse(current)-5*86400000).toISOString().slice(0,10);
+  const family=await a('families','POST',{name:'Trial Family',manager_email:'trial@example.com',trial_date:trial},201);
+  await a('families/'+family.id,'PATCH',{name:'Trial Family',manager_email:'trial@example.com',trial_date:'2026-02-30'},400);assert.equal((await a('state')).families[0].trial_date,trial);
+  const issue=await a('issues','POST',{family_id:family.id,title:'Trial error',reported_on:'1990-01-01',trial_date:'1990-01-01'},201);
+  let state=await a('state'),row=state.issues[0];assert.equal(row.reported_on,current);assert.equal(row.trial_date,trial);assert.equal(row.days_used,5);
+  await a('issues/'+issue.id,'DELETE',{revision:0,expected_created_at:row.created_at},400);
+  await a('issues/'+issue.id,'PATCH',{status:'doing',revision:0});
+  await a('families/'+family.id,'PATCH',{name:'Trial Family',manager_email:'trial@example.com',trial_date:current});
+  row=(await a('state')).issues[0];assert.equal(row.days_used,5);assert.equal(row.trial_date,trial);
+  await f.stop();await f.start();assert.equal((await a('state')).issues[0].days_used,5);
+  await a('issues/'+issue.id,'PATCH',{status:'done',revision:1,resolution:'keep'});
+  await a('issues/'+issue.id,'DELETE',{revision:1,expected_created_at:row.created_at},409);await a('issues/'+issue.id,'DELETE',{revision:2,expected_created_at:row.created_at});
+  state=await a('state');assert.equal(state.issues.length,0);assert.equal(state.families[0].manager_email,'trial@example.com');assert.equal(state.families[0].trial_date,current);
+  const deletion=(await a('journal?search=trial@example.com')).entries.find(e=>e.action==='Xóa lỗi');const detail=await a('journal/audit/'+deletion.id);const change=detail.changes.find(c=>c.table==='issues');assert.equal(change.before.trial_date,trial);assert.equal(change.before.reported_on,current);assert.equal(change.after,null);
+  // SQLite can reuse a deleted id; an old device must not delete the replacement case.
+  const replacement=await a('issues','POST',{family_id:family.id,title:'New case'},201);assert.equal(replacement.id,issue.id);await a('issues/'+replacement.id,'PATCH',{status:'doing',revision:0});await a('issues/'+replacement.id,'PATCH',{status:'done',revision:1,resolution:'keep'});
+  await a('issues/'+replacement.id,'DELETE',{revision:2,expected_created_at:row.created_at},409);assert.equal((await a('state')).issues[0].title,'New case');
+  await a('issues/'+replacement.id,'PATCH',{title:'Stale title',revision:2,expected_created_at:row.created_at},409);
+ }finally{await f.close();}
+});
+
+test('v10 SQLite migration and legacy v1/v2 backups preserve customers and old issue report dates without guessing trial dates',async()=>{
+ const f=await fixture();try{
+  const a=f.admin,family=await a('families','POST',{name:'Old Family',manager_email:'old@example.com'},201);await a('members','POST',{family_id:family.id,email:'guest@example.com',contact:'Original Zalo'},201);await a('issues','POST',{family_id:family.id,title:'Old case'},201);
+  const backup=await a('backup');assert.equal(backup.version,3);
+  for(const version of [1,2]){const legacy=structuredClone(backup);legacy.version=version;for(const row of legacy.tables.families)delete row.trial_date;for(const row of legacy.tables.issues){delete row.trial_date;delete row.reported_on;row.created_at='2026-08-14T23:30:00.000Z';}if(version===1){delete legacy.tables.issues;delete legacy.tables.audit_events;}
+   const destination=await fixture();try{await destination.admin('restore','POST',legacy);const state=await destination.admin('state');assert.equal(state.members[0].contact,'Original Zalo');assert.equal(state.families[0].trial_date,'');if(version===2){assert.equal(state.issues[0].reported_on,'2026-08-15');assert.equal(state.issues[0].days_used,null);}}finally{await destination.close();}
+  }
+  await f.stop();const db=new DatabaseSync(path.join(f.dir,'family.sqlite'));db.exec("ALTER TABLE families DROP COLUMN trial_date;ALTER TABLE issues DROP COLUMN trial_date;ALTER TABLE issues DROP COLUMN reported_on;UPDATE issues SET created_at='2026-08-14T23:30:00.000Z';PRAGMA user_version=10");db.close();await f.start();const state=await a('state');assert.equal(state.members[0].contact,'Original Zalo');assert.equal(state.issues[0].reported_on,'2026-08-15');assert.equal(state.issues[0].days_used,null);assert.equal(state.families[0].trial_date,'');assert.equal(readdirSync(f.dir).filter(n=>n.startsWith('before-v11-')).length,1);
  }finally{await f.close();}
 });

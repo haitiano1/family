@@ -69,6 +69,7 @@ async function handle(req, res) {
     if(req.method==='GET'&&url.pathname==='/api/journal')return send(res,200,journal(db,url.searchParams));
     if(req.method==='GET'&&/^\/api\/journal\/(audit|log)\/\d+$/.test(url.pathname)){const [,,,kind,id]=url.pathname.split('/');const entry=journalEntry(db,kind,Number(id));if(!entry)fail('Không tìm thấy nhật ký.',404);return send(res,200,entry);}
     if(['POST','PATCH'].includes(req.method)&&/^\/api\/issues(?:\/\d+)?$/.test(url.pathname)){const id=req.method==='PATCH'?Number(url.pathname.split('/').pop()):null;if((req.method==='POST'&&url.pathname!=='/api/issues')||(req.method==='PATCH'&&!id))fail('Không tìm thấy.',404);return send(res,id?200:201,issues.save(id,await body(req)));}
+    if(req.method==='DELETE'&&/^\/api\/issues\/\d+$/.test(url.pathname))return send(res,200,issues.remove(Number(url.pathname.split('/').pop()),await body(req)));
     if (req.method==='GET' && url.pathname==='/api/backup') {
       res.setHeader('Content-Disposition',`attachment; filename="family-backup-${today()}.json"`);
       return send(res,200,customerBackup(db));
@@ -136,7 +137,7 @@ async function handle(req, res) {
           let manager = managerEmail ? one('SELECT * FROM accounts WHERE email=?',managerEmail) : one('SELECT * FROM accounts WHERE id=?',Number(data.manager_id));
           if (!manager && managerEmail) { const result=run('INSERT INTO accounts(email,note,created_at) VALUES (?,?,?)',managerEmail,'',now()); manager={id:Number(result.lastInsertRowid)}; }
           if (!manager) fail('Nhập email quản lý Family hợp lệ.');
-          const result = run('INSERT INTO families(name,manager_id,service,note,created_at) VALUES (?,?,?,?,?)',name,manager.id,product,note,now());
+          const result = run('INSERT INTO families(name,manager_id,service,note,created_at,trial_date) VALUES (?,?,?,?,?,?)',name,manager.id,product,note,now(),calendarDate(data.trial_date));
           log(`${actor.username}: tạo Family ${name}`); db.exec('RELEASE family_save'); return send(res,201,{id:Number(result.lastInsertRowid)});
         } catch(error) {db.exec('ROLLBACK TO family_save; RELEASE family_save');throw error;}
       }
@@ -149,7 +150,7 @@ async function handle(req, res) {
           if (!manager && managerEmail) {const result=run('INSERT INTO accounts(email,note,created_at) VALUES (?,?,?)',managerEmail,'',now());manager={id:Number(result.lastInsertRowid),email:managerEmail};}
           if (!manager) fail('Nhập email quản lý Family hợp lệ.');
           if (one('SELECT id FROM members WHERE family_id=? AND email=?',id,manager.email)) fail('Email quản lý trùng một khách trong nhóm.');
-          run('UPDATE families SET name=?,manager_id=?,service=?,note=? WHERE id=?',name,manager.id,product,note,id);
+          run('UPDATE families SET name=?,manager_id=?,service=?,note=?,trial_date=? WHERE id=?',name,manager.id,product,note,calendarDate(data.trial_date??old.trial_date),id);
           log(`${actor.username}: sửa Family #${id}`);db.exec('RELEASE family_save');return send(res,200,{ok:true});
         } catch(error) {db.exec('ROLLBACK TO family_save; RELEASE family_save');throw error;}
       }

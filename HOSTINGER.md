@@ -4,7 +4,7 @@ Gói Premium hiện có đã được xác nhận qua hPanel có PHP8.3 và MySQ
 
 [Tải gói PHP sẵn để upload](https://github.com/haitiano1/family/raw/refs/heads/main/downloads/family-hostinger.zip).
 
-**Website đã cài:** tải [gói cập nhật riêng](https://github.com/haitiano1/family/raw/refs/heads/main/downloads/family-hostinger-update.zip) và làm theo [UPDATE.md](hosting/php/UPDATE.md). Thay file chương trình, giữ config.php/database; không cần tạo lại website hoặc nhập lại khách. Bản0.6 có tìm kiếm Family, Fix lỗi giữ/đổi mail và Nhật ký trước/sau.
+**Website đã cài:** tải [gói cập nhật riêng](https://github.com/haitiano1/family/raw/refs/heads/main/downloads/family-hostinger-update.zip) và làm theo [UPDATE.md](hosting/php/UPDATE.md). Thay file chương trình, giữ config.php/database; không cần tạo lại website hoặc nhập lại khách. Bản0.7 có tìm kiếm Family/Ngày trial, Fix lỗi giữ/đổi mail và số ngày dùng, xóa case Đã fix, Nhật ký trước/sau và chữ điện thoại lớn hơn.
 
 Xem [hướng dẫn từng bước trong gói](hosting/php/INSTALL.md): tạo website và database riêng, tải ZIP lên thư mục mẹ của public_html, giải nén, điền cấu hình riêng, kiểm tra rồi chuyển dữ liệu Windows bằng file sao lưu. config.php nằm ngoài public_html; giữ riêng mật khẩu database/mật khẩu mở ứng dụng. PHP dùng MySQL tự tạo bảng, không cần npm/Node.js trên Hostinger.
 
