@@ -1,0 +1,105 @@
+<?php
+declare(strict_types=1);
+ini_set('display_errors','0');
+class FamilyError extends RuntimeException {
+    public function __construct(string $message, public int $status=400) {parent::__construct($message);}
+}
+function fail(string $message,int $status=400): never {throw new FamilyError($message,$status);}
+function reply(mixed $data,int $status=200): never {
+    http_response_code($status);header('Content-Type: application/json; charset=utf-8');header('Cache-Control: no-store');
+    echo json_encode($data,JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES|JSON_THROW_ON_ERROR);exit;
+}
+function config(): array {
+    $file=__DIR__.'/config.php';
+    if (!is_readable($file)) fail('Chưa cấu hình Family. Điền file family-private/config.php theo hướng dẫn cài đặt.',503);
+    $c=require $file;
+    if (!is_array($c)) fail('Cấu hình Family không hợp lệ.',503);
+    $origin=rtrim((string)($c['public_origin']??''),'/');$url=parse_url($origin);
+    $testHttp=($url['scheme']??'')==='http' && getenv('FAMILY_ALLOW_HTTP')==='1' && in_array($url['host']??'', ['127.0.0.1','localhost'],true);
+    if (!$url || (($url['scheme']??'')!=='https' && !$testHttp) || !empty($url['path']) || !empty($url['query']) || !empty($url['fragment']) || !empty($url['user']) || !empty($url['pass'])) fail('Địa chỉ ứng dụng cần là HTTPS, không kèm đường dẫn.',503);
+    if (!is_string($c['access_password']??null) || strlen($c['access_password'])<7 || str_starts_with($c['access_password'],'YOUR_')) fail('Điền mật khẩu truy cập riêng dài hơn 6 ký tự.',503);
+    foreach(['db_name','db_user'] as $field) if (!preg_match('/^[A-Za-z0-9_]+$/D',(string)($c[$field]??'')) || str_starts_with($c[$field],'YOUR_')) fail('Điền tên database và người dùng MySQL đầy đủ do Hostinger cấp.',503);
+    $c['public_origin']=$origin;$c['secure']=!$testHttp;
+    return $c;
+}
+function checkRequest(array $c): void {
+    $url=parse_url($c['public_origin']);$host=$url['host'].(isset($url['port'])?':'.$url['port']:'');
+    if (($_SERVER['HTTP_HOST']??'')!==$host) fail('Địa chỉ truy cập không hợp lệ.',403);
+    if (!in_array($_SERVER['REQUEST_METHOD'],['GET','HEAD'],true)) {
+        if (isset($_SERVER['HTTP_ORIGIN']) && $_SERVER['HTTP_ORIGIN']!==$c['public_origin']) fail('Nguồn yêu cầu không hợp lệ.',403);
+        if (($_SERVER['HTTP_X_FAM_REQUEST']??'')!=='1') fail('Yêu cầu thay đổi không hợp lệ.',403);
+    }
+}
+function accessKey(array $c): string {return hash('sha256',"family-hosting-session\0".$c['access_password'],true);}
+function authorized(array $c): bool {
+    $token=$_COOKIE['fam_access']??'';
+    if (!is_string($token) || !preg_match('/^(\d{13})\.([a-f0-9]{64})$/D',$token,$parts)) return false;
+    return (float)$parts[1]>microtime(true)*1000 && hash_equals(hash_hmac('sha256',$parts[1],accessKey($c)),$parts[2]);
+}
+function accessCookie(array $c,bool $close=false): void {
+    $expires=(string)(int)floor(microtime(true)*1000+30*86400000);
+    setcookie('fam_access',$close?'':$expires.'.'.hash_hmac('sha256',$expires,accessKey($c)),['expires'=>$close?1:time()+30*86400,'path'=>'/','secure'=>$c['secure'],'httponly'=>true,'samesite'=>'Strict']);
+}
+function db(array $c): PDO {
+    try {$db=new PDO('mysql:host='.$c['db_host'].';port='.($c['db_port']??3306).';dbname='.$c['db_name'].';charset=utf8mb4',$c['db_user'],$c['db_password'],[PDO::ATTR_ERRMODE=>PDO::ERRMODE_EXCEPTION,PDO::ATTR_DEFAULT_FETCH_MODE=>PDO::FETCH_ASSOC,PDO::ATTR_EMULATE_PREPARES=>false]);}
+    catch (PDOException $e) {error_log('Family database connection failed.');fail('Không kết nối được MySQL. Kiểm tra cấu hình database của website Family.',503);}
+    if ((int)q($db,'SELECT GET_LOCK(?,10) AS ok',['family:'.$c['db_name']])->fetch()['ok']!==1) fail('Ứng dụng đang xử lý dữ liệu. Thử lại sau ít giây.',503);
+    initializeSchema($db);
+    return $db;
+}
+function q(PDO $db,string $sql,array $args=[]): PDOStatement {$stmt=$db->prepare($sql);$stmt->execute($args);return $stmt;}
+function one(PDO $db,string $sql,array $args=[]): array|false {return q($db,$sql,$args)->fetch();}
+function all(PDO $db,string $sql,array $args=[]): array {return q($db,$sql,$args)->fetchAll();}
+function stamp(): string {return gmdate('Y-m-d\TH:i:s.000\Z');}
+function today(): string {return (new DateTimeImmutable('now',new DateTimeZone('Asia/Ho_Chi_Minh')))->format('Y-m-d');}
+function logEntry(PDO $db,string $message): void {q($db,'INSERT INTO logs(message,created_at) VALUES (?,?)',[$message,stamp()]);}
+function body(int $limit=16384): array {
+    if (!preg_match('~^application/json(?:;|$)~i',$_SERVER['CONTENT_TYPE']??'')) fail('Yêu cầu cần Content-Type application/json.',415);
+    $stream=fopen('php://input','rb');$raw=stream_get_contents($stream,$limit+1);fclose($stream);
+    if (strlen($raw)>$limit) fail('Dữ liệu quá lớn.',413);
+    try {$object=json_decode($raw,false,512,JSON_THROW_ON_ERROR);if (!$object instanceof stdClass) fail('Dữ liệu cần là một đối tượng.');return json_decode($raw,true,512,JSON_THROW_ON_ERROR);}
+    catch (JsonException $e) {fail('JSON không hợp lệ.');}
+}
+function text(mixed $value,int $max=1000): string {
+    if ($value!==null && !is_string($value)) fail('Dữ liệu văn bản không hợp lệ.');$s=trim($value??'');
+    if (!preg_match('//u',$s) || preg_match_all('/./us',$s)>$max) fail("Nội dung không được quá $max ký tự.");return $s;
+}
+function email(mixed $value): string {$s=strtolower(text($value,254));if (!preg_match('/^[^\s@]+@[^\s@]+\.[^\s@]+$/uD',$s)) fail('Email không hợp lệ.');return $s;}
+function calendarDate(mixed $value): string {
+    if (!$value) return '';
+    if (!is_string($value) || !preg_match('/^(\d{4})-(\d{2})-(\d{2})$/D',$value,$p) || !checkdate((int)$p[2],(int)$p[3],(int)$p[1])) fail('Ngày không hợp lệ.');return $value;
+}
+function integer(mixed $value,int $min,int $max,string $message): int {
+    if ($min===0 && is_string($value) && trim($value)==='') return 0;
+    if ((!is_int($value) && !is_float($value) && !is_string($value)) || !is_numeric($value) || (float)$value!=(int)$value || (float)$value<$min || (float)$value>$max) fail($message);return (int)$value;
+}
+function memberValues(array $d): array {
+    $joined=calendarDate($d['joined_at']??'');$expires=calendarDate($d['expires_at']??'');if ($joined && $expires && $expires<$joined) fail('Ngày hết hạn phải từ ngày mua trở đi.');
+    $payment=$d['payment_status']??'unpaid';if (!in_array($payment,['unknown','unpaid','partial','paid'],true)) fail('Trạng thái thanh toán không hợp lệ.');
+    $membership=$d['membership_status']??'unknown';if (!in_array($membership,['unknown','active','invited'],true)) fail('Trạng thái thành viên không hợp lệ.');
+    return [email($d['email']??''),text($d['customer_name']??'',200),text($d['contact']??''),$joined,$expires,$payment,integer($d['amount']??0,0,1000000000,'Số tiền từ 0 đến 1 tỷ VND.'),text($d['note']??''),integer($d['plan_months']??0,0,120,'Gói mua cần từ 1 đến 120 tháng hoặc để chưa đặt.'),$membership];
+}
+function expiry(string $value): array {
+    if (!$value) return ['expiry_status'=>'unknown','days_left'=>null];
+    $days=(int)round((strtotime($value.' UTC')-strtotime(today().' UTC'))/86400);
+    return ['expiry_status'=>$days<0?'expired':($days<=2?'due_soon':'active'),'days_left'=>$days];
+}
+function transaction(PDO $db,callable $operation): mixed {
+    $db->beginTransaction();try {$result=$operation();$db->commit();return $result;}catch (Throwable $e) {if ($db->inTransaction()) $db->rollBack();throw $e;}
+}
+function initializeSchema(PDO $db): void {
+    $tables=array_map(fn($r)=>array_values($r)[0],all($db,'SHOW TABLES'));
+    if ($tables && !in_array('app_meta',$tables,true)) fail('Database đang chứa dữ liệu khác. Tạo database trống riêng cho Family.',503);
+    if (in_array('app_meta',$tables,true)) {
+        $version=one($db,"SELECT value FROM app_meta WHERE name='schema_version'");
+        if (($version['value']??'')==='1') return;
+        if ($version) fail('Database dùng phiên bản khác. Hãy dùng mã nguồn tương ứng.',503);
+    }
+    foreach(explode(';',file_get_contents(__DIR__.'/schema.sql')) as $sql) if (trim($sql)) $db->exec($sql);
+    q($db,"INSERT INTO app_meta(name,value) VALUES ('schema_version','1') ON DUPLICATE KEY UPDATE value=value");
+}
+function errorReply(Throwable $e): never {
+    if ($e instanceof FamilyError) reply(['error'=>$e->getMessage()],$e->status);
+    if ($e instanceof PDOException && ($e->errorInfo[1]??0)===1062) reply(['error'=>'Hồ sơ đã tồn tại; một email quản lý chỉ thuộc một Family.'],409);
+    error_log('Family request failed: '.get_class($e));reply(['error'=>'Lỗi hệ thống. Kiểm tra cấu hình hoặc nhật ký lỗi của website Family.'],500);
+}

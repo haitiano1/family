@@ -10,3 +10,4 @@ test
 family-backup-*.json
 .env
 .env.*
+**/config.php

@@ -6,3 +6,4 @@ node_modules/
 .env
 .env.*
 family-backup-*.json
+hosting/php/family-private/config.php
