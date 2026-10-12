@@ -2,7 +2,7 @@ import { createHmac, randomBytes } from 'node:crypto';
 import { parseCSV, importFields, normalizeHeader } from './public/csv.js';
 export function initImporter(db, { fail, email, text, memberData, log }) {
   const key = randomBytes(32);
-  const columns = ['email','customer_name','contact','joined_at','expires_at','payment_status','amount','note','plan_months'];
+  const columns = ['email','customer_name','contact','joined_at','expires_at','payment_status','amount','note','plan_months','membership_status'];
   const dateCell = value => {
     if (!value) return '';
     const parts = value.match(/^(\d{1,2})[/.\-](\d{1,2})[/.\-](\d{4})$/);
@@ -23,8 +23,9 @@ export function initImporter(db, { fail, email, text, memberData, log }) {
   };
   const planCell = value => {
     if (!value) return 0;
-    const match = value.match(/^(1|2|3|6|12)\s*(?:tháng|thang|th|months?)?$/i);
-    if (!match) fail('Gói mua cần là 1, 2, 3, 6 hoặc 12 tháng.');
+    if (/^(?:1|một|mot)\s*năm$/i.test(value)) return 12;
+    const match = value.match(/^(\d+)\s*(?:tháng|thang|th|months?)?$/i);
+    if (!match || Number(match[1]) < 1 || Number(match[1]) > 120) fail('Gói mua cần từ 1 đến 120 tháng.');
     return Number(match[1]);
   };
   function prepare(data) {
@@ -38,19 +39,20 @@ export function initImporter(db, { fail, email, text, memberData, log }) {
     if (mapping.email < 0) fail('Cần chọn cột Email khách.');
     const selected = Object.values(mapping).filter(v => v >= 0); if (new Set(selected).size !== selected.length) fail('Một cột chỉ được gán cho một trường.');
     if (!['skip','update'].includes(data.duplicates || 'skip')) fail('Cách xử lý khách trùng không hợp lệ.');
+    for (const key of ['allow_overflow','match_by_manager']) if (data[key] != null && typeof data[key] !== 'boolean') fail('Tùy chọn nhập không hợp lệ.');
     if (data.create_groups != null && typeof data.create_groups !== 'boolean') fail('Tùy chọn tạo nhóm không hợp lệ.');
     const accounts = db.prepare('SELECT * FROM accounts ORDER BY id').all();
     const families = db.prepare('SELECT f.*,a.email AS manager_email FROM families f JOIN accounts a ON a.id=f.manager_id ORDER BY f.id').all();
     const members = db.prepare('SELECT * FROM members ORDER BY id').all();
     const fallback = families.find(f => f.id === Number(data.family_id));
     if (!fallback && !data.default_manager && mapping.family_name < 0 && mapping.manager_email < 0) fail('Chọn Family nhận khách hoặc chọn cột Family/email quản lý.');
-    const newGroups = new Map(), seen = new Set(), counts = new Map(families.map(f => [String(f.id), members.filter(m => m.family_id === f.id).length]));
+    const newGroups = new Map(), seen = new Set(), counts = new Map(families.map(f => [String(f.id), members.filter(m => m.family_id === f.id && m.membership_status !== 'invited').length]));
     const items = [];
     function groupFor(name, manager) {
       if (!name && !manager && !fallback && data.default_manager) { manager = data.default_manager; name = text(data.default_family || '', 200); }
       if (manager) {
         manager = email(manager); const found = families.find(f => f.manager_email === manager);
-        if (found) { if (name && name !== found.name) fail('Tên Family không khớp email quản lý trong hệ thống.'); return { key: String(found.id), ...found }; }
+        if (found) { if (name && name !== found.name && !data.match_by_manager) fail('Tên Family không khớp email quản lý trong hệ thống.'); return { key: String(found.id), ...found }; }
         if (!data.create_groups) fail('Email quản lý chưa có Family. Tạo hồ sơ trước hoặc bật tạo Family mới.');
         const groupName = name || `Family ${manager}`;
         if (newGroups.has(manager)) { const g = newGroups.get(manager); if (g.name !== groupName) fail('Một email quản lý có nhiều tên Family trong CSV.'); return g; }
@@ -85,8 +87,10 @@ export function initImporter(db, { fail, email, text, memberData, log }) {
           values[name] = ['joined_at','expires_at'].includes(name) ? dateCell(raw) : name === 'payment_status' ? paymentCell(raw) : name === 'amount' ? amountCell(raw) : name === 'plan_months' ? planCell(raw) : raw;
         }
         item.values = memberData(values); item.member_id = existing?.id;
-        if (!existing && counts.get(group.key) >= 5) fail('Family đã đủ 5 khách và 1 quản lý.');
-        if (!existing) counts.set(group.key, counts.get(group.key) + 1);
+        const before = existing && existing.membership_status !== 'invited' ? 1 : 0;
+        const after = item.values[9] !== 'invited' ? 1 : 0;
+        if (counts.get(group.key) - before + after > 5) fail('Family đã đủ 5 khách và 1 quản lý.');
+        counts.set(group.key, counts.get(group.key) - before + after);
         item.status = existing ? 'update' : 'create'; item.message = existing ? 'Cập nhật trường đã chọn, giữ dữ liệu ô trống.' : 'Thêm khách mới.';
       } catch (error) { if (!error.status) throw error; item.message = error.message; }
       items.push(item);
@@ -97,7 +101,7 @@ export function initImporter(db, { fail, email, text, memberData, log }) {
     return { summary, items, groups, token };
   }
   function handle(data, user, commit = false) {
-    if (data.create_groups && user.role !== 'admin') fail('Chỉ quản trị viên được tự tạo Family/tài khoản quản lý khi nhập CSV.', 403);
+    if (data.create_groups && user.role !== 'admin') fail('Chỉ quản trị viên được tạo nhóm mới hoặc giữ hồ sơ vượt giới hạn khi nhập CSV.', 403);
     const token = data.preview_token; const input = { ...data }; delete input.preview_token;
     db.exec(commit ? 'BEGIN IMMEDIATE' : 'BEGIN');
     try {
@@ -112,8 +116,8 @@ export function initImporter(db, { fail, email, text, memberData, log }) {
           const id = Number(db.prepare('INSERT INTO families(name,manager_id,service,note,created_at) VALUES (?,?,?,?,?)').run(g.name,accountId,'youtube','',new Date().toISOString()).lastInsertRowid); groupIds.set(g.key,id);
         }
         for (const row of plan.items) {
-          if (row.status === 'create') db.prepare('INSERT INTO members(family_id,email,customer_name,contact,joined_at,expires_at,payment_status,amount,note,plan_months) VALUES (?,?,?,?,?,?,?,?,?,?)').run(groupIds.get(row.group_key) || Number(row.group_key),...row.values);
-          else if (row.status === 'update') db.prepare('UPDATE members SET email=?,customer_name=?,contact=?,joined_at=?,expires_at=?,payment_status=?,amount=?,note=?,plan_months=?,renewal_revision=renewal_revision+1 WHERE id=?').run(...row.values,row.member_id);
+          if (row.status === 'create') db.prepare('INSERT INTO members(family_id,email,customer_name,contact,joined_at,expires_at,payment_status,amount,note,plan_months,membership_status) VALUES (?,?,?,?,?,?,?,?,?,?,?)').run(groupIds.get(row.group_key) || Number(row.group_key),...row.values);
+          else if (row.status === 'update') db.prepare('UPDATE members SET email=?,customer_name=?,contact=?,joined_at=?,expires_at=?,payment_status=?,amount=?,note=?,plan_months=?,membership_status=?,renewal_revision=renewal_revision+1 WHERE id=?').run(...row.values,row.member_id);
         }
         log(`${user.username}: nhập CSV ${plan.summary.create} khách mới, ${plan.summary.update} cập nhật, ${plan.summary.skip} bỏ qua, ${plan.summary.new_families} Family mới`);
       }

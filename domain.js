@@ -28,7 +28,7 @@ export function googleGuide(action, service = 'google_one') {
 }
 // Add calendar months, clamping to the last valid day instead of overflowing February.
 export function renewalDates(previousExpiry, purchaseDate, months) {
-  if (![1,2,3,6,12].includes(Number(months))) throw new Error('Chọn gói gia hạn 1, 2, 3, 6 hoặc 12 tháng.');
+  if (!Number.isInteger(Number(months)) || Number(months) < 1 || Number(months) > 120) throw new Error('Chọn gói gia hạn từ 1 đến 120 tháng.');
   for (const value of [purchaseDate, ...(previousExpiry ? [previousExpiry] : [])]) {
     if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(value) || !Number.isFinite(Date.parse(value)) || new Date(value).toISOString().slice(0,10) !== value) throw new Error('Ngày mua hoặc ngày hết hạn không hợp lệ.');
   }

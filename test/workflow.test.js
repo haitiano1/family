@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import http from 'node:http';
 import { spawn } from 'node:child_process';
-import { mkdtempSync, rmSync, readdirSync } from 'node:fs';
+import { mkdtempSync, rmSync, readdirSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { once } from 'node:events';
@@ -139,9 +139,9 @@ test('existing v1 database is backed up and migrated without losing customer rec
   });
   try {
     await f.setup(); let state = await f.admin('state'); assert.equal(state.accounts[0].note, 'Existing note'); assert.equal(state.members[0].email, 'legacyguest@example.com'); assert.equal(state.members[0].expiry_status, 'unknown'); assert.equal(state.families[0].service, 'youtube'); assert.equal(state.jobs.length, 1);
-    const backups = readdirSync(f.dir).filter(n => n.startsWith('before-v6-')); assert.equal(backups.length, 1);
+    const backups = readdirSync(f.dir).filter(n => n.startsWith('before-v7-')); assert.equal(backups.length, 1);
     const backup = new DatabaseSync(path.join(f.dir, backups[0])); assert.equal(backup.prepare('SELECT email FROM members').get().email, 'legacyguest@example.com'); assert.equal(backup.prepare('PRAGMA user_version').get().user_version, 0); backup.close();
-    await f.stop(); await f.start(); state = await f.admin('state'); assert.equal(state.members.length, 1); assert.equal(readdirSync(f.dir).filter(n => n.startsWith('before-v6-')).length, 1);
+    await f.stop(); await f.start(); state = await f.admin('state'); assert.equal(state.members.length, 1); assert.equal(readdirSync(f.dir).filter(n => n.startsWith('before-v7-')).length, 1);
   } finally { await f.close(); }
 });
 
@@ -248,7 +248,7 @@ test('upgrading v2 retains users, active sessions and old customer records while
     await f.stop();
     const old=new DatabaseSync(path.join(f.dir,'family.sqlite')); old.exec('ALTER TABLE members DROP COLUMN plan_months; PRAGMA user_version=2'); old.close();
     await f.start(); const state=await a('state'); assert.equal(state.user.username,'owner'); assert.equal(state.members[0].email,'guest@example.com'); assert.equal(state.members[0].contact,'Existing contact'); assert.equal(state.members[0].payment_status,'paid'); assert.equal(state.members[0].plan_months,0);
-    const backups=readdirSync(f.dir).filter(n=>n.startsWith('before-v6-')); assert.equal(backups.length,1);
+    const backups=readdirSync(f.dir).filter(n=>n.startsWith('before-v7-')); assert.equal(backups.length,1);
     const saved=new DatabaseSync(path.join(f.dir,backups[0])); assert.equal(saved.prepare('PRAGMA user_version').get().user_version,2); assert.equal(saved.prepare('SELECT username FROM users').get().username,'owner'); saved.close();
   } finally { await f.close(); }
 });
@@ -311,4 +311,29 @@ test('declined customers archive after seven days from selection, keep their his
     assert.equal((await a('members/'+restored.member_id+'/renewal-history')).history.length,1);
     await a('archives/'+record.id+'/restore','POST',{family_id:family.id},409);
   } finally { await f.close(); }
+});
+
+test('invitation-pending sixth customer imports with a custom plan and does not consume an occupied slot', async () => {
+  const f=await fixture();
+  try {
+    await f.setup();const a=f.admin;
+    const payload={csv:'Email,Manager,Gói,Status\n'+Array.from({length:6},(_,i)=>`guest${i}@example.com,manager@example.com,${i===0?'13 tháng':'1 năm'},${i===0?'invited':'unknown'}`).join('\n'),mapping:{email:0,manager_email:1,plan_months:2,membership_status:3},create_groups:true,duplicates:'skip'};
+    const preview=await a('import/preview','POST',payload);assert.equal(preview.summary.create,6);assert.equal(preview.summary.errors,0);await a('import/commit','POST',{...payload,preview_token:preview.preview_token});
+    const state=await a('state');assert.equal(state.members.length,6);assert.equal(state.members.filter(m=>m.membership_status!=='invited').length,5);assert.equal(state.members.find(m=>m.email==='guest0@example.com').plan_months,13);
+    const m=state.members.find(m=>m.membership_status==='invited');await a('members/'+m.id,'PATCH',{email:m.email,membership_status:'active',plan_months:13},400);
+  } finally {await f.close();}
+});
+
+test('offline CSV importer preserves existing app users and skips duplicate customer imports', async () => {
+  const f=await fixture();
+  try {
+    await f.setup();await f.stop();
+    const csv=path.join(f.dir,'source.csv');writeFileSync(csv,'Family 1,,,,,,\nmanager@example.com,SECRET-HEADER,Gói mua,Ngày mua,Ngày đến hạn,Ngày pay,Contact\nCustomer,guest@example.com,13 tháng,01/01/2026,01/02/2027,0,Zalo');
+    async function runImport() {
+      const process=spawn(globalThis.process.execPath,['import-cli.js',csv],{env:{...globalThis.process.env,DATA_DIR:f.dir},stdio:['ignore','pipe','pipe']});let output='';process.stdout.on('data',d=>output+=d);process.stderr.on('data',d=>output+=d);const [code]=await once(process,'exit');assert.equal(code,0,output);return output;
+    }
+    assert.match(await runImport(),/1 new customers/);assert.match(await runImport(),/Already imported/);
+    assert.ok(readdirSync(f.dir).some(n=>n.startsWith('before-csv-')));
+    await f.start();const state=await f.admin('state');assert.equal(state.user.username,'owner');assert.equal(state.members.length,1);assert.equal(state.members[0].plan_months,13);
+  } finally {await f.close();}
 });

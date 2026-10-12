@@ -1,8 +1,9 @@
 import http from 'node:http';
-import { DatabaseSync } from 'node:sqlite';
-import { mkdirSync, readFileSync, existsSync } from 'node:fs';
+import { initDatabase } from './database.js';
+import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
+import { validators } from './validation.js';
 import { initArchive } from './archive.js';
 import { initRenewals } from './renewal.js';
 import { initImporter } from './importer.js';
@@ -11,43 +12,7 @@ import { today, expiry, services, googleActions, googleGuide } from './domain.js
 
 const root = path.dirname(fileURLToPath(import.meta.url));
 const dir = process.env.DATA_DIR || path.join(root, 'data');
-mkdirSync(dir, { recursive: true });
-const file = path.join(dir, 'family.sqlite');
-const existing = existsSync(file);
-const db = new DatabaseSync(file);
-const currentVersion = db.prepare('PRAGMA user_version').get().user_version;
-if (currentVersion > 6) throw new Error('Database is newer than this application. Use the latest application version.');
-if (existing && currentVersion < 6) {
-  const backup = path.join(dir, `before-v6-${Date.now()}.sqlite`);
-  db.exec(`VACUUM INTO '${backup.replaceAll("'", "''")}'`);
-  console.log('Saved pre-upgrade database backup in the data directory.');
-}
-db.exec(`PRAGMA foreign_keys=ON; PRAGMA busy_timeout=5000;
-CREATE TABLE IF NOT EXISTS accounts (id INTEGER PRIMARY KEY, email TEXT UNIQUE NOT NULL, note TEXT NOT NULL DEFAULT '', created_at TEXT NOT NULL);
-CREATE TABLE IF NOT EXISTS families (id INTEGER PRIMARY KEY, name TEXT NOT NULL, manager_id INTEGER UNIQUE NOT NULL REFERENCES accounts(id), created_at TEXT NOT NULL);
-CREATE TABLE IF NOT EXISTS members (id INTEGER PRIMARY KEY, family_id INTEGER NOT NULL REFERENCES families(id) ON DELETE CASCADE, email TEXT NOT NULL, UNIQUE(family_id,email));
-CREATE TABLE IF NOT EXISTS jobs (id INTEGER PRIMARY KEY, action TEXT NOT NULL, target TEXT NOT NULL, status TEXT NOT NULL, detail TEXT NOT NULL, created_at TEXT NOT NULL);
-CREATE TABLE IF NOT EXISTS logs (id INTEGER PRIMARY KEY, message TEXT NOT NULL, created_at TEXT NOT NULL);`);
-const additions = {
-  families: { service: "TEXT NOT NULL DEFAULT 'youtube'", note: "TEXT NOT NULL DEFAULT ''" },
-  members: { customer_name: "TEXT NOT NULL DEFAULT ''", contact: "TEXT NOT NULL DEFAULT ''", joined_at: "TEXT NOT NULL DEFAULT ''", expires_at: "TEXT NOT NULL DEFAULT ''", payment_status: "TEXT NOT NULL DEFAULT 'unpaid'", amount: 'INTEGER NOT NULL DEFAULT 0', plan_months: 'INTEGER NOT NULL DEFAULT 0', note: "TEXT NOT NULL DEFAULT ''", renewal_status: "TEXT NOT NULL DEFAULT 'not_contacted'", renewal_amount: 'INTEGER NOT NULL DEFAULT 0', renewal_paid_at: "TEXT NOT NULL DEFAULT ''", renewal_note: "TEXT NOT NULL DEFAULT ''", renewal_revision: 'INTEGER NOT NULL DEFAULT 0', declined_at: "TEXT NOT NULL DEFAULT ''" },
-  jobs: { account_id: 'INTEGER', family_id: 'INTEGER', email: "TEXT NOT NULL DEFAULT ''", service: "TEXT NOT NULL DEFAULT 'youtube'", manager_email: "TEXT NOT NULL DEFAULT ''", completed_at: 'TEXT', completed_by: 'TEXT' }
-};
-db.exec('BEGIN');
-try {
-  for (const [table, columns] of Object.entries(additions)) {
-    const known = new Set(db.prepare(`PRAGMA table_info(${table})`).all().map(c => c.name));
-    for (const [name, type] of Object.entries(columns)) if (!known.has(name)) db.exec(`ALTER TABLE ${table} ADD COLUMN ${name} ${type}`);
-  }
-  db.exec(`CREATE TABLE IF NOT EXISTS renewal_history (id INTEGER PRIMARY KEY, member_id INTEGER REFERENCES members(id) ON DELETE SET NULL, email TEXT NOT NULL,customer_name TEXT NOT NULL,family_name TEXT NOT NULL,old_expires_at TEXT NOT NULL,new_expires_at TEXT NOT NULL,plan_months INTEGER NOT NULL,amount INTEGER NOT NULL,paid_at TEXT NOT NULL,note TEXT NOT NULL,created_at TEXT NOT NULL,created_by TEXT NOT NULL);
-  `);
-  const historyColumns = new Set(db.prepare('PRAGMA table_info(renewal_history)').all().map(c => c.name));
-  for (const name of ['old_purchase_at','new_purchase_at']) if (!historyColumns.has(name)) db.exec(`ALTER TABLE renewal_history ADD COLUMN ${name} TEXT NOT NULL DEFAULT ''`);
-  if (!historyColumns.has('archive_id')) db.exec('ALTER TABLE renewal_history ADD COLUMN archive_id INTEGER');
-  if (currentVersion < 6) db.prepare("UPDATE members SET declined_at=? WHERE renewal_status='declined' AND declined_at=''").run(new Date().toISOString());
-  db.exec(`CREATE TABLE IF NOT EXISTS archived_customers (id INTEGER PRIMARY KEY,original_member_id INTEGER NOT NULL,email TEXT NOT NULL,customer_name TEXT NOT NULL,family_name TEXT NOT NULL,manager_email TEXT NOT NULL,snapshot TEXT NOT NULL,archived_at TEXT NOT NULL,reason TEXT NOT NULL,restored_at TEXT,restored_by TEXT,restored_member_id INTEGER);
-  PRAGMA user_version=6; COMMIT`);
-} catch (error) { db.exec('ROLLBACK'); throw error; }
+const db = initDatabase(dir);
 const all = (sql, ...args) => db.prepare(sql).all(...args);
 const one = (sql, ...args) => db.prepare(sql).get(...args);
 const run = (sql, ...args) => db.prepare(sql).run(...args);
@@ -55,27 +20,7 @@ const now = () => new Date().toISOString();
 const log = message => run('INSERT INTO logs(message,created_at) VALUES (?,?)', message, now());
 const fail = (message, status = 400) => { throw Object.assign(new Error(message), { status }); };
 const auth = initAuth(db, fail, log);
-const email = value => {
-  const result = String(value || '').trim().toLowerCase();
-  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(result) || result.length > 254) fail('Email không hợp lệ.');
-  return result;
-};
-const text = (value, max = 1000) => { if (value != null && typeof value !== 'string') fail('Dữ liệu văn bản không hợp lệ.'); const result = (value || '').trim(); if (result.length > max) fail(`Nội dung không được quá ${max} ký tự.`); return result; };
-const label = value => { const result = text(value, 200); if (!result) fail('Tên không được để trống.'); return result; };
-const service = value => { if (!services.includes(value)) fail('Dịch vụ không hợp lệ.'); return value; };
-const calendarDate = value => {
-  if (!value) return '';
-  if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(value) || !Number.isFinite(Date.parse(value)) || new Date(value).toISOString().slice(0, 10) !== value) fail('Ngày không hợp lệ.');
-  return value;
-};
-function memberData(data) {
-  const joined = calendarDate(data.joined_at), expires = calendarDate(data.expires_at);
-  if (joined && expires && expires < joined) fail('Ngày hết hạn phải từ ngày vào trở đi.');
-  const payment = data.payment_status || 'unpaid'; if (!['unknown','unpaid', 'paid', 'partial'].includes(payment)) fail('Trạng thái thanh toán không hợp lệ.');
-  const amount = Number(data.amount || 0); if (!Number.isSafeInteger(amount) || amount < 0 || amount > 1000000000) fail('Số tiền phải là số nguyên từ 0 đến 1 tỷ đồng.');
-  const plan = Number(data.plan_months || 0); if (![0,1,2,3,6,12].includes(plan)) fail('Gói mua cần là 1, 2, 3, 6 hoặc 12 tháng.');
-  return [email(data.email), text(data.customer_name, 200), text(data.contact, 1000), joined, expires, payment, amount, text(data.note), plan];
-}
+const { email,text,label,service,calendarDate,memberData } = validators(fail);
 const archive = initArchive(db, { fail,log, mode:'declined' });
 archive.sweep();
 const housekeeper = setInterval(() => { try { archive.sweep(); } catch { console.error('Archive sweep failed. Retry on the next interval.'); } },60000); housekeeper.unref();
@@ -170,12 +115,13 @@ const server = http.createServer(async (req, res) => {
       const family = one('SELECT f.*,a.email FROM families f JOIN accounts a ON a.id=f.manager_id WHERE f.id=?', prior?.family_id || Number(data.family_id));
       if (!family) fail('Không tìm thấy Family.'); if (values[0] === family.email) fail('Tài khoản quản lý đã thuộc hồ sơ này.');
       if (req.method === 'POST' && url.pathname === '/api/members') {
-        if (one('SELECT COUNT(*) AS n FROM members WHERE family_id=?', family.id).n >= 5) fail('Hồ sơ đã đủ 6 người gồm tài khoản quản lý.');
-        const result = run('INSERT INTO members(family_id,email,customer_name,contact,joined_at,expires_at,payment_status,amount,note,plan_months) VALUES (?,?,?,?,?,?,?,?,?,?)', family.id, ...values);
+        if (values[9] !== 'invited' && one("SELECT COUNT(*) AS n FROM members WHERE family_id=? AND membership_status!='invited'", family.id).n >= 5) fail('Hồ sơ đã đủ 6 người gồm tài khoản quản lý.');
+        const result = run('INSERT INTO members(family_id,email,customer_name,contact,joined_at,expires_at,payment_status,amount,note,plan_months,membership_status) VALUES (?,?,?,?,?,?,?,?,?,?,?)', family.id, ...values);
         log(`${user.username}: ghi nhận khách ${values[0]} trong ${family.name}`); return send(res, 201, { id: Number(result.lastInsertRowid) });
       }
       if (req.method === 'PATCH') {
-        run('UPDATE members SET email=?,customer_name=?,contact=?,joined_at=?,expires_at=?,payment_status=?,amount=?,note=?,plan_months=?,renewal_revision=renewal_revision+1 WHERE id=?', ...values, id);
+        if (values[9] !== 'invited' && one("SELECT COUNT(*) AS n FROM members WHERE family_id=? AND id!=? AND membership_status!='invited'", family.id,id).n >= 5) fail('Family đã đủ 5 thành viên ghi nhận.');
+        run('UPDATE members SET email=?,customer_name=?,contact=?,joined_at=?,expires_at=?,payment_status=?,amount=?,note=?,plan_months=?,membership_status=?,renewal_revision=renewal_revision+1 WHERE id=?', ...values, id);
         log(`${user.username}: cập nhật khách #${id}, hạn ${values[4] || 'chưa đặt'}, thanh toán ${values[5]}`); return send(res, 200, { ok: true });
       }
     }

@@ -38,8 +38,8 @@ export function initArchive(db, { fail, log, mode = 'expiry' }) {
       if (!family) fail('Chọn Family đang tồn tại để khôi phục.');
       if (family.email === m.email) fail('Email khách trùng tài khoản quản lý.');
       if (db.prepare('SELECT id FROM members WHERE family_id=? AND email=?').get(family.id,m.email)) fail('Email khách đã có trong Family này.',409);
-      if (db.prepare('SELECT COUNT(*) AS n FROM members WHERE family_id=?').get(family.id).n >= 5) fail('Family đã đủ 5 khách.');
-      const restoredId = Number(db.prepare("INSERT INTO members(family_id,email,customer_name,contact,joined_at,expires_at,payment_status,amount,note,plan_months,renewal_status,renewal_amount,renewal_paid_at,renewal_note,renewal_revision,declined_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)").run(family.id,m.email,m.customer_name,m.contact,m.joined_at,m.expires_at,m.payment_status,m.amount,m.note,m.plan_months,'not_contacted',0,'','',m.renewal_revision+1,'').lastInsertRowid);
+      if ((m.membership_status || 'unknown') !== 'invited' && db.prepare("SELECT COUNT(*) AS n FROM members WHERE family_id=? AND membership_status!='invited'").get(family.id).n >= 5) fail('Family đã đủ 5 khách.');
+      const restoredId = Number(db.prepare("INSERT INTO members(family_id,email,customer_name,contact,joined_at,expires_at,payment_status,amount,note,plan_months,renewal_status,renewal_amount,renewal_paid_at,renewal_note,renewal_revision,declined_at,membership_status) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)").run(family.id,m.email,m.customer_name,m.contact,m.joined_at,m.expires_at,m.payment_status,m.amount,m.note,m.plan_months,'not_contacted',0,'','',m.renewal_revision+1,'',m.membership_status || 'unknown').lastInsertRowid);
       db.prepare('UPDATE archived_customers SET restored_at=?,restored_by=?,restored_member_id=? WHERE id=?').run(new Date().toISOString(),user.username,restoredId,id);
       db.prepare('UPDATE renewal_history SET member_id=? WHERE archive_id=?').run(restoredId,id);
       log(`${user.username}: khôi phục khách lưu trữ #${id} vào Family #${family.id}; gia hạn tiếp theo trở về Chưa nhắc`);

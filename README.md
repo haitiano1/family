@@ -1,4 +1,4 @@
-# Fam Manager 0.3.2
+# Fam Manager 0.3.3
 
 Ứng dụng Windows/cục bộ quản lý khách hàng, hạn sử dụng và hồ sơ Google Family. Mặc định dịch vụ là **YouTube Premium**. Node.js 24 trở lên; không cần cài thư viện ngoài.
 
@@ -20,7 +20,7 @@ Những lần sau chỉ chạy `START-WINDOWS.cmd` và đăng nhập. Đóng c�
 2. Sao chép **toàn bộ thư mục ứng dụng cũ** sang thư mục khác để làm bản sao lưu, bao gồm `data`.
 3. Tải ZIP mới từ GitHub và giải nén vào một thư mục riêng.
 4. Mở thư mục mới, chọn tất cả tệp/thư mục bên trong và **Copy**. Mở thư mục ứng dụng cũ chứa `START-WINDOWS.cmd`, chọn **Paste**, rồi chọn thay thế các tệp trùng tên. Gói GitHub không chứa `data`, nên thư mục dữ liệu cũ được giữ lại. Không xóa thư mục ứng dụng cũ hoặc `data`.
-5. Chạy lại `START-WINDOWS.cmd` từ thư mục ứng dụng cũ. Bản mới tự nâng cấp dữ liệu, tạo thêm bản sao lưu `data/before-v6-*.sqlite` trước khi nâng cấp. Tài khoản ứng dụng và hồ sơ cũ được giữ nguyên.
+5. Chạy lại `START-WINDOWS.cmd` từ thư mục ứng dụng cũ. Bản mới tự nâng cấp dữ liệu, tạo thêm bản sao lưu `data/before-v7-*.sqlite` trước khi nâng cấp. Tài khoản ứng dụng và hồ sơ cũ được giữ nguyên.
 6. Nếu chưa có tài khoản ứng dụng, tạo quản trị viên bằng tên đăng nhập và mật khẩu theo hướng dẫn trên; không cần mã khởi tạo. Nếu đã có, đăng nhập như trước. Mở trang ứng dụng, nhấn **Ctrl+F5** để tải giao diện mới nếu còn hiển thị bản cũ.
 7. Kiểm tra lại tài khoản, Family và khách đã nhập trước đó.
 
@@ -29,7 +29,7 @@ Bản sao lưu trước nâng cấp không chứa người dùng mới hoặc c�
 ## Khách và gia hạn
 
 - **Tài khoản**: thêm hoặc sửa email quản lý và ghi chú.
-- **Family**: thêm/sửa tên nhóm, tài khoản quản lý, dịch vụ và ghi chú. Một hồ sơ chứa manager và tối đa 5 khách.
+- **Family**: thêm/sửa tên nhóm, tài khoản quản lý, dịch vụ và ghi chú. Một Family ghi nhận tối đa 5 chỗ thành viên cùng manager; hồ sơ khách đã mời nhưng chưa vào được giữ riêng và chưa tính chỗ.
 - Mở Family → **Thêm khách**: email, tên, liên hệ, ngày vào, ngày hết hạn, thanh toán, số tiền đã ghi nhận và ghi chú.
 - **Khách & Gia hạn**: tìm khách, lọc sắp hết hạn, đã quá hạn, chưa thanh toán đủ hoặc chưa đặt hạn.
 - **Sửa / Gia hạn**: chỉnh hồ sơ, gói và thanh toán kỳ hiện tại. **Gia hạn**: theo dõi việc nhắc khách và tiền nhận cho lần tiếp theo; **Xác nhận hạn mới** hoàn tất và lưu lịch sử riêng.
@@ -59,19 +59,33 @@ Không tự động nhắc qua Zalo/Facebook hoặc kick khách. Nhân viên và
 - Khôi phục vào một Family hiện có và còn chỗ; thông tin khách, hạn, thanh toán và lịch sử được giữ, trạng thái gia hạn tiếp theo trở về Chưa nhắc. Nhân viên/quản trị viên được khôi phục; người chỉ xem có thể đọc dữ liệu lưu trữ. Lưu trữ giải phóng chỗ trong hồ sơ nội bộ, không chứng minh nhóm Google đã trống chỗ.
 - Không xóa thư mục data hoặc đưa nó lên GitHub. Sao lưu khi ứng dụng đã dừng. Lịch sử ngày mua của các lần gia hạn trước bản 0.3.2 có thể trống vì bản cũ chưa lưu thông tin đó.
 
+## Nhập nhanh toàn bộ bảng Family trên Windows
+
+Dùng cho bảng cũ có nhiều Family xếp nối tiếp trong cùng tab, với dòng email quản lý/mật khẩu ở đầu mỗi nhóm và tên/email khách bên dưới.
+
+1. Cập nhật mã nguồn mới, giữ nguyên thư mục `data` và sao lưu thư mục ứng dụng.
+2. **Đóng cửa sổ đang chạy Fam Manager** trước khi nhập.
+3. Nhấp đúp **IMPORT-CSV-WINDOWS.cmd** trong cùng thư mục với START-WINDOWS.cmd.
+4. Chọn tệp CSV gốc trong cửa sổ chọn tệp. Công cụ tự tách nhóm, ghép khách, tạo Family/tài khoản quản lý còn thiếu và nhập dữ liệu trong một giao dịch. Không cần ghép cột thủ công.
+5. Đợi dòng **Import complete**; nếu tệp đã nhập rồi, hiện **Already imported** và giữ nguyên các hồ sơ đã có. Mở lại START-WINDOWS.cmd và kiểm tra danh sách khách.
+
+Công cụ chạy trên máy bạn, không tải dữ liệu lên GitHub hoặc Google, không yêu cầu mật khẩu quản trị viên vì đây là công cụ làm việc trực tiếp với tệp dữ liệu của chủ máy. Cần quyền đọc/ghi thư mục ứng dụng. Tài khoản đăng nhập, lịch sử và dữ liệu cũ được giữ; trước khi ghi, sao lưu SQLite vào `data/before-csv-*.sqlite`. Khách trùng email trong cùng Family được bỏ qua mặc định, không ghi đè hồ sơ đã được bạn sửa/gia hạn. Công cụ chưa được chạy trên Windows trong môi trường kiểm thử, nhưng phần nhập Node đã được kiểm thử với CSV thực tế và kiểm thử tự động; giao diện chọn tệp dùng Windows PowerShell có sẵn.
+
+Các dòng mật khẩu/xác minh của quản lý, dòng trống, tiêu đề lặp và cột đếm ngược không nhập. Tên, email, gói, ngày và Contact/ghi chú khách được giữ. “1 năm” được chuẩn hóa thành 12 tháng; gói tùy chỉnh như 13 tháng giữ nguyên. Ô trống không bị đoán thêm dữ liệu. Ngày mua thiếu năm chỉ được bổ sung nếu gói và hạn xác định được cùng ngày/tháng; ví dụ 10/8 và hạn 10/02/2027 với gói 6 tháng xác định năm 2026. Khách ghi “chưa vào” vẫn có hồ sơ và ghi chú, chưa tính vào chỗ thành viên; không thêm cảnh báo vào hồ sơ đó. Mật khẩu không được nhập hoặc giữ trong bản sao dữ liệu mới.
+
 ## Nhập khách từ Google Sheets
 
 1. Dừng ứng dụng và sao lưu thư mục ứng dụng gồm cả `data` trước khi cập nhật lên bản 0.3. Chạy lại và đăng nhập quản trị viên.
 2. Trong Google Sheets, mở tab Family muốn nhập: **Tệp → Tải xuống → Giá trị được phân tách bằng dấu phẩy (.csv)**. Mỗi tệp chỉ chứa tab đang mở.
 3. Vào **Khách & Gia hạn → Nhập khách từ CSV**, chọn tệp vừa tải.
-4. Ứng dụng nhận dạng bảng cũ có email quản lý ở ô đầu, mật khẩu ở ô thứ hai, rồi Gói mua / Ngày mua / Ngày đến hạn. Ô mật khẩu đầu bảng được bỏ; cột tên và email khách phía dưới được giữ nguyên. Các cột mang tên pass/password/mật khẩu không cho chọn. Chỉ cột được chọn mới gửi tới máy ứng dụng; không lưu tệp CSV gốc.
+4. Ứng dụng nhận dạng bảng cũ có email quản lý ở ô đầu, mật khẩu ở ô thứ hai, rồi Gói mua / Ngày mua / Ngày đến hạn. Có thể có nhiều dòng quản lý và nhiều Family trong một tab. Ô mật khẩu đầu bảng được bỏ; cột tên và email khách phía dưới được giữ nguyên. Các cột mang tên pass/password/mật khẩu không cho chọn. Chỉ cột được chọn mới gửi tới máy ứng dụng; không lưu tệp CSV gốc.
 5. Kiểm tra ghép cột: tên khách → Tên khách, mail → Email khách, gói mua → Gói mua, ngày mua → Ngày mua, ngày đến hạn → Ngày hết hạn, Contact → Liên hệ. **Ngày pay đếm ngược không nhập**; số ngày còn lại tính lại từ hạn theo ngày Việt Nam. Không gán cột này cho thanh toán hoặc số tiền.
 6. Nếu có Family trùng email quản lý, hệ thống đề xuất Family đó. Nếu chưa có, quản trị viên có thể bật **Cho phép tạo hồ sơ Family/tài khoản quản lý còn thiếu**, kiểm tra email quản lý mặc định và nhập tên Family. Không tạo nhóm trên Google. CSV nhiều Family cần cột tên Family và/hoặc email quản lý; mỗi dòng phải xác định được nhóm. Nếu tên Family trùng nhau thì cần email quản lý để phân biệt.
 7. Chọn **Bỏ qua** khách trùng (mặc định) hoặc **Cập nhật cột đã chọn**. Khi cập nhật, cột không chọn và ô trống giữ nguyên thông tin cũ; không chuyển khách qua Family khác. Email trùng trong cùng Family của CSV giữ dòng đầu; email ở Family khác là hồ sơ riêng.
 8. Bấm **Xem trước dữ liệu**. Kiểm tra số khách, Family mới, gói, ngày mua, ngày hết hạn và dòng lỗi, rồi chọn **Xác nhận nhập**. Xem trước không ghi cơ sở dữ liệu. Nếu có dòng lỗi hoặc Family quá 5 khách thì không nhập dòng nào; sửa tệp và xem trước lại. Nếu dữ liệu ứng dụng thay đổi sau xem trước, phải xem trước lại.
 9. Kiểm tra danh sách khách; tiếp tục với tab Family khác. Không gửi mật khẩu hoặc tệp khách lên GitHub. Bạn không cần chia sẻ Google Sheet hoặc cung cấp thông tin đăng nhập Google cho ứng dụng.
 
-Nhận ngày `dd/mm/yyyy` hoặc `yyyy-mm-dd`; gói `1, 2, 3, 6, 12 tháng`; thanh toán “Đã thanh toán”, “Chưa thanh toán”, “Thanh toán một phần” nếu sheet có cột riêng. Nếu không có thanh toán, khách mới có trạng thái **Chưa ghi nhận**, không bị coi là chưa trả tiền. Số tiền nhận số nguyên VND như `100000`, `100.000`, `100,000`. Contact giữ nguyên liên kết Facebook/Zalo hoặc ghi chú (tối đa 1000 ký tự). Giới hạn mỗi tệp 1 MB, 10.000 khách, 100 cột; xem trước hiển thị tối đa 200 dòng và 200 lỗi đầu. Hỗ trợ CSV UTF-8, dấu phẩy/chấm phẩy/tab, dấu nháy và ô có xuống dòng; chưa nhập trực tiếp XLSX hoặc tự đồng bộ Google Sheets.
+Nhận ngày `dd/mm/yyyy` hoặc `yyyy-mm-dd`; gói từ 1 đến 120 tháng, kể cả “1 năm” (12 tháng) và 13 tháng; thanh toán “Đã thanh toán”, “Chưa thanh toán”, “Thanh toán một phần” nếu sheet có cột riêng. Nếu không có thanh toán, khách mới có trạng thái **Chưa ghi nhận**, không bị coi là chưa trả tiền. Số tiền nhận số nguyên VND như `100000`, `100.000`, `100,000`. Contact giữ nguyên liên kết Facebook/Zalo hoặc ghi chú (tối đa 1000 ký tự). Giới hạn mỗi tệp 1 MB, 10.000 khách, 100 cột; xem trước hiển thị tối đa 200 dòng và 200 lỗi đầu. Bộ nhập ghép Family theo email quản lý và giữ tên hồ sơ cũ nếu đã có. Hỗ trợ nhiều Family xếp nối tiếp trong một tab, CSV UTF-8, dấu phẩy/chấm phẩy/tab, dấu nháy và ô có xuống dòng; chưa nhập trực tiếp XLSX hoặc tự đồng bộ Google Sheets.
 
 ## Đăng nhập và phân quyền
 
