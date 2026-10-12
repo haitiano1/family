@@ -29,10 +29,11 @@ export function googleGuide(action, service = 'google_one') {
 // Add calendar months, clamping to the last valid day instead of overflowing February.
 export function renewalDates(previousExpiry, purchaseDate, months) {
   if (!Number.isInteger(Number(months)) || Number(months) < 1 || Number(months) > 120) throw new Error('Chọn gói gia hạn từ 1 đến 120 tháng.');
-  for (const value of [purchaseDate, ...(previousExpiry ? [previousExpiry] : [])]) {
-    if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(value) || !Number.isFinite(Date.parse(value)) || new Date(value).toISOString().slice(0,10) !== value) throw new Error('Ngày mua hoặc ngày hết hạn không hợp lệ.');
+  if (!previousExpiry) throw new Error('Khách chưa có ngày hết hạn. Bổ sung hạn hiện tại trước khi gia hạn.');
+  for (const value of [purchaseDate, previousExpiry]) {
+    if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(value) || !Number.isFinite(Date.parse(value)) || new Date(value).toISOString().slice(0,10) !== value) throw new Error('Ngày nhận tiền hoặc ngày hết hạn không hợp lệ.');
   }
-  const base = previousExpiry && previousExpiry > purchaseDate ? previousExpiry : purchaseDate;
+  const base = previousExpiry;
   const target = new Date(base + 'T00:00:00Z'); const day = target.getUTCDate();
   target.setUTCDate(1); target.setUTCMonth(target.getUTCMonth() + Number(months));
   const last = new Date(target); last.setUTCMonth(last.getUTCMonth() + 1, 0);

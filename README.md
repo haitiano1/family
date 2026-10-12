@@ -1,4 +1,4 @@
-# Fam Manager 0.3.3
+# Fam Manager 0.3.4
 
 Ứng dụng Windows/cục bộ quản lý khách hàng, hạn sử dụng và hồ sơ Google Family. Mặc định dịch vụ là **YouTube Premium**. Node.js 24 trở lên; không cần cài thư viện ngoài.
 
@@ -43,7 +43,7 @@ Trong **Khách & Gia hạn**, thanh toán kỳ hiện tại và gia hạn tiếp
 1. Bấm **Gia hạn** ở dòng khách. Chọn **Chưa nhắc gia hạn**, **Đã nhắc khách**, **Chờ thanh toán**, **Đã trả một phần**, **Đã thanh toán gia hạn** hoặc **Không gia hạn**.
 2. Ghi số tiền đã nhận, ngày nhận tiền và ghi chú. Với trả một phần/đã thanh toán, cần số tiền lớn hơn 0 và ngày nhận tiền không ở tương lai. Đây là dữ liệu bạn ghi nhận, không kết nối ngân hàng hoặc kiểm tra chuyển khoản.
 3. Chọn gói gia hạn. Mặc định bật **Tự cập nhật ngày mua và hạn khi đã thanh toán đủ**. Khi trạng thái Đã thanh toán gia hạn, bấm **Lưu gia hạn** sẽ ghi tiền, tự cập nhật ngày mua/hạn và lưu lịch sử trong một lần. Chờ tiền/trả một phần chỉ ghi nhận trạng thái, không đổi ngày. Bỏ dấu chọn nếu chỉ muốn ghi nhận tiền trước, chưa tăng hạn.
-4. Với khách đã trả đủ tiền nhưng chưa tăng hạn, vẫn có **Xác nhận hạn mới**: chọn gói và xem trước ngày tự tính rồi xác nhận. Ngày mua mới là ngày bắt đầu kỳ mới, không phải ngày nhận tiền. Nếu còn hạn, nối kỳ từ hạn cũ; nếu đã hết hạn trước ngày nhận tiền, bắt đầu từ ngày nhận tiền. Ví dụ kỳ 05/10/2026–05/01/2027, gia hạn sớm gói 3 tháng thành 05/01/2027–05/04/2027. Ngày cuối tháng được giới hạn đúng số ngày của tháng, kể cả năm nhuận.
+4. Với khách đã trả đủ tiền nhưng chưa tăng hạn, vẫn có **Xác nhận hạn mới**: chọn gói và xem trước ngày tự tính rồi xác nhận. Ngày mua mới là ngày bắt đầu kỳ mới, không phải ngày nhận tiền. Luôn nối kỳ từ ngày hết hạn cũ, kể cả khách trả tiền muộn hoặc đã quá hạn; ngày nhận tiền không thay đổi mốc kỳ. Ví dụ hết hạn 05/01/2026, trả tiền 15/01/2026 và gia hạn 3 tháng thì kỳ mới là 05/01/2026–05/04/2026. Nếu chưa có hạn cũ, cần bổ sung ngày hết hạn trước khi gia hạn. Ví dụ kỳ 05/10/2026–05/01/2027, gia hạn sớm gói 3 tháng thành 05/01/2027–05/04/2027. Ngày cuối tháng được giới hạn đúng số ngày của tháng, kể cả năm nhuận.
 5. Hệ thống lưu ngày mua cũ/mới, hạn cũ/mới, gói, số tiền, ngày nhận tiền riêng, ghi chú và người thực hiện trong **Lịch sử**; cập nhật thanh toán/số tiền của kỳ hiện tại bằng lần vừa gia hạn. Việc tăng hạn ở đây không đổi đăng ký/gói trên Google.
 6. Sau xác nhận, lần gia hạn tiếp theo trở về **Chưa nhắc**, số tiền/ngày nhận tạm được làm trống; lần đã hoàn tất vẫn có trong **Lịch sử**. Số tiền ở cột kỳ hiện tại là của kỳ hiện tại, không phải tổng doanh thu.
 

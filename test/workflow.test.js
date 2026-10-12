@@ -337,3 +337,19 @@ test('offline CSV importer preserves existing app users and skips duplicate cust
     await f.start();const state=await f.admin('state');assert.equal(state.user.username,'owner');assert.equal(state.members.length,1);assert.equal(state.members[0].plan_months,13);
   } finally {await f.close();}
 });
+
+test('late payment renews from the old expiry, not the receipt or confirmation day', async () => {
+  const f=await fixture();
+  try {
+    await f.setup();const a=f.admin;
+    const account=await a('accounts','POST',{email:'manager@example.com'},201);const family=await a('families','POST',{name:'Family',manager_id:account.id},201);
+    const member=await a('members','POST',{family_id:family.id,email:'guest@example.com',joined_at:'2025-10-05',expires_at:'2026-01-05',plan_months:3},201);
+    const result=await a('members/'+member.id+'/renewal','PATCH',{revision:0,status:'paid',amount:150000,paid_at:'2026-01-15',plan_months:3,apply_now:true});
+    assert.equal(result.purchase_date,'2026-01-05');assert.equal(result.expires_at,'2026-04-05');
+    const m=(await a('state')).members[0];assert.equal(m.joined_at,'2026-01-05');assert.equal(m.expires_at,'2026-04-05');
+    const history=(await a('members/'+member.id+'/renewal-history')).history[0];assert.equal(history.paid_at,'2026-01-15');assert.equal(history.new_purchase_at,'2026-01-05');assert.equal(history.new_expires_at,'2026-04-05');
+    const second=await a('members','POST',{family_id:family.id,email:'unknown@example.com'},201);
+    await a('members/'+second.id+'/renewal','PATCH',{revision:0,status:'paid',amount:150000,paid_at:'2026-01-15',plan_months:3,apply_now:true},400);
+    const unchanged=(await a('state')).members.find(m=>m.id===second.id);assert.equal(unchanged.expires_at,'');assert.equal(unchanged.renewal_status,'not_contacted');
+  }finally{await f.close();}
+});
