@@ -139,9 +139,9 @@ test('existing v1 database is backed up and migrated without losing customer rec
   });
   try {
     await f.setup(); let state = await f.admin('state'); assert.equal(state.accounts[0].note, 'Existing note'); assert.equal(state.members[0].email, 'legacyguest@example.com'); assert.equal(state.members[0].expiry_status, 'unknown'); assert.equal(state.families[0].service, 'youtube'); assert.equal(state.jobs.length, 1);
-    const backups = readdirSync(f.dir).filter(n => n.startsWith('before-v2-')); assert.equal(backups.length, 1);
+    const backups = readdirSync(f.dir).filter(n => n.startsWith('before-v3-')); assert.equal(backups.length, 1);
     const backup = new DatabaseSync(path.join(f.dir, backups[0])); assert.equal(backup.prepare('SELECT email FROM members').get().email, 'legacyguest@example.com'); assert.equal(backup.prepare('PRAGMA user_version').get().user_version, 0); backup.close();
-    await f.stop(); await f.start(); state = await f.admin('state'); assert.equal(state.members.length, 1); assert.equal(readdirSync(f.dir).filter(n => n.startsWith('before-v2-')).length, 1);
+    await f.stop(); await f.start(); state = await f.admin('state'); assert.equal(state.members.length, 1); assert.equal(readdirSync(f.dir).filter(n => n.startsWith('before-v3-')).length, 1);
   } finally { await f.close(); }
 });
 
@@ -198,5 +198,57 @@ test('7 character passwords work for creating users and changing passwords; 6 is
     await staff('auth/password', 'POST', { current_password: '7654321', password: 'gfedcba' });
     await staff('auth/login', 'POST', { username: 'staff', password: 'gfedcba' });
     assert.equal((await staff('state')).user.role, 'operator');
+  } finally { await f.close(); }
+});
+
+test('CSV preview is read-only; confirmation creates groups and customers atomically with deduplication', async () => {
+  const f = await fixture();
+  try {
+    await f.setup(); const a = f.admin;
+    const payload = { csv: 'Tên khách,Email khách,Gói mua,Ngày mua,Ngày đến hạn,Contact\n"Nguyễn, An",an@example.com,6 tháng,12/06/2026,12/12/2026,"FB link\nGhi chú"\nBình,binh@example.com,12 tháng,19/03/2026,19/03/2027,Zalo\nBình,binh@example.com,12 tháng,19/03/2026,19/03/2027,Zalo',
+      delimiter: ',', mapping: { customer_name:0,email:1,plan_months:2,joined_at:3,expires_at:4,contact:5 }, default_manager:'owner@example.com',default_family:'Sheet Family',create_groups:true,duplicates:'skip' };
+    const p = await a('import/preview','POST',payload); assert.equal(p.summary.create,2); assert.equal(p.summary.skip,1); assert.equal(p.summary.new_families,1); assert.equal(p.summary.errors,0);
+    assert.equal((await a('state')).accounts.length,0);
+    await a('import/commit','POST',{...payload,preview_token:'invalid'},409);
+    await a('import/commit','POST',{...payload,preview_token:p.preview_token});
+    let state = await a('state'); assert.equal(state.members.length,2); assert.equal(state.families.length,1); assert.equal(state.accounts.length,1);
+    const an = state.members.find(m=>m.email==='an@example.com'); assert.equal(an.customer_name,'Nguyễn, An'); assert.equal(an.plan_months,6); assert.equal(an.expires_at,'2026-12-12'); assert.equal(an.payment_status,'unknown'); assert.equal(state.reminders.unpaid,0); assert.equal(an.contact,'FB link\nGhi chú');
+    await a('import/commit','POST',{...payload,preview_token:p.preview_token},409);
+    const again = await a('import/preview','POST',payload); assert.equal(again.summary.skip,3); assert.equal(again.summary.create,0);
+    const update = {...payload,csv:'Email khách,Ngày đến hạn,Contact\nan@example.com,01/01/2027,', mapping:{email:0,expires_at:1,contact:2},duplicates:'update'};
+    const q = await a('import/preview','POST',update); assert.equal(q.summary.update,1); await a('import/commit','POST',{...update,preview_token:q.preview_token});
+    state = await a('state'); const changed = state.members.find(m=>m.email==='an@example.com'); assert.equal(changed.expires_at,'2027-01-01'); assert.equal(changed.plan_months,6); assert.equal(changed.contact,'FB link\nGhi chú'); assert.equal(changed.customer_name,'Nguyễn, An');
+    await f.stop(); await f.start(); assert.equal((await a('state')).members.length,2);
+  } finally { await f.close(); }
+});
+
+test('CSV errors and stale preview cannot partially import; viewer cannot import and operator cannot create groups', async () => {
+  const f = await fixture();
+  try {
+    await f.setup(); const a=f.admin;
+    const acc=await a('accounts','POST',{email:'mgr@example.com'},201); const fam=await a('families','POST',{name:'Family',manager_id:acc.id},201);
+    const payload={csv:'Email,Ngày đến hạn\nvalid@example.com,12/12/2026\ninvalid@example.com,31/02/2026',mapping:{email:0,expires_at:1},family_id:fam.id,duplicates:'skip'};
+    let p=await a('import/preview','POST',payload); assert.equal(p.summary.errors,1); await a('import/commit','POST',{...payload,preview_token:p.preview_token},400); assert.equal((await a('state')).members.length,0);
+    const six={...payload,csv:'Email\n'+Array.from({length:6},(_,i)=>`guest${i}@example.com`).join('\n'),mapping:{email:0}};
+    p=await a('import/preview','POST',six); assert.equal(p.summary.errors,1); await a('import/commit','POST',{...six,preview_token:p.preview_token},400); assert.equal((await a('state')).members.length,0);
+    const valid={...payload,csv:'Email\nvalid@example.com',mapping:{email:0}};
+    p=await a('import/preview','POST',valid); await a('members','POST',{family_id:fam.id,email:'other@example.com'},201); await a('import/commit','POST',{...valid,preview_token:p.preview_token},409); assert.equal((await a('state')).members.length,1);
+    await a('users','POST',{username:'view',role:'viewer',password:'abcdefg'},201); await a('users','POST',{username:'staff',role:'operator',password:'abcdefg'},201);
+    const v=f.client(); await v('auth/login','POST',{username:'view',password:'abcdefg'}); await v('import/preview','POST',valid,403);
+    const o=f.client(); await o('auth/login','POST',{username:'staff',password:'abcdefg'}); await o('import/preview','POST',{...valid,create_groups:true},403); await o('import/preview','POST',valid);
+  } finally { await f.close(); }
+});
+
+test('upgrading v2 retains users, active sessions and old customer records while adding the plan field', async () => {
+  const f=await fixture();
+  try {
+    await f.setup(); const a=f.admin;
+    const acc=await a('accounts','POST',{email:'manager@example.com'},201); const family=await a('families','POST',{name:'Old Family',manager_id:acc.id},201);
+    await a('members','POST',{email:'guest@example.com',family_id:family.id,expires_at:'2026-12-12',contact:'Existing contact',payment_status:'paid'},201);
+    await f.stop();
+    const old=new DatabaseSync(path.join(f.dir,'family.sqlite')); old.exec('ALTER TABLE members DROP COLUMN plan_months; PRAGMA user_version=2'); old.close();
+    await f.start(); const state=await a('state'); assert.equal(state.user.username,'owner'); assert.equal(state.members[0].email,'guest@example.com'); assert.equal(state.members[0].contact,'Existing contact'); assert.equal(state.members[0].payment_status,'paid'); assert.equal(state.members[0].plan_months,0);
+    const backups=readdirSync(f.dir).filter(n=>n.startsWith('before-v3-')); assert.equal(backups.length,1);
+    const saved=new DatabaseSync(path.join(f.dir,backups[0])); assert.equal(saved.prepare('PRAGMA user_version').get().user_version,2); assert.equal(saved.prepare('SELECT username FROM users').get().username,'owner'); saved.close();
   } finally { await f.close(); }
 });

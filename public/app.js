@@ -1,14 +1,15 @@
+import { prepareSheet, suggestMapping, importFields } from './csv.js';
 const $ = selector => document.querySelector(selector);
 const escape = value => String(value ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const date = value => value ? new Date(value).toLocaleString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh' }) : '—';
 const day = value => value ? value.split('-').reverse().join('/') : 'Chưa đặt';
-const names = { overview: 'Tổng quan', accounts: 'Tài khoản', families: 'Family', customers: 'Khách & Gia hạn', jobs: 'Jobs', integration: 'Google', logs: 'Nhật ký', users: 'Người dùng', profile: 'Tài khoản ứng dụng' };
+const names = { overview: 'Tổng quan', accounts: 'Tài khoản', families: 'Family', customers: 'Khách & Gia hạn', jobs: 'Jobs', integration: 'Google', logs: 'Nhật ký', users: 'Người dùng', profile: 'Tài khoản ứng dụng', import: 'Nhập khách CSV' };
 const roles = { admin: 'Quản trị viên', operator: 'Nhân viên', viewer: 'Chỉ xem' };
 const products = { youtube: 'YouTube Premium', google_one: 'Google One', google_ai: 'Google AI', other: 'Khác' };
 const jobNames = { invite: 'Mời thành viên', remove_member: 'Kick thành viên', delete_family: 'Xóa Google Family', change_password: 'Đổi mật khẩu', setup_2fa: 'Thiết lập 2FA', check_trial: 'Kiểm tra trial', healthcheck: 'Healthcheck' };
 const statuses = { blocked: 'Cần thao tác trên Google', manual_done: 'Đã làm — tự xác nhận', manual_failed: 'Thất bại — tự ghi nhận', cancelled: 'Đã hủy' };
-const payments = { unpaid: 'Chưa thanh toán', partial: 'Thanh toán một phần', paid: 'Đã thanh toán' };
-let state, auth, users = [], search = '', familyFilter = '', customerSearch = '', customerFilter = '', submitModal, toastTimer, sessionEpoch = 0;
+const payments = { unknown: 'Chưa ghi nhận', unpaid: 'Chưa thanh toán', partial: 'Thanh toán một phần', paid: 'Đã thanh toán' };
+let state, auth, users = [], search = '', familyFilter = '', customerSearch = '', customerFilter = '', submitModal, toastTimer, sessionEpoch = 0, importData = null, importPreview = null;
 const route = () => (location.hash.slice(1) || 'overview').split('/');
 const canWrite = () => ['admin', 'operator'].includes(auth?.user?.role);
 const admin = () => auth?.user?.role === 'admin';
@@ -32,7 +33,7 @@ async function refresh(render = true) {
   if (render) draw();
 }
 function showAuth() {
-  sessionEpoch++; state = null; users = []; if ($('#modal').open) $('#modal').close(); $('#modal-fields').innerHTML = '';
+  sessionEpoch++; importData = null; importPreview = null; state = null; users = []; if ($('#modal').open) $('#modal').close(); $('#modal-fields').innerHTML = '';
   document.body.classList.add('auth-mode'); $('#main').innerHTML = '';
   const setup = auth?.setup_required;
   $('#auth-screen').hidden = false;
@@ -63,7 +64,7 @@ function expiryBadge(m) {
   return `<span class="badge ${m.expiry_status === 'expired' ? 'red' : m.expiry_status === 'due_soon' ? 'amber' : m.expiry_status === 'active' ? 'green' : ''}">${labels[m.expiry_status]}</span>`;
 }
 function customerTable(members) {
-  return members.length ? `<div class="table-wrap"><table><thead><tr><th>KHÁCH HÀNG</th><th>FAMILY / GÓI</th><th>NGÀY VÀO</th><th>HẾT HẠN</th><th>THANH TOÁN</th><th>THAO TÁC</th></tr></thead><tbody>${members.map(m => `<tr><td><strong>${escape(m.customer_name || m.email)}</strong><span class="subtext">${escape(m.email)}</span><span class="subtext">${escape(m.contact)}</span></td><td><a class="email-link" href="#family/${m.family_id}">${escape(m.family_name)}</a><span class="subtext">${products[m.service]}</span></td><td>${day(m.joined_at)}</td><td>${day(m.expires_at)}<span class="subtext">${expiryBadge(m)}</span></td><td><span class="badge ${m.payment_status === 'paid' ? 'green' : 'amber'}">${payments[m.payment_status]}</span><span class="subtext">${Number(m.amount).toLocaleString('vi-VN')} ₫</span></td><td><div class="row-actions">${btn('edit-member', 'Sửa / Gia hạn', 'secondary tiny', `data-id="${m.id}"`)}${btn('kick', 'Yêu cầu kick', 'secondary tiny', `data-id="${m.family_id}" data-email="${escape(m.email)}"`)}${btn('delete-member', 'Xóa hồ sơ', 'danger tiny', `data-id="${m.id}"`)}</div></td></tr>`).join('')}</tbody></table></div>` : empty('Chưa có khách phù hợp', 'Thêm khách từ trang Family hoặc điều chỉnh bộ lọc.');
+  return members.length ? `<div class="table-wrap"><table><thead><tr><th>KHÁCH HÀNG</th><th>FAMILY / GÓI</th><th>NGÀY VÀO</th><th>HẾT HẠN</th><th>THANH TOÁN</th><th>THAO TÁC</th></tr></thead><tbody>${members.map(m => `<tr><td><strong>${escape(m.customer_name || m.email)}</strong><span class="subtext">${escape(m.email)}</span><span class="subtext">${escape(m.contact)}</span></td><td><a class="email-link" href="#family/${m.family_id}">${escape(m.family_name)}</a><span class="subtext">${products[m.service]}${m.plan_months ? ' · ' + m.plan_months + ' tháng' : ''}</span></td><td>${day(m.joined_at)}</td><td>${day(m.expires_at)}<span class="subtext">${expiryBadge(m)}</span></td><td><span class="badge ${m.payment_status === 'paid' ? 'green' : 'amber'}">${payments[m.payment_status]}</span><span class="subtext">${Number(m.amount).toLocaleString('vi-VN')} ₫</span></td><td><div class="row-actions">${btn('edit-member', 'Sửa / Gia hạn', 'secondary tiny', `data-id="${m.id}"`)}${btn('kick', 'Yêu cầu kick', 'secondary tiny', `data-id="${m.family_id}" data-email="${escape(m.email)}"`)}${btn('delete-member', 'Xóa hồ sơ', 'danger tiny', `data-id="${m.id}"`)}</div></td></tr>`).join('')}</tbody></table></div>` : empty('Chưa có khách phù hợp', 'Thêm khách từ trang Family hoặc điều chỉnh bộ lọc.');
 }
 function jobsTable(jobs) {
   return jobs.length ? `<div class="table-wrap"><table><thead><tr><th>ID / TÁC VỤ</th><th>ĐỐI TƯỢNG</th><th>TRẠNG THÁI</th><th>THỜI GIAN</th><th></th></tr></thead><tbody>${jobs.map(j => `<tr><td><a class="email-link" href="#job/${j.id}">#${j.id} · ${jobNames[j.action]}</a></td><td>${escape(j.target)}</td><td><span class="badge ${j.status === 'blocked' ? 'amber' : j.status === 'manual_done' ? 'green' : ''}">${statuses[j.status] || escape(j.status)}</span></td><td>${date(j.created_at)}</td><td><a class="secondary link-button tiny" href="#job/${j.id}">Xem hướng dẫn</a></td></tr>`).join('')}</tbody></table></div>` : empty('Chưa có tác vụ', 'Yêu cầu thao tác với Google sẽ xuất hiện tại đây.');
@@ -72,7 +73,7 @@ function draw() {
   if (!state || !auth?.user) return;
   document.body.classList.remove('auth-mode'); $('#auth-screen').hidden = true; $('#auth-screen').innerHTML = '';
   const [page, id] = route();
-  const parent = { account: 'accounts', family: 'families', job: 'jobs' }[page] || page;
+  const parent = { import: 'customers', account: 'accounts', family: 'families', job: 'jobs' }[page] || page;
   document.querySelectorAll('nav a').forEach(a => a.classList.toggle('active', a.dataset.page === parent));
   $('#users-nav').hidden = !admin();
   $('#breadcrumb').textContent = `Fam Manager › ${names[parent] || 'Tài khoản'} ${id ? '› #' + id : ''}`;
@@ -81,7 +82,7 @@ function draw() {
   if (page === 'overview') {
     content = hero('KHÔNG GIAN LÀM VIỆC', 'Tổng quan', 'Quản lý khách hàng, hạn sử dụng và hồ sơ Family.', btn('add-account', '+ Thêm tài khoản', 'primary')) + stats([['Tài khoản', state.accounts.length], ['Hồ sơ Family', state.families.length], ['Sắp hết hạn (7 ngày)', state.reminders.due_soon], ['Khách đã quá hạn', state.reminders.expired]]) + `<section class="card"><div class="section-heading"><div><h2>Nhắc gia hạn</h2><p>Tính theo ngày Việt Nam. Hạn có hiệu lực hết ngày ghi nhận; không tự động kick khách.</p></div><a class="email-link" href="#customers">Xem tất cả khách →</a></div>${customerTable(state.members.filter(m => ['expired', 'due_soon'].includes(m.expiry_status)))}</section><div class="split"><section class="card"><h2>Thanh toán</h2><p>${state.reminders.unpaid} khách chưa thanh toán đủ. Số tiền là khoản bạn ghi nhận thủ công.</p><a class="email-link" href="#customers">Quản lý khách và thanh toán →</a></section><section class="card"><h2>Hoạt động gần đây</h2>${state.logs.slice(0, 5).map(l => `<div class="list-item">${escape(l.message)}<span class="subtext">${date(l.created_at)}</span></div>`).join('') || '<p>Chưa có hoạt động.</p>'}</section></div>`;
   } else if (page === 'customers') {
-    content = hero('KHÁCH HÀNG', 'Khách & Gia hạn', 'Theo dõi thông tin liên hệ, ngày vào, hạn sử dụng và thanh toán.') + stats([['Khách đang ghi nhận', state.members.length], ['Sắp hết hạn', state.reminders.due_soon], ['Quá hạn', state.reminders.expired], ['Chưa thanh toán đủ', state.reminders.unpaid]]) + `<section class="card"><h2>Danh sách khách</h2><div class="toolbar"><input id="customer-search" aria-label="Tìm khách" placeholder="Tìm email, tên, liên hệ hoặc Family…" value="${escape(customerSearch)}"><select id="customer-filter" aria-label="Lọc khách">${Object.entries({ '': 'Tất cả khách', due_soon: 'Sắp hết hạn (7 ngày)', expired: 'Đã quá hạn', unpaid: 'Chưa thanh toán đủ', unknown: 'Chưa đặt hạn' }).map(([key, name]) => `<option value="${key}" ${customerFilter === key ? 'selected' : ''}>${name}</option>`).join('')}</select></div><div id="customer-table">${filteredCustomers()}</div></section>`;
+    content = hero('KHÁCH HÀNG', 'Khách & Gia hạn', 'Theo dõi thông tin liên hệ, ngày vào, hạn sử dụng và thanh toán.', canWrite() ? '<a class="primary link-button" href="#import">↑ Nhập khách từ CSV</a>' : '') + stats([['Khách đang ghi nhận', state.members.length], ['Sắp hết hạn', state.reminders.due_soon], ['Quá hạn', state.reminders.expired], ['Chưa thanh toán đủ', state.reminders.unpaid]]) + `<section class="card"><h2>Danh sách khách</h2><div class="toolbar"><input id="customer-search" aria-label="Tìm khách" placeholder="Tìm email, tên, liên hệ hoặc Family…" value="${escape(customerSearch)}"><select id="customer-filter" aria-label="Lọc khách">${Object.entries({ '': 'Tất cả khách', due_soon: 'Sắp hết hạn (7 ngày)', expired: 'Đã quá hạn', unpaid: 'Chưa thanh toán đủ', unknown: 'Chưa đặt hạn' }).map(([key, name]) => `<option value="${key}" ${customerFilter === key ? 'selected' : ''}>${name}</option>`).join('')}</select></div><div id="customer-table">${filteredCustomers()}</div></section>`;
   } else if (page === 'accounts') {
     content = hero('TÀI KHOẢN', 'Managed accounts', 'Quản lý email, ghi chú và hồ sơ Family.', btn('add-account', '+ Thêm tài khoản', 'primary')) + `<section class="card"><h2>Danh sách tài khoản</h2><p>Dữ liệu được cập nhật mỗi 10 giây.</p><div class="toolbar"><input id="search" aria-label="Tìm tài khoản" placeholder="Tìm email, Family hoặc ghi chú…" value="${escape(search)}"><select id="family-filter" aria-label="Lọc Family"><option value="">Tất cả tài khoản</option><option value="with" ${familyFilter === 'with' ? 'selected' : ''}>Có hồ sơ Family</option><option value="without" ${familyFilter === 'without' ? 'selected' : ''}>Chưa gắn Family</option></select><small>${state.accounts.length} tài khoản</small></div><div id="account-table">${filteredAccounts()}</div></section>`;
   } else if (page === 'account') {
@@ -94,7 +95,8 @@ function draw() {
     const f = state.families.find(f => f.id === Number(id));
     if (!f) content = empty('Không tìm thấy Family', 'Hồ sơ này có thể đã bị xóa.');
     else content = `<a class="back" href="#families">← Danh sách Family</a>` + hero('FAMILY', f.name, `${products[f.service]} · Quản lý: ${escape(f.manager_email)}`, btn('add-member', '+ Thêm khách', 'primary', `data-id="${f.id}"`)) + notice + `<section class="card"><div class="section-heading"><div><h2>Thông tin Family</h2><p>${escape(f.note || 'Chưa có ghi chú')}</p></div>${btn('edit-family', 'Sửa hồ sơ', 'secondary', `data-id="${f.id}"`)}</div><p>Manager: ${escape(f.manager_email)} · ${state.members.filter(m => m.family_id === f.id).length + 1}/6 người đang ghi nhận.</p></section><section class="card"><h2>Khách hàng trong nhóm</h2>${customerTable(state.members.filter(m => m.family_id === f.id))}</section><section class="card"><h2>Tác vụ Google Family</h2><div class="actions">${btn('invite', 'Mời khách vào Family', 'secondary', `data-id="${f.id}"`)}${btn('delete-google-family', 'Yêu cầu xóa Google Family', 'danger', `data-id="${f.id}"`, 'admin')}</div></section>`;
-  } else if (page === 'jobs') content = hero('VẬN HÀNH', 'Tác vụ & Jobs', 'Theo dõi yêu cầu và kết quả tự ghi nhận.') + notice + `<section class="card"><h2>100 tác vụ gần đây</h2>${jobsTable(state.jobs)}</section>`;
+  } else if (page === 'import') content = canWrite() ? importPage() : empty('Không có quyền', 'Chỉ quản trị viên hoặc nhân viên được nhập khách.');
+  else if (page === 'jobs') content = hero('VẬN HÀNH', 'Tác vụ & Jobs', 'Theo dõi yêu cầu và kết quả tự ghi nhận.') + notice + `<section class="card"><h2>100 tác vụ gần đây</h2>${jobsTable(state.jobs)}</section>`;
   else if (page === 'job') {
     const j = state.jobs.find(j => j.id === Number(id));
     if (!j) content = empty('Không tìm thấy tác vụ', 'Danh sách hiển thị 100 tác vụ gần nhất.');
@@ -112,13 +114,13 @@ function filteredAccounts() {
 }
 function filteredCustomers() {
   const q = customerSearch.toLocaleLowerCase();
-  return customerTable(state.members.filter(m => `${m.email} ${m.customer_name} ${m.contact} ${m.note} ${m.family_name}`.toLocaleLowerCase().includes(q) && (!customerFilter || (customerFilter === 'unpaid' ? m.payment_status !== 'paid' : m.expiry_status === customerFilter))));
+  return customerTable(state.members.filter(m => `${m.email} ${m.customer_name} ${m.contact} ${m.note} ${m.family_name}`.toLocaleLowerCase().includes(q) && (!customerFilter || (customerFilter === 'unpaid' ? ['unpaid','partial'].includes(m.payment_status) : m.expiry_status === customerFilter))));
 }
 function modal(title, fields, handler, submit = 'Lưu') {
   $('#modal-title').textContent = title; $('#modal-fields').innerHTML = fields; $('#form-error').textContent = ''; $('#modal-form button[type=submit]').textContent = submit; submitModal = handler; $('#modal').showModal();
 }
 function memberFields(m = {}) {
-  return input('email', 'Email khách', 'email', m.email, true, 'maxlength="254"') + input('customer_name', 'Tên khách', 'text', m.customer_name, false, 'maxlength="200"') + input('contact', 'Liên hệ (điện thoại / Zalo)', 'text', m.contact, false, 'maxlength="200"') + '<div class="form-grid">' + input('joined_at', 'Ngày vào', 'date', m.joined_at ?? state.today) + input('expires_at', 'Ngày hết hạn', 'date', m.expires_at) + '</div>' + select('payment_status', 'Thanh toán', payments, m.payment_status || 'unpaid') + input('amount', 'Số tiền đã ghi nhận (VND)', 'number', m.amount || 0, false, 'min="0" max="1000000000" step="1"') + noteField(m.note) + '<p>Gia hạn bằng cách đổi ngày hết hạn. Không tự động thu tiền, gửi lời mời hoặc kick trên Google.</p>';
+  return input('email', 'Email khách', 'email', m.email, true, 'maxlength="254"') + input('customer_name', 'Tên khách', 'text', m.customer_name, false, 'maxlength="200"') + input('contact', 'Liên hệ (điện thoại / Zalo)', 'text', m.contact, false, 'maxlength="1000"') + select('plan_months', 'Gói mua', { 0: 'Chưa đặt', 1: '1 tháng', 2: '2 tháng', 3: '3 tháng', 6: '6 tháng', 12: '12 tháng' }, m.plan_months || 0) + '<div class="form-grid">' + input('joined_at', 'Ngày vào', 'date', m.joined_at ?? state.today) + input('expires_at', 'Ngày hết hạn', 'date', m.expires_at) + '</div>' + select('payment_status', 'Thanh toán', payments, m.payment_status || 'unpaid') + input('amount', 'Số tiền đã ghi nhận (VND)', 'number', m.amount || 0, false, 'min="0" max="1000000000" step="1"') + noteField(m.note) + '<p>Gia hạn bằng cách đổi ngày hết hạn. Không tự động thu tiền, gửi lời mời hoặc kick trên Google.</p>';
 }
 async function recordJob(data) { const result = await post('jobs', data); await refresh(false); location.hash = 'job/' + result.id; draw(); toast('Đã ghi nhận yêu cầu. Mở trang Google để thực hiện.'); }
 $('#modal-form').addEventListener('submit', async event => {
@@ -176,3 +178,61 @@ async function sync() {
 try { auth = await api('auth/status'); if (auth.user) await refresh(); else showAuth(); }
 catch { $('#main').innerHTML = '<div class="error-box">Không thể tải dữ liệu. Kiểm tra máy chủ rồi tải lại trang.</div>'; }
 setInterval(sync, 10000);
+function importPage() {
+  const guide = '<section class="card"><h2>Từ Google Sheets sang ứng dụng</h2><p>Trong Google Sheets: Tệp → Tải xuống → Giá trị được phân tách bằng dấu phẩy (.csv). Mỗi lần tải chỉ gồm tab đang mở. Giữ bản sheet gốc để đối chiếu.</p><p>Hỗ trợ cả bảng có dòng đầu chứa email quản lý, ô mật khẩu rồi Gói mua / Ngày mua / Ngày đến hạn. Ô mật khẩu đầu bảng được loại bỏ. Cột đếm ngược Ngày pay không nhập; số ngày còn lại được tính lại theo hạn.</p></section>';
+  if (!importData) return hero('NHẬP DỮ LIỆU', 'Nhập khách từ Google Sheets', 'Chọn CSV, ghép cột, xem trước rồi xác nhận.') + guide + '<section class="card"><h2>Chọn tệp CSV</h2><label for="csv-file">Tệp CSV từ Google Sheets (tối đa 1 MB, 10.000 dòng)</label><input id="csv-file" type="file" accept=".csv,text/csv"><p>Không cần chia sẻ Google Sheet hoặc cấp quyền Google. Tệp được đọc trên máy bạn; chỉ các cột đã chọn được gửi tới ứng dụng cục bộ.</p></section>';
+  const d = importData;
+  const confidential = value => ['pass','password','matkhau','otp','recoverycode'].includes(value.normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/đ/g,'d').toLowerCase().replace(/[^a-z0-9]/g,''));
+  const options = field => '<option value="-1">Không nhập cột này</option>' + d.headers.map((h,i) => confidential(h) ? '' : `<option value="${i}" ${d.mapping[field] === i ? 'selected' : ''}>${escape(h)} (cột ${i+1})</option>`).join('');
+  return hero('NHẬP DỮ LIỆU', d.filename, `${d.records.length} dòng khách · Chưa lưu vào hệ thống.`, '<button class="secondary" id="import-reset">Chọn tệp khác</button>') + (d.legacy ? '<div class="notice">Đã nhận dạng bố cục sheet của bạn. Ô mật khẩu ở dòng đầu đã loại bỏ; email quản lý được dùng để đề xuất Family. Không nhập cột Ngày pay đếm ngược.</div>' : '') + `<section class="card"><h2>1. Chọn cột dữ liệu</h2><div class="mapping-grid">${Object.entries(importFields).map(([field,label]) => `<div><label for="map-${field}">${label}</label><select id="map-${field}" data-import-map="${field}">${options(field)}</select></div>`).join('')}</div><p>Ngày nhận dd/mm/yyyy hoặc yyyy-mm-dd. Gói nhận 1, 2, 3, 6, 12 tháng. Contact giữ nguyên liên kết/ghi chú. Nếu sheet không có thanh toán, giữ “Không nhập cột này”; không suy ra từ cột Ngày pay.</p></section><section class="card"><h2>2. Chọn Family và khách trùng</h2><label for="import-family">Family nhận khách (khi CSV không có cột Family)</label><select id="import-family"><option value="">Dùng cột Family/email quản lý hoặc tạo Family mới bên dưới</option>${state.families.map(f => `<option value="${f.id}" ${String(d.family_id) === String(f.id) ? 'selected' : ''}>${escape(f.name)} · ${escape(f.manager_email)}</option>`).join('')}</select>${admin() ? `<label class="check-label"><input id="import-create" type="checkbox" ${d.create_groups ? 'checked' : ''}> Cho phép tạo hồ sơ Family/tài khoản quản lý còn thiếu</label><div class="form-grid"><div><label for="import-manager">Email quản lý mặc định (khi chưa chọn Family)</label><input id="import-manager" type="email" value="${escape(d.default_manager)}" placeholder="manager@example.com"></div><div><label for="import-group-name">Tên Family mới (không bắt buộc)</label><input id="import-group-name" value="${escape(d.default_family)}" maxlength="200" placeholder="Family 01"></div></div>` : ''}<label for="import-duplicates">Khách đã có cùng email trong cùng Family</label><select id="import-duplicates"><option value="skip" ${d.duplicates === 'skip' ? 'selected' : ''}>Bỏ qua — giữ nguyên dữ liệu cũ</option><option value="update" ${d.duplicates === 'update' ? 'selected' : ''}>Cập nhật cột đã chọn — ô trống giữ dữ liệu cũ</option></select><p>Các dòng trùng trong CSV giữ dòng đầu. Family tối đa 5 khách và 1 quản lý. Khi có dòng lỗi, không nhập dòng nào; bạn sửa CSV rồi xem trước lại.</p><button id="import-preview" class="primary">Xem trước dữ liệu</button><p id="import-error" role="alert"></p></section><div id="import-results">${importPreview ? previewHTML(importPreview) : ''}</div>`;
+}
+function previewHTML(p) {
+  const s = p.summary, labels = { create: 'Thêm mới', update: 'Cập nhật', skip: 'Bỏ qua', error: 'Lỗi' };
+  return stats([['Thêm mới',s.create],['Cập nhật',s.update],['Bỏ qua',s.skip],['Dòng lỗi',s.errors]]) + `<section class="card"><h2>3. Xác nhận nhập</h2><p>${s.new_accounts} tài khoản quản lý mới, ${s.new_families} hồ sơ Family mới sẽ được tạo. Đây là hồ sơ nội bộ, không tạo nhóm hoặc mời khách trên Google.</p>${p.groups.length ? '<p>Family mới: '+p.groups.map(g => escape(g.name)+' · '+escape(g.manager_email)).join('; ')+'</p>' : ''}<div class="table-wrap"><table><thead><tr><th>DÒNG</th><th>EMAIL</th><th>FAMILY</th><th>XỬ LÝ</th><th>CHI TIẾT</th></tr></thead><tbody>${p.rows.map(r => `<tr><td>${r.line}</td><td>${escape(r.email)}<span class="subtext">${escape(r.customer_name)}</span></td><td>${escape(r.family_name)}${r.status === 'create' || r.status === 'update' ? `<span class="subtext">Gói ${r.plan_months || 'chưa đặt'} tháng · Mua ${day(r.joined_at)} · Hạn ${day(r.expires_at)}</span>` : ''}</td><td><span class="badge ${r.status === 'error' ? 'red' : 'blue'}">${labels[r.status]}</span></td><td>${escape(r.message)}</td></tr>`).join('')}</tbody></table></div>${s.total > p.rows.length ? `<p>Hiển thị ${p.rows.length}/${s.total} dòng đầu.</p>` : ''}${p.errors.length ? '<div class="error-box">'+p.errors.map(e => `Dòng ${e.line}: ${escape(e.message)}`).join('<br>')+'</div>' : ''}<p>Tệp gốc không được lưu. Kiểm tra thông tin và sao lưu thư mục data trước khi nhập lượng khách lớn.</p><button id="import-confirm" class="primary" ${s.errors || !(s.create+s.update) ? 'disabled' : ''}>Xác nhận nhập ${s.create+s.update} khách</button></section>`;
+}
+function importPayload() {
+  if (importData.mapping.email < 0) throw new Error('Hãy chọn cột Email khách trước.');
+  const d = importData, chosen = [...new Set(Object.values(d.mapping).filter(n => n >= 0))].sort((a,b) => a-b);
+  const encode = value => '"'+value.replaceAll('"','""')+'"';
+  const csv = [chosen.map(i => d.headers[i]), ...d.records.map(r => chosen.map(i => r.cells[i] || ''))].map(row => row.map(encode).join(',')).join('\n');
+  return { csv, delimiter: ',', mapping: Object.fromEntries(Object.entries(d.mapping).map(([k,v]) => [k, chosen.indexOf(v)])), family_id: d.family_id, default_manager: d.default_manager, default_family: d.default_family, create_groups: d.create_groups, duplicates: d.duplicates };
+}
+function invalidateImport() { importPreview = null; const results = $('#import-results'); if (results) results.innerHTML = ''; }
+document.addEventListener('change', async event => {
+  if (event.target.id === 'csv-file') {
+    const file = event.target.files[0]; if (!file) return;
+    try {
+      if (file.size > 1000000) throw new Error('CSV tối đa 1 MB. Chia thành nhiều tệp nếu quá lớn.');
+      const parsed = prepareSheet(await file.text());
+      const matching = state.families.find(f => f.manager_email === parsed.manager_email);
+      importData = { ...parsed, filename: file.name, mapping: suggestMapping(parsed.headers), family_id: matching?.id || '', default_manager: parsed.manager_email, default_family: '', create_groups: false, duplicates: 'skip' }; importPreview = null; draw();
+    } catch (error) { toast(error.message); }
+    return;
+  }
+  if (!importData) return;
+  if (event.target.dataset.importMap) importData.mapping[event.target.dataset.importMap] = Number(event.target.value);
+  const keys = { 'import-family':'family_id', 'import-create':'create_groups', 'import-duplicates':'duplicates' };
+  if (keys[event.target.id]) importData[keys[event.target.id]] = event.target.type === 'checkbox' ? event.target.checked : event.target.value;
+  if (event.target.dataset.importMap || keys[event.target.id]) invalidateImport();
+});
+document.addEventListener('input', event => {
+  if (!importData) return;
+  const field = { 'import-manager':'default_manager', 'import-group-name':'default_family' }[event.target.id];
+  if (field) { importData[field] = event.target.value.trim(); invalidateImport(); }
+});
+document.addEventListener('click', async event => {
+  const id = event.target.closest('button')?.id;
+  if (id === 'import-reset') { importData = null; importPreview = null; draw(); }
+  if (!['import-preview','import-confirm'].includes(id)) return;
+  const button = event.target.closest('button'); button.disabled = true; $('#import-error').textContent = '';
+  try {
+    if (id === 'import-preview') { importPreview = await post('import/preview', importPayload()); $('#import-results').innerHTML = previewHTML(importPreview); }
+    else {
+      if (!importPreview || importPreview.summary.errors) throw new Error('Cần xem trước và sửa dòng lỗi trước khi nhập.');
+      const result = await post('import/commit', { ...importPayload(), preview_token: importPreview.preview_token });
+      importData = null; importPreview = null; await refresh(false); customerSearch = ''; customerFilter = ''; location.hash = 'customers'; draw();
+      toast(`Đã nhập ${result.summary.create} khách mới, cập nhật ${result.summary.update}, bỏ qua ${result.summary.skip}.`);
+    }
+  } catch (error) { invalidateImport(); const errorBox = $('#import-error'); if (errorBox) errorBox.textContent = error.message; else toast(error.message); }
+  finally { button.disabled = false; }
+});

@@ -3,6 +3,7 @@ import { DatabaseSync } from 'node:sqlite';
 import { mkdirSync, readFileSync, existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
+import { initImporter } from './importer.js';
 import { initAuth } from './auth.js';
 import { today, expiry, services, googleActions, googleGuide } from './domain.js';
 
@@ -13,9 +14,9 @@ const file = path.join(dir, 'family.sqlite');
 const existing = existsSync(file);
 const db = new DatabaseSync(file);
 const currentVersion = db.prepare('PRAGMA user_version').get().user_version;
-if (currentVersion > 2) throw new Error('Database is newer than this application. Use the latest application version.');
-if (existing && currentVersion < 2) {
-  const backup = path.join(dir, `before-v2-${Date.now()}.sqlite`);
+if (currentVersion > 3) throw new Error('Database is newer than this application. Use the latest application version.');
+if (existing && currentVersion < 3) {
+  const backup = path.join(dir, `before-v3-${Date.now()}.sqlite`);
   db.exec(`VACUUM INTO '${backup.replaceAll("'", "''")}'`);
   console.log('Saved pre-upgrade database backup in the data directory.');
 }
@@ -27,7 +28,7 @@ CREATE TABLE IF NOT EXISTS jobs (id INTEGER PRIMARY KEY, action TEXT NOT NULL, t
 CREATE TABLE IF NOT EXISTS logs (id INTEGER PRIMARY KEY, message TEXT NOT NULL, created_at TEXT NOT NULL);`);
 const additions = {
   families: { service: "TEXT NOT NULL DEFAULT 'youtube'", note: "TEXT NOT NULL DEFAULT ''" },
-  members: { customer_name: "TEXT NOT NULL DEFAULT ''", contact: "TEXT NOT NULL DEFAULT ''", joined_at: "TEXT NOT NULL DEFAULT ''", expires_at: "TEXT NOT NULL DEFAULT ''", payment_status: "TEXT NOT NULL DEFAULT 'unpaid'", amount: 'INTEGER NOT NULL DEFAULT 0', note: "TEXT NOT NULL DEFAULT ''" },
+  members: { customer_name: "TEXT NOT NULL DEFAULT ''", contact: "TEXT NOT NULL DEFAULT ''", joined_at: "TEXT NOT NULL DEFAULT ''", expires_at: "TEXT NOT NULL DEFAULT ''", payment_status: "TEXT NOT NULL DEFAULT 'unpaid'", amount: 'INTEGER NOT NULL DEFAULT 0', plan_months: 'INTEGER NOT NULL DEFAULT 0', note: "TEXT NOT NULL DEFAULT ''" },
   jobs: { account_id: 'INTEGER', family_id: 'INTEGER', email: "TEXT NOT NULL DEFAULT ''", service: "TEXT NOT NULL DEFAULT 'youtube'", manager_email: "TEXT NOT NULL DEFAULT ''", completed_at: 'TEXT', completed_by: 'TEXT' }
 };
 db.exec('BEGIN');
@@ -36,7 +37,7 @@ try {
     const known = new Set(db.prepare(`PRAGMA table_info(${table})`).all().map(c => c.name));
     for (const [name, type] of Object.entries(columns)) if (!known.has(name)) db.exec(`ALTER TABLE ${table} ADD COLUMN ${name} ${type}`);
   }
-  db.exec('PRAGMA user_version=2; COMMIT');
+  db.exec('PRAGMA user_version=3; COMMIT');
 } catch (error) { db.exec('ROLLBACK'); throw error; }
 const all = (sql, ...args) => db.prepare(sql).all(...args);
 const one = (sql, ...args) => db.prepare(sql).get(...args);
@@ -61,14 +62,16 @@ const calendarDate = value => {
 function memberData(data) {
   const joined = calendarDate(data.joined_at), expires = calendarDate(data.expires_at);
   if (joined && expires && expires < joined) fail('Ngày hết hạn phải từ ngày vào trở đi.');
-  const payment = data.payment_status || 'unpaid'; if (!['unpaid', 'paid', 'partial'].includes(payment)) fail('Trạng thái thanh toán không hợp lệ.');
+  const payment = data.payment_status || 'unpaid'; if (!['unknown','unpaid', 'paid', 'partial'].includes(payment)) fail('Trạng thái thanh toán không hợp lệ.');
   const amount = Number(data.amount || 0); if (!Number.isSafeInteger(amount) || amount < 0 || amount > 1000000000) fail('Số tiền phải là số nguyên từ 0 đến 1 tỷ đồng.');
-  return [email(data.email), text(data.customer_name, 200), text(data.contact, 200), joined, expires, payment, amount, text(data.note)];
+  const plan = Number(data.plan_months || 0); if (![0,1,2,3,6,12].includes(plan)) fail('Gói mua cần là 1, 2, 3, 6 hoặc 12 tháng.');
+  return [email(data.email), text(data.customer_name, 200), text(data.contact, 1000), joined, expires, payment, amount, text(data.note), plan];
 }
-async function body(req) {
+const importCustomers = initImporter(db, { fail, email, text, memberData, log });
+async function body(req, limit = 16384) {
   if (!/^application\/json(?:;|$)/i.test(req.headers['content-type'] || '')) fail('Yêu cầu cần Content-Type application/json.', 415);
   let length = 0; const chunks = [];
-  for await (const chunk of req) { length += chunk.length; if (length > 16384) fail('Dữ liệu quá lớn.', 413); chunks.push(chunk); }
+  for await (const chunk of req) { length += chunk.length; if (length > limit) fail('Dữ liệu quá lớn.', 413); chunks.push(chunk); }
   try { const parsed = JSON.parse(Buffer.concat(chunks).toString('utf8') || '{}'); if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) fail('Dữ liệu cần là một đối tượng.'); return parsed; }
   catch { fail('JSON không hợp lệ.'); }
 }
@@ -92,6 +95,10 @@ const server = http.createServer(async (req, res) => {
       user = auth.loggedIn(req);
       if (writing) { auth.csrf(req, user); auth.role(user, ['admin', 'operator']); }
     }
+    if (req.method === 'POST' && ['/api/import/preview','/api/import/commit'].includes(url.pathname)) {
+      const data = await body(req, 2000000);
+      return send(res, 200, importCustomers(data, user, url.pathname.endsWith('/commit')));
+    }
     if (req.method === 'GET' && url.pathname === '/api/state') {
       const members = all('SELECT m.*,f.name AS family_name,f.service,a.email AS manager_email FROM members m JOIN families f ON f.id=m.family_id JOIN accounts a ON a.id=f.manager_id ORDER BY m.id DESC').map(m => ({ ...m, ...expiry(m.expires_at) }));
       return send(res, 200, {
@@ -99,7 +106,7 @@ const server = http.createServer(async (req, res) => {
         families: all('SELECT f.*, a.email AS manager_email FROM families f JOIN accounts a ON a.id=f.manager_id ORDER BY f.id DESC'),
         members, jobs: all('SELECT * FROM jobs ORDER BY id DESC LIMIT 100').map(j => ({ ...j, guide: googleGuide(j.action, j.service) })),
         logs: all('SELECT * FROM logs ORDER BY id DESC LIMIT 100'), integration: false, google_mode: 'manual', today: today(),
-        reminders: { expired: members.filter(m => m.expiry_status === 'expired').length, due_soon: members.filter(m => m.expiry_status === 'due_soon').length, unpaid: members.filter(m => m.payment_status !== 'paid').length },
+        reminders: { expired: members.filter(m => m.expiry_status === 'expired').length, due_soon: members.filter(m => m.expiry_status === 'due_soon').length, unpaid: members.filter(m => ['unpaid','partial'].includes(m.payment_status)).length },
         user: { id: user.id, username: user.username, role: user.role }
       });
     }
@@ -136,11 +143,11 @@ const server = http.createServer(async (req, res) => {
       if (!family) fail('Không tìm thấy Family.'); if (values[0] === family.email) fail('Tài khoản quản lý đã thuộc hồ sơ này.');
       if (req.method === 'POST' && url.pathname === '/api/members') {
         if (one('SELECT COUNT(*) AS n FROM members WHERE family_id=?', family.id).n >= 5) fail('Hồ sơ đã đủ 6 người gồm tài khoản quản lý.');
-        const result = run('INSERT INTO members(family_id,email,customer_name,contact,joined_at,expires_at,payment_status,amount,note) VALUES (?,?,?,?,?,?,?,?,?)', family.id, ...values);
+        const result = run('INSERT INTO members(family_id,email,customer_name,contact,joined_at,expires_at,payment_status,amount,note,plan_months) VALUES (?,?,?,?,?,?,?,?,?,?)', family.id, ...values);
         log(`${user.username}: ghi nhận khách ${values[0]} trong ${family.name}`); return send(res, 201, { id: Number(result.lastInsertRowid) });
       }
       if (req.method === 'PATCH') {
-        run('UPDATE members SET email=?,customer_name=?,contact=?,joined_at=?,expires_at=?,payment_status=?,amount=?,note=? WHERE id=?', ...values, id);
+        run('UPDATE members SET email=?,customer_name=?,contact=?,joined_at=?,expires_at=?,payment_status=?,amount=?,note=?,plan_months=? WHERE id=?', ...values, id);
         log(`${user.username}: cập nhật khách #${id}, hạn ${values[4] || 'chưa đặt'}, thanh toán ${values[5]}`); return send(res, 200, { ok: true });
       }
     }
@@ -180,7 +187,7 @@ const server = http.createServer(async (req, res) => {
       run(`DELETE FROM ${table} WHERE id=?`, id); log(`${user.username}: xóa hồ sơ nội bộ ${table} #${id}`); return send(res, 200, { ok: true });
     }
     if (req.method === 'GET') {
-      const assets = { '/': ['index.html','text/html'], '/app.js': ['app.js','text/javascript'], '/style.css': ['style.css','text/css'] };
+      const assets = { '/': ['index.html','text/html'], '/app.js': ['app.js','text/javascript'], '/style.css': ['style.css','text/css'], '/csv.js': ['csv.js','text/javascript'] };
       const asset = assets[url.pathname]; if (!asset) return send(res, 404, { error: 'Không tìm thấy.' });
       res.writeHead(200, { 'Content-Type': asset[1] + '; charset=utf-8', 'Cache-Control': 'no-store', 'Content-Security-Policy': "default-src 'self'; style-src 'self'; script-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'" });
       return res.end(readFileSync(path.join(root, 'public', asset[0])));
