@@ -54,15 +54,17 @@ function restoreArchive(PDO $db,int $id,array $d): array {
         q($db,'UPDATE archived_customers SET restored_at=?,restored_by=?,restored_member_id=? WHERE id=?',[stamp(),'Cá nhân',$new,$id]);q($db,'UPDATE renewal_history SET member_id=? WHERE archive_id=?',[$new,$id]);logEntry($db,"Cá nhân: khôi phục khách lưu trữ #$id vào Family #{$family['id']}");return ['ok'=>true,'member_id'=>$new];
     });
 }
-const BACKUP_TABLES=['accounts','families','members','archived_customers','renewal_history','other_purchases','logs'];
-function backup(PDO $db): array {return ['format'=>'family-customer-backup','version'=>1,'created_at'=>stamp(),'tables'=>array_combine(BACKUP_TABLES,array_map(fn($t)=>all($db,"SELECT * FROM `$t` ORDER BY id"),BACKUP_TABLES))];}
+const BASE_BACKUP_TABLES=['accounts','families','members','archived_customers','renewal_history','other_purchases','logs'];
+const BACKUP_TABLES=[...BASE_BACKUP_TABLES,'issues','audit_events'];
+function backup(PDO $db): array {return ['format'=>'family-customer-backup','version'=>2,'created_at'=>stamp(),'tables'=>array_combine(BACKUP_TABLES,array_map(fn($t)=>all($db,"SELECT * FROM `$t` ORDER BY id"),BACKUP_TABLES))];}
 function restoreBackup(PDO $db,array $d): array {
-    if (($d['format']??'')!=='family-customer-backup' || ($d['version']??null)!==1 || !is_array($d['tables']??null)) fail('File sao lưu khách hàng không hợp lệ.');
-    foreach(BACKUP_TABLES as $t) {if (!is_array($d['tables'][$t]??null) || !array_is_list($d['tables'][$t])) fail('File sao lưu thiếu bảng dữ liệu.');if ($t!=='logs' && one($db,"SELECT COUNT(*) AS n FROM `$t`")['n']) fail('Chỉ khôi phục vào ứng dụng đang trống để không ghi đè dữ liệu hiện có.',409);}
+    if (($d['format']??'')!=='family-customer-backup' || !in_array($d['version']??null,[1,2],true) || !is_array($d['tables']??null)) fail('File sao lưu khách hàng không hợp lệ.');
+    if($d['version']===1){$d['tables']['issues']=$d['tables']['issues']??[];$d['tables']['audit_events']=$d['tables']['audit_events']??[];}
+    foreach(BACKUP_TABLES as $t) {if (!is_array($d['tables'][$t]??null) || !array_is_list($d['tables'][$t])) fail('File sao lưu thiếu bảng dữ liệu.');if (!in_array($t,['logs','audit_events'],true) && one($db,"SELECT COUNT(*) AS n FROM `$t`")['n']) fail('Chỉ khôi phục vào ứng dụng đang trống để không ghi đè dữ liệu hiện có.',409);}
     try {return transaction($db,function()use($db,$d){
-        q($db,'DELETE FROM logs');
+
         foreach(BACKUP_TABLES as $t) {
-            $columns=array_column(all($db,"SHOW COLUMNS FROM `$t`"),'Field');$sql="INSERT INTO `$t` (`".implode('`,`',$columns).'`) VALUES ('.implode(',',array_fill(0,count($columns),'?')).')';
+            $columns=array_column(all($db,"SHOW COLUMNS FROM `$t`"),'Field');if(in_array($t,['logs','audit_events'],true)&&one($db,"SELECT COUNT(*) AS n FROM `$t`")['n'])$columns=array_values(array_filter($columns,fn($c)=>$c!=='id'));$sql="INSERT INTO `$t` (`".implode('`,`',$columns).'`) VALUES ('.implode(',',array_fill(0,count($columns),'?')).')';
             foreach($d['tables'][$t] as $row) {
                 if (!is_array($row)) fail('Dữ liệu sao lưu sai định dạng.');
                 foreach($columns as $c) if (!array_key_exists($c,$row) || (!is_null($row[$c]) && !is_string($row[$c]) && !is_int($row[$c]) && !is_float($row[$c]))) fail('Dữ liệu sao lưu thiếu trường hoặc sai định dạng.');

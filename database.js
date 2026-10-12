@@ -7,9 +7,9 @@ const file = path.join(dir, 'family.sqlite');
 const existing = existsSync(file);
 const db = new DatabaseSync(file);
 const currentVersion = db.prepare('PRAGMA user_version').get().user_version;
-if (currentVersion > 9) throw new Error('Database is newer than this application. Use the latest application version.');
-if (existing && currentVersion < 9) {
-  const backup = path.join(dir, `before-v9-${Date.now()}.sqlite`);
+if (currentVersion > 10) throw new Error('Database is newer than this application. Use the latest application version.');
+if (existing && currentVersion < 10) {
+  const backup = path.join(dir, `before-v10-${Date.now()}.sqlite`);
   db.exec(`VACUUM INTO '${backup.replaceAll("'", "''")}'`);
   console.log('Saved pre-upgrade database backup in the data directory.');
 }
@@ -37,7 +37,9 @@ try {
   if (currentVersion < 9) db.prepare("UPDATE members SET declined_at=? WHERE renewal_status='declined' AND declined_at=''").run(new Date().toISOString());
   db.exec(`CREATE TABLE IF NOT EXISTS archived_customers (id INTEGER PRIMARY KEY,original_member_id INTEGER NOT NULL,email TEXT NOT NULL,customer_name TEXT NOT NULL,family_name TEXT NOT NULL,manager_email TEXT NOT NULL,snapshot TEXT NOT NULL,archived_at TEXT NOT NULL,reason TEXT NOT NULL,restored_at TEXT,restored_by TEXT,restored_member_id INTEGER);
   CREATE TABLE IF NOT EXISTS other_purchases (id INTEGER PRIMARY KEY,product TEXT NOT NULL,customer_name TEXT NOT NULL,email TEXT NOT NULL,contact TEXT NOT NULL,joined_at TEXT NOT NULL,expires_at TEXT NOT NULL,payment_status TEXT NOT NULL,amount INTEGER NOT NULL,note TEXT NOT NULL,created_at TEXT NOT NULL);
-  PRAGMA user_version=9; COMMIT`);
+  CREATE TABLE IF NOT EXISTS issues(id INTEGER PRIMARY KEY,family_id INTEGER REFERENCES families(id) ON DELETE SET NULL,family_name TEXT NOT NULL,target_type TEXT NOT NULL,target_id INTEGER NOT NULL,subject_email TEXT NOT NULL,original_email TEXT NOT NULL,title TEXT NOT NULL,note TEXT NOT NULL DEFAULT '',status TEXT NOT NULL DEFAULT 'todo',revision INTEGER NOT NULL DEFAULT 0,created_at TEXT NOT NULL,updated_at TEXT NOT NULL,done_at TEXT NOT NULL DEFAULT '',resolution TEXT NOT NULL DEFAULT '',resolution_email TEXT NOT NULL DEFAULT '',resolution_note TEXT NOT NULL DEFAULT '');
+  CREATE TABLE IF NOT EXISTS audit_events(id INTEGER PRIMARY KEY,action TEXT NOT NULL,actor TEXT NOT NULL,message TEXT NOT NULL,details TEXT NOT NULL,created_at TEXT NOT NULL);
+  PRAGMA user_version=10; COMMIT`);
 } catch (error) { db.exec('ROLLBACK'); throw error; }
 return db;
 }

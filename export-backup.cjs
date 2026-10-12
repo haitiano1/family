@@ -10,7 +10,7 @@ function exportBackup(databaseFile, outputFile) {
   try {
     db.exec('PRAGMA busy_timeout=5000; BEGIN');
     const version=db.prepare('PRAGMA user_version').get().user_version;
-    if (version>9) throw new Error('This database is newer than this export tool. Download the latest exporter.');
+    if (version>10) throw new Error('This database is newer than this export tool. Download the latest exporter.');
     const known=new Set(db.prepare("SELECT name FROM sqlite_master WHERE type='table'").all().map(r=>r.name));
     for (const name of ['accounts','families','members']) if (!known.has(name)) throw new Error('Not a Fam Manager customer database.');
     const defaults={
@@ -20,7 +20,9 @@ function exportBackup(databaseFile, outputFile) {
       archived_customers:{id:null,original_member_id:null,email:'',customer_name:'',family_name:'',manager_email:'',snapshot:'',archived_at:'',reason:'',restored_at:null,restored_by:null,restored_member_id:null},
       renewal_history:{id:null,member_id:null,email:'',customer_name:'',family_name:'',old_expires_at:'',new_expires_at:'',plan_months:0,amount:0,paid_at:'',note:'',created_at:'',created_by:'',old_purchase_at:'',new_purchase_at:'',archive_id:null},
       other_purchases:{id:null,product:'',customer_name:'',email:'',contact:'',joined_at:'',expires_at:'',payment_status:'unknown',amount:0,note:'',created_at:''},
-      logs:{id:null,message:'',created_at:''}
+      logs:{id:null,message:'',created_at:''},
+      issues:{id:null,family_id:null,family_name:'',target_type:'manager',target_id:null,subject_email:'',original_email:'',title:'',note:'',status:'todo',revision:0,created_at:'',updated_at:'',done_at:'',resolution:'',resolution_email:'',resolution_note:''},
+      audit_events:{id:null,action:'',actor:'',message:'',details:'',created_at:''}
     };
     const tables={};
     for (const [table,base] of Object.entries(defaults)) {
@@ -35,7 +37,7 @@ function exportBackup(databaseFile, outputFile) {
       for (const [field,value] of Object.entries(defaults.members)) if (!Object.hasOwn(m,field)) {m[field]=value;changed=true;}
       if (changed) row.snapshot=JSON.stringify(m);
     }
-    const result={format:'family-customer-backup',version:1,created_at:new Date().toISOString(),tables};
+    const result={format:'family-customer-backup',version:known.has('issues')||known.has('audit_events')?2:1,created_at:new Date().toISOString(),tables};
     db.exec('COMMIT');
     writeFileSync(outputFile,JSON.stringify(result),{flag:'wx',mode:0o600});
     return result;

@@ -4,13 +4,14 @@ const $ = selector => document.querySelector(selector);
 const escape = value => String(value ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const date = value => value ? new Date(value).toLocaleString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh' }) : '—';
 const day = value => value ? value.split('-').reverse().join('/') : 'Chưa đặt';
-const names = {overview:'Tổng quan',customers:'Khách & Gia hạn',families:'Family',archives:'Khách lưu trữ',import:'Nhập khách CSV',products:'Sản phẩm khác'};
+const names = {overview:'Tổng quan',customers:'Khách & Gia hạn',families:'Family',archives:'Khách lưu trữ',import:'Nhập khách CSV',products:'Sản phẩm khác',issues:'Fix lỗi',journal:'Nhật ký'};
 const products = { youtube:'YouTube Premium',google_one:'Google One',google_ai:'Google AI',other:'Khác' };
 const planOptions = (value=0, unknown=false) => Object.fromEntries([...(unknown ? [[0,'Chưa đặt']] : []), ...[...new Set([1,2,3,6,12,...(Number(value)>0 ? [Number(value)] : [])])].sort((a,b)=>a-b).map(n=>[n,n+' tháng'])]);
 const renewalLabels = { not_contacted: 'Chưa nhắc gia hạn', reminded: 'Đã nhắc khách', awaiting_payment: 'Chờ thanh toán', partial: 'Đã trả một phần', paid: 'Đã thanh toán gia hạn', declined: 'Không gia hạn' };
 const memberships = {unknown:'Chưa xác minh',active:'Đã vào',invited:'Đã mời, chưa vào'};
+const issueStatuses={todo:'Chờ fix',doing:'Đang fix',done:'Đã fix'};
 const payments = { unknown: 'Chưa ghi nhận', unpaid: 'Chưa thanh toán', partial: 'Thanh toán một phần', paid: 'Đã thanh toán' };
-let state, customerSearch='',customerFilter='',submitModal,toastTimer,importData=null,importPreview=null,productSearch='',productFilter='';
+let state, customerSearch='',customerFilter='',submitModal,toastTimer,importData=null,importPreview=null,productSearch='',productFilter='',familySearch='',issueSearch='',draggedIssue=null,journalSearch='',journalPage=1,journalToken=0,journalTimer;
 const route=()=>(location.hash.slice(1)||'overview').split('/');
 function toast(text) { $('#toast').textContent=text;$('#toast').style.display='block';clearTimeout(toastTimer);toastTimer=setTimeout(()=>$('#toast').style.display='none',6000); }
 async function api(path,options={}) {
@@ -38,7 +39,7 @@ function customerTable(members) {
 function draw() {
   if (!state) return;
   let [page,id]=route();
-  if (!['overview','customers','families','family','archives','import','products'].includes(page)) {location.hash='overview';return;}
+  if (!['overview','customers','families','family','archives','import','products','issues','journal'].includes(page)) {location.hash='overview';return;}
   const parent={import:'customers',family:'families'}[page]||page;
   document.querySelectorAll('nav a').forEach(a=>a.classList.toggle('active',a.dataset.page===parent));
   $('#breadcrumb').textContent=`YouTube Family › ${names[parent]} ${id ? '› #'+id : ''}`;
@@ -53,14 +54,19 @@ function draw() {
   } else if (page === 'archives') {
     content = hero('LƯU TRỮ', 'Khách không gia hạn', 'Khách đã chuyển khỏi danh sách hoạt động; thông tin và lịch sử vẫn được giữ.') + `<section class="card"><p>Chuyển tự động sau 7 ngày ${state.archive_mode === 'declined' ? 'kể từ khi chọn Không gia hạn' : 'sau ngày hết hạn'}, khi ứng dụng đang chạy. </p>${state.archives.length ? `<div class="table-wrap"><table><thead><tr><th>KHÁCH</th><th>FAMILY</th><th>NGÀY MUA / HẠN</th><th>LƯU TRỮ</th><th></th></tr></thead><tbody>${state.archives.map(a => `<tr><td><strong>${escape(a.customer_name || a.email)}</strong><span class="subtext">${escape(a.email)}</span><span class="subtext">${escape(a.member.contact)}</span></td><td>${escape(a.family_name)}<span class="subtext">${escape(a.manager_email)}</span></td><td>${day(a.member.joined_at)} → ${day(a.member.expires_at)}</td><td>${date(a.archived_at)}<span class="subtext">${escape(a.reason)}</span></td><td><div class="row-actions">${btn('archive-details','Xem dữ liệu','secondary tiny',`data-id="${a.id}"`,'all')}${btn('archive-restore','Khôi phục','secondary tiny',`data-id="${a.id}"`)}</div></td></tr>`).join('')}</tbody></table></div>` : empty('Chưa có khách lưu trữ','Chỉ khách chọn Không gia hạn và đủ thời gian mới được chuyển vào đây.')}</section>`;
   } else if (page==='families') {
-    content=hero('FAMILY','Quản lý Family','Email quản lý, ghi chú và khách trong nhóm.',btn('add-family','+ Thêm Family','primary'))+`<section class="card"><h2>Danh sách Family</h2>${state.families.length ? `<div class="table-wrap"><table><thead><tr><th>FAMILY</th><th>EMAIL QUẢN LÝ</th><th>KHÁCH ĐANG GHI NHẬN</th><th></th></tr></thead><tbody>${state.families.map(f=>`<tr><td><a class="email-link" href="#family/${f.id}">${escape(f.name)}</a><span class="subtext">${escape(f.note)}</span></td><td>${escape(f.manager_email)}</td><td>${state.members.filter(m=>m.family_id===f.id).length}</td><td><div class="row-actions">${btn('edit-family','Sửa','secondary tiny',`data-id="${f.id}"`)}${btn('delete-family-record','Xóa hồ sơ','danger tiny',`data-id="${f.id}"`)}</div></td></tr>`).join('')}</tbody></table></div>` : empty('Chưa có Family','Thêm tên Family và email quản lý để bắt đầu.',btn('add-family','+ Thêm Family','primary'))}</section>`;
+    content=hero('FAMILY','Quản lý Family','Email quản lý, ghi chú và khách trong nhóm.',btn('add-family','+ Thêm Family','primary'))+`<section class="card"><h2>Danh sách Family</h2><div class="toolbar"><input id="family-search" aria-label="Tìm Family" placeholder="Tìm tên Family, email quản lý, email khách hoặc ghi chú…" value="${escape(familySearch)}"></div><div id="family-table">${familyTable()}</div></section>`;
+  } else if(page==='issues') {
+    content=hero('THEO DÕI LỖI','Fix lỗi','Kéo thẻ giữa các cột, hoặc chọn trạng thái trên thẻ. Khi Đã fix, chọn giữ mail hay đổi mail.',btn('report-family','+ Báo lỗi','primary'))+`<section class="card"><div class="toolbar"><input id="issue-search" aria-label="Tìm lỗi" placeholder="Tìm mail, Family hoặc nội dung lỗi…" value="${escape(issueSearch)}"></div><div id="issue-board">${issueBoard()}</div></section>`;
+  } else if(page==='journal') {
+    content=hero('LỊCH SỬ THAO TÁC','Nhật ký','Xem thời gian, nội dung và dữ liệu trước/sau khi sửa hoặc xóa.')+`<section class="card"><div class="toolbar"><input id="journal-search" aria-label="Tìm nhật ký" placeholder="Tìm email, Family hoặc thao tác…" value="${escape(journalSearch)}"></div><div id="journal-list"><p>Đang tải nhật ký…</p></div></section>`;
   } else if (page==='family') {
     const f=state.families.find(f=>f.id===Number(id));
-    content=f ? `<a class="back" href="#families">← Danh sách Family</a>`+hero('FAMILY',f.name,`Email quản lý: ${escape(f.manager_email)}`,btn('add-member','+ Thêm khách','primary',`data-id="${f.id}"`))+`<section class="card"><div class="section-heading"><div><h2>Thông tin Family</h2><p>${escape(f.note||'Chưa có ghi chú')}</p></div>${btn('edit-family','Sửa Family','secondary',`data-id="${f.id}"`)}</div></section><section class="card"><h2>Khách trong Family</h2>${customerTable(state.members.filter(m=>m.family_id===f.id))}</section>` : empty('Không tìm thấy Family','Hồ sơ này có thể đã được xóa.');
+    content=f ? `<a class="back" href="#families">← Danh sách Family</a>`+hero('FAMILY',f.name,`Email quản lý: ${escape(f.manager_email)}`,btn('add-member','+ Thêm khách','primary',`data-id="${f.id}"`))+`<section class="card"><div class="section-heading"><div><h2>Thông tin Family</h2><p>${escape(f.note||'Chưa có ghi chú')}</p></div><div class="row-actions">${btn('edit-family','Sửa Family','secondary',`data-id="${f.id}"`)}${btn('report-family','Báo lỗi','secondary',`data-id="${f.id}"`)}</div></div></section><section class="card"><h2>Khách trong Family</h2>${customerTable(state.members.filter(m=>m.family_id===f.id))}</section>` : empty('Không tìm thấy Family','Hồ sơ này có thể đã được xóa.');
   } else if (page==='import') content=importPage();
   else content=empty('Không tìm thấy trang','Chọn mục trong thanh điều hướng.');
   $('#main').innerHTML = content;
   labelTables();
+  if(page==='journal')loadJournal();
 }
 function labelTables() {
   document.querySelectorAll('#main table').forEach(table=>{
@@ -88,6 +94,11 @@ $('#modal-form').addEventListener('submit', async event => {
 });
 $('#close-modal').onclick = $('#cancel-modal').onclick = () => $('#modal').close();
 for (const eventName of ['input','change']) document.addEventListener(eventName,event=>{
+  // Text searches already render on input; rendering again on blur removes a clicked row button.
+  if(eventName==='change'&&event.target.tagName!=='SELECT')return;
+  if(event.target.id==='family-search'){familySearch=event.target.value;$('#family-table').innerHTML=familyTable();labelTables();return;}
+  if(event.target.id==='issue-search'){issueSearch=event.target.value;$('#issue-board').innerHTML=issueBoard();return;}
+  if(event.target.id==='journal-search'){journalSearch=event.target.value;journalPage=1;++journalToken;$('#journal-list').innerHTML='<p>Đang tìm nhật ký…</p>';clearTimeout(journalTimer);journalTimer=setTimeout(loadJournal,250);return;}
   if (event.target.id==='product-search' || event.target.id==='product-filter') { if(event.target.id==='product-search')productSearch=event.target.value;else productFilter=event.target.value;$('#product-table').innerHTML=filteredProducts();labelTables();return;}
   if (event.target.id==='customer-search') customerSearch=event.target.value;
   else if (event.target.id==='customer-filter') customerFilter=event.target.value;
@@ -99,7 +110,18 @@ document.addEventListener('click', async event => {
   const button = event.target.closest('[data-action]'); if (!button) return;
   const { action, id, kind, email } = button.dataset;
   try {
-    if (action==='backup') {
+    if(action==='report-family'){
+      if(!state.families.length)return toast('Tạo Family trước khi báo lỗi.');
+      modal('Báo lỗi Family',select('family_id','Family',Object.fromEntries(state.families.map(f=>[f.id,f.name+' · '+f.manager_email])),id||state.families[0].id)+select('issue_target','Mail gặp lỗi',{},'')+input('subject_email','Email được báo lỗi','email','',false,'readonly')+input('title','Nội dung lỗi','text','',true,'maxlength="200"')+noteField(''),async data=>{const [type,targetId]=data.issue_target.split(':');await post('issues',{family_id:Number(data.family_id),target_type:type,target_id:Number(targetId),title:data.title,note:data.note});issueSearch='';location.hash='issues';toast('Đã đưa mail vào Chờ fix.');},'Báo lỗi');updateIssueTargets();
+    }else if(action==='issue-complete'){
+      const issue=state.issues.find(i=>i.id===Number(id));completeIssue(issue);
+    }else if(action==='issue-edit'){
+      const issue=state.issues.find(i=>i.id===Number(id));modal('Sửa lỗi',`<p>${escape(issue.subject_email)} · ${escape(issue.family_name)}</p>`+input('title','Nội dung lỗi','text',issue.title,true,'maxlength="200"')+noteField(issue.note)+select('status','Trạng thái lỗi',issueStatuses,issue.status)+completionFields(issue),async data=>{await patch('issues/'+issue.id,{...data,revision:issue.revision,expected_email:issue.target_current_email||issue.subject_email});if(data.resolution==='replace'){familySearch='';customerSearch='';}toast('Đã lưu lỗi.');});updateCompletionFields();
+    }else if(action==='journal-details'){
+      const entry=await api('journal/'+kind+'/'+id);modal('Chi tiết nhật ký',journalDetails(entry),async()=>{},'Đóng');
+    }else if(action==='journal-page'){
+      journalPage=Number(button.dataset.page);loadJournal();
+    }else if (action==='backup') {
       modal('Sao lưu / Chuyển dữ liệu','<p>File sao lưu giữ khách, Family, Contact, sản phẩm khác, lịch sử gia hạn và khách lưu trữ.</p><p><a class="primary link-button" href="/api/backup" download>Tải file sao lưu</a></p><label for="backup-file">Khôi phục vào ứng dụng đang trống</label><input id="backup-file" type="file" accept=".json,application/json"><p>Để chuyển lên hosting: tải file từ máy tính, mở địa chỉ hosting rồi chọn file tại đây. Bản khôi phục chỉ nhận vào ứng dụng đang trống.</p>',async()=>{const file=$('#backup-file').files[0];if (!file) throw new Error('Chọn file sao lưu .json để khôi phục, hoặc nhấn Hủy sau khi tải sao lưu.');if (file.size>32000000) throw new Error('File quá lớn (tối đa 32 MB).');let data;try {data=JSON.parse(await file.text());} catch {throw new Error('File JSON không hợp lệ.');}const result=await post('restore',data);toast(`Đã khôi phục ${result.customers} khách, ${result.families} Family và ${result.other_products} sản phẩm khác.`);},'Khôi phục dữ liệu');
     } else if (action==='close-access') {
       await post('access/close',{});location.replace('/access');
@@ -150,7 +172,7 @@ document.addEventListener('click', async event => {
 });
 window.addEventListener('hashchange', draw);
 async function sync() {
-  if ($('#modal').open) return;
+  if ($('#modal').open||draggedIssue!==null) return;
   try {await refresh(false);if (!['INPUT','SELECT','TEXTAREA'].includes(document.activeElement.tagName))draw();}
   catch(error){toast('Không thể cập nhật: '+error.message);}
 }
@@ -242,3 +264,52 @@ document.addEventListener('change',event=>{
   const m=state.members.find(m=>m.id===Number(event.target.value));if(!m)return;
   for(const name of ['customer_name','email','contact']){const field=$('#modal-fields [name='+name+']');if(field)field.value=m[name]||'';}
 });
+
+function familyTable(){
+  const q=familySearch.toLocaleLowerCase();const rows=state.families.filter(f=>`${f.name} ${f.manager_email} ${f.note} ${state.members.filter(m=>m.family_id===f.id).map(m=>m.email+' '+m.customer_name).join(' ')}`.toLocaleLowerCase().includes(q));
+  return rows.length?`<div class="table-wrap"><table><thead><tr><th>FAMILY</th><th>EMAIL QUẢN LÝ</th><th>KHÁCH ĐANG GHI NHẬN</th><th>THAO TÁC</th></tr></thead><tbody>${rows.map(f=>{const open=(state.issues||[]).filter(i=>i.family_id===f.id&&i.status!=='done').length;return `<tr><td><a class="email-link" href="#family/${f.id}">${escape(f.name)}</a><span class="subtext">${escape(f.note)}</span>${open?`<span class="badge amber">${open} lỗi cần fix</span>`:''}</td><td>${escape(f.manager_email)}</td><td>${state.members.filter(m=>m.family_id===f.id).length}</td><td><div class="row-actions">${btn('edit-family','Sửa','secondary tiny',`data-id="${f.id}"`)}${btn('delete-family-record','Xóa hồ sơ','danger tiny',`data-id="${f.id}"`)}${btn('report-family','Báo lỗi','secondary tiny',`data-id="${f.id}"`)}</div></td></tr>`;}).join('')}</tbody></table></div>`:empty('Chưa có Family phù hợp','Thêm Family hoặc điều chỉnh tìm kiếm.');
+}
+function issueBoard(){
+  const q=issueSearch.toLocaleLowerCase(),rows=(state.issues||[]).filter(i=>`${i.subject_email} ${i.original_email} ${i.family_name} ${i.title} ${i.note} ${i.resolution_note}`.toLocaleLowerCase().includes(q));
+  return `<div class="issue-board">${Object.entries(issueStatuses).map(([status,label])=>{const items=rows.filter(i=>i.status===status);return `<section class="issue-column" data-status-column="${status}" aria-label="${label}"><h2>${label} <span class="badge">${items.length}</span></h2><div class="issue-stack">${items.map(i=>`<article class="issue-card" draggable="true" data-issue-id="${i.id}"><strong>${escape(i.subject_email)}</strong><span class="subtext">${escape(i.family_name)} · ${i.target_type==='manager'?'Mail quản lý':'Mail khách'}</span><h3>${escape(i.title)}</h3><p>${escape(i.note)}</p>${i.original_email!==i.subject_email?`<span class="subtext">Mail báo lỗi ban đầu: ${escape(i.original_email)}</span>`:''}${i.resolution_note?`<p class="resolution-note">${escape(i.resolution_note)}</p><span class="subtext">${date(i.done_at)}</span>`:''}${!i.target_available?'<span class="badge amber">Hồ sơ liên quan không còn trong Family</span>':''}<label for="issue-status-${i.id}" class="sr-label">Trạng thái ${escape(i.subject_email)}</label><select id="issue-status-${i.id}" data-issue-status="${i.id}" aria-label="Trạng thái ${escape(i.subject_email)}">${Object.entries(issueStatuses).map(([v,n])=>`<option value="${v}" ${status===v?'selected':''}>${n}</option>`).join('')}</select><div class="row-actions">${btn('issue-edit','Sửa lỗi','secondary tiny',`data-id="${i.id}"`)}${status!=='done'?btn('issue-complete','Đã fix','primary tiny',`data-id="${i.id}"`):''}</div></article>`).join('')||'<p class="issue-empty">Chưa có lỗi trong cột này.</p>'}</div></section>`;}).join('')}</div>`;
+}
+function updateIssueTargets(){
+  const family=state.families.find(f=>f.id===Number($('#modal-fields [name=family_id]')?.value));if(!family)return;
+  const choices={['manager:'+family.manager_id]:'Mail quản lý · '+family.manager_email,...Object.fromEntries(state.members.filter(m=>m.family_id===family.id).map(m=>['member:'+m.id,'Mail khách · '+m.email]))};
+  const field=$('#modal-fields [name=issue_target]');field.innerHTML=Object.entries(choices).map(([key,label])=>`<option value="${key}">${escape(label)}</option>`).join('');updateIssueMail();
+}
+function updateIssueMail(){
+  const [type,id]=($('#modal-fields [name=issue_target]')?.value||'').split(':');const row=(type==='manager'?state.accounts:state.members).find(r=>r.id===Number(id));const field=$('#modal-fields [name=subject_email]');if(field)field.value=row?.email||'';
+}
+function completionFields(issue){return `<div id="issue-completion" data-original-status="${issue.status}">`+select('resolution','Khi Đã fix',{'keep':'Giữ nguyên mail','replace':'Đổi sang mail mới'},'keep')+`<div id="replacement-field">`+input('replacement_email','Mail mới','email','',false,'maxlength="254"')+'</div><p>Đổi mail sẽ cập nhật hồ sơ quản lý/khách trong Family và ghi rõ mail cũ → mail mới trong thẻ Đã fix và nhật ký.</p></div>';}
+function updateCompletionFields(){const section=$('#issue-completion');if(!section)return;const status=$('#modal-fields [name=status]')?.value||'done';section.hidden=status!=='done'||section.dataset.originalStatus==='done';const replacing=!section.hidden&&$('#modal-fields [name=resolution]').value==='replace';$('#replacement-field').hidden=!replacing;$('#modal-fields [name=replacement_email]').required=replacing;}
+function completeIssue(issue){
+  if(!issue)return;
+  modal('Hoàn tất fix lỗi',`<p><strong>${escape(issue.subject_email)}</strong> · ${escape(issue.family_name)}</p><p>${escape(issue.title)}</p>`+completionFields(issue)+noteField(issue.note),async data=>{await patch('issues/'+issue.id,{...data,status:'done',revision:issue.revision,expected_email:issue.target_current_email||issue.subject_email});if(data.resolution==='replace'){familySearch='';customerSearch='';}toast(data.resolution==='replace'?'Đã fix và cập nhật mail trong Family.':'Đã fix, giữ nguyên mail.');},'Xác nhận Đã fix');updateCompletionFields();
+}
+async function moveIssue(id,status){const issue=(state.issues||[]).find(i=>i.id===Number(id));if(!issue||issue.status===status)return;if(status==='done'){completeIssue(issue);return;}try{await patch('issues/'+issue.id,{status,revision:issue.revision});await refresh();toast('Đã chuyển sang '+issueStatuses[status]+'.');}catch(error){toast(error.message);await refresh();}}
+document.addEventListener('change',event=>{if(event.target.dataset.issueStatus)moveIssue(event.target.dataset.issueStatus,event.target.value);if(event.target.name==='family_id'&&$('#modal-fields [name=issue_target]'))updateIssueTargets();if(event.target.name==='issue_target')updateIssueMail();if(['status','resolution'].includes(event.target.name))updateCompletionFields();});
+document.addEventListener('dragstart',event=>{const card=event.target.closest('.issue-card');if(!card)return;if(event.target.closest('button,select,input,a')){event.preventDefault();return;}draggedIssue=Number(card.dataset.issueId);event.dataTransfer.setData('text/plain',String(draggedIssue));event.dataTransfer.effectAllowed='move';card.classList.add('dragging');});
+document.addEventListener('dragover',event=>{const col=event.target.closest('[data-status-column]');if(col&&draggedIssue!==null){event.preventDefault();event.dataTransfer.dropEffect='move';col.classList.add('drag-over');}});
+document.addEventListener('dragleave',event=>{const col=event.target.closest('[data-status-column]');if(col&&!col.contains(event.relatedTarget))col.classList.remove('drag-over');});
+document.addEventListener('drop',event=>{const col=event.target.closest('[data-status-column]');if(!col||draggedIssue===null)return;event.preventDefault();const id=draggedIssue;draggedIssue=null;document.querySelectorAll('.dragging,.drag-over').forEach(el=>el.classList.remove('dragging','drag-over'));moveIssue(id,col.dataset.statusColumn);});
+document.addEventListener('dragend',()=>{draggedIssue=null;document.querySelectorAll('.dragging,.drag-over').forEach(el=>el.classList.remove('dragging','drag-over'));});
+$('#modal').addEventListener('close',()=>{if(route()[0]==='issues')draw();});
+async function loadJournal(){
+  const token=++journalToken;try{const data=await api('journal?search='+encodeURIComponent(journalSearch)+'&page='+journalPage);if(token!==journalToken||route()[0]!=='journal'||!$('#journal-list'))return;$('#journal-list').innerHTML=(data.entries.length?`<div class="table-wrap"><table><thead><tr><th>THỜI GIAN</th><th>THAO TÁC</th><th>NỘI DUNG</th><th>CHI TIẾT</th></tr></thead><tbody>${data.entries.map(e=>`<tr><td>${date(e.created_at)}<span class="subtext">${escape(e.actor)}</span></td><td>${escape(e.action)}</td><td class="journal-message">${escape(e.message)}</td><td>${btn('journal-details','Xem chi tiết','secondary tiny',`data-kind="${e.kind}" data-id="${e.id}"`)}</td></tr>`).join('')}</tbody></table></div>`:empty('Chưa có nhật ký phù hợp','Điều chỉnh tìm kiếm hoặc thực hiện một thao tác.'))+`<div class="journal-pages"><span>${data.total} mục · Trang ${data.page}</span>${btn('journal-page','← Trước','secondary tiny',`data-page="${Math.max(1,data.page-1)}" ${data.page<=1?'disabled':''}`)}${btn('journal-page','Sau →','secondary tiny',`data-page="${data.page+1}" ${data.page*data.page_size>=data.total?'disabled':''}`)}</div>`;labelTables();}catch(error){if(token===journalToken&&$('#journal-list'))$('#journal-list').innerHTML='<p class="error-box">'+escape(error.message)+'</p>';}
+}
+const auditLabels={accounts:'Email quản lý',families:'Family',members:'Khách',archived_customers:'Khách lưu trữ',renewal_history:'Lịch sử gia hạn',other_purchases:'Sản phẩm khác',issues:'Lỗi',email:'Email',subject_email:'Mail gặp lỗi',original_email:'Mail báo lỗi ban đầu',customer_name:'Tên khách',contact:'Contact',name:'Tên',title:'Nội dung lỗi',note:'Ghi chú',joined_at:'Ngày mua',expires_at:'Ngày hết hạn',payment_status:'Thanh toán',amount:'Số tiền',plan_months:'Gói tháng',status:'Trạng thái lỗi',resolution_note:'Kết quả fix',resolution_email:'Mail sau fix',resolution:'Lựa chọn khi fix',renewal_status:'Trạng thái gia hạn'};
+Object.assign(auditLabels,{service:'Dịch vụ',product:'Sản phẩm',family_name:'Tên Family',manager_email:'Mail quản lý',old_expires_at:'Hạn cũ',new_expires_at:'Hạn mới',old_purchase_at:'Ngày mua cũ',new_purchase_at:'Ngày mua mới',paid_at:'Ngày nhận tiền',renewal_amount:'Tiền gia hạn',renewal_paid_at:'Ngày nhận tiền gia hạn',renewal_note:'Ghi chú gia hạn',declined_at:'Ngày chọn Không gia hạn',membership_status:'Trạng thái thành viên',archived_at:'Ngày lưu trữ',restored_at:'Ngày khôi phục',reason:'Lý do lưu trữ',done_at:'Ngày Đã fix',target_type:'Loại mail',snapshot:'Hồ sơ khách đã lưu'});
+const auditHiddenFields=new Set(['id','revision','renewal_revision','target_id','family_id','manager_id','member_id','archive_id','restored_member_id','original_member_id','created_at','updated_at','created_by','restored_by']);
+function auditValue(key,value){
+  if(value===null||value===undefined||value==='')return '—';
+  const labels={payment_status:payments,renewal_status:renewalLabels,membership_status:memberships,status:issueStatuses,service:products,target_type:{manager:'Mail quản lý',member:'Mail khách'},resolution:{keep:'Giữ nguyên mail',replace:'Đổi sang mail mới'}}[key];
+  if(labels)return labels[value]||value;
+  if(['joined_at','expires_at','old_expires_at','new_expires_at','old_purchase_at','new_purchase_at','paid_at','renewal_paid_at'].includes(key))return day(value);
+  if(['done_at','archived_at','restored_at','declined_at'].includes(key))return date(value);
+  if(['amount','renewal_amount'].includes(key))return Number(value).toLocaleString('vi-VN')+' ₫';
+  return value;
+}
+function journalDetails(entry){
+  const changes=entry.changes||[];return `<p>${date(entry.created_at)} · ${escape(entry.actor||'Cá nhân')}</p><p>${escape(entry.message)}</p>`+(changes.length?changes.map(c=>{const keys=[...new Set([...Object.keys(c.before||{}),...Object.keys(c.after||{})])].filter(k=>!auditHiddenFields.has(k)&&JSON.stringify(c.before?.[k])!==JSON.stringify(c.after?.[k]));if(!keys.length)return '';return `<section class="audit-change"><h3>${auditLabels[c.table]||escape(c.table)} #${c.id} · ${!c.before?'Thêm':!c.after?'Xóa':'Sửa'}</h3>${keys.map(k=>`<div class="audit-value"><strong>${escape(auditLabels[k]||k)}</strong><span><b>Trước:</b> ${escape(auditValue(k,c.before?.[k]))}</span><span><b>Sau:</b> ${escape(auditValue(k,c.after?.[k]))}</span></div>`).join('')}</section>`;}).join(''):'<p>Nhật ký cũ chỉ có nội dung thao tác. Chi tiết trước/sau được lưu từ bản cập nhật này.</p>');
+}

@@ -2,6 +2,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { readFileSync } from 'node:fs';
 import { randomBytes } from 'node:crypto';
+import { withAudit,auditLog } from './audit.js';
 import { initDatabase } from './database.js';
 import { validators } from './validation.js';
 import { initImporter } from './importer.js';
@@ -17,7 +18,7 @@ try {
   const fail=(message,status=400)=>{throw Object.assign(new Error(message),{status});};
   const validation=validators(fail);
   db=initDatabase(dir);
-  const log=message=>db.prepare('INSERT INTO logs(message,created_at) VALUES (?,?)').run(message,new Date().toISOString());
+  const log=message=>auditLog(db,message);
   const importer=initImporter(db,{...validation,fail,log});
   const payload={csv:parsed.normalizedCSV,delimiter:',',mapping:suggestMapping(parsed.headers),create_groups:true,duplicates:'skip',match_by_manager:true};
   const user={username:'Nhập CSV'};
@@ -31,7 +32,7 @@ try {
   } else {
     const backup=path.join(dir,`before-csv-${Date.now()}-${randomBytes(3).toString('hex')}.sqlite`);
     db.exec(`VACUUM INTO '${backup.replaceAll("'","''")}'`);
-    const result=importer({...payload,preview_token:preview.preview_token},user,true);
+    const result=await withAudit(db,'Nhập CSV trên Windows',()=>importer({...payload,preview_token:preview.preview_token},user,true),'Cá nhân');
     console.log(`Import complete: ${result.summary.create} new customers, ${result.summary.skip} existing records skipped, ${result.summary.new_families} new families.`);
     console.log('Existing customer data and history were preserved. A backup is in the data directory.');
     console.log('Passwords and countdown columns were not imported. Invitation-pending records are kept separately from member slots.');

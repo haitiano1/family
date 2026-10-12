@@ -102,7 +102,7 @@ export function initImporter(db, { fail, email, text, memberData, log }) {
   }
   function handle(data, user, commit = false) {
     const token = data.preview_token; const input = { ...data }; delete input.preview_token;
-    db.exec(commit ? 'BEGIN IMMEDIATE' : 'BEGIN');
+    db.exec('SAVEPOINT csv_save');
     try {
       const plan = prepare(input);
       if (commit) {
@@ -120,9 +120,9 @@ export function initImporter(db, { fail, email, text, memberData, log }) {
         }
         log(`${user.username}: nhập CSV ${plan.summary.create} khách mới, ${plan.summary.update} cập nhật, ${plan.summary.skip} bỏ qua, ${plan.summary.new_families} Family mới`);
       }
-      db.exec('COMMIT');
+      db.exec('RELEASE csv_save');
       return { summary: plan.summary, preview_token: plan.token, rows: plan.items.slice(0,200).map(i => ({ line: i.line, status: i.status, email: i.email, family_name: i.family_name, message: i.message, customer_name: i.values?.[1] || '', joined_at: i.values?.[3] || '', expires_at: i.values?.[4] || '', plan_months: i.values?.[8] || 0 })), groups: plan.groups.map(g => ({ name: g.name, manager_email: g.manager_email })), errors: plan.items.filter(i => i.status === 'error').slice(0,200).map(i => ({ line: i.line, message: i.message })), committed: commit };
-    } catch (error) { db.exec('ROLLBACK'); throw error; }
+    } catch (error) { db.exec('ROLLBACK TO csv_save; RELEASE csv_save'); throw error; }
   }
   return handle;
 }

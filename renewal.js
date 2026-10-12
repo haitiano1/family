@@ -2,7 +2,7 @@ import { today, renewalDates } from './domain.js';
 export const renewalStatuses = ['not_contacted','reminded','awaiting_payment','partial','paid','declined'];
 export function initRenewals(db, { fail, text, calendarDate, log }) {
   return function renew(id, data, user, apply = false) {
-    db.exec('BEGIN IMMEDIATE');
+    db.exec('SAVEPOINT renewal_save');
     try {
       const m = db.prepare('SELECT m.*,f.name AS family_name FROM members m JOIN families f ON f.id=m.family_id WHERE m.id=?').get(id);
       if (!m) fail('Không tìm thấy khách.', 404);
@@ -26,11 +26,11 @@ export function initRenewals(db, { fail, text, calendarDate, log }) {
         const result = db.prepare('INSERT INTO renewal_history(member_id,email,customer_name,family_name,old_expires_at,new_expires_at,plan_months,amount,paid_at,note,created_at,created_by,old_purchase_at,new_purchase_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)').run(m.id,m.email,m.customer_name,m.family_name,m.expires_at,dates.expires_at,plan,payment.amount,payment.paid_at,payment.note,new Date().toISOString(),user.username,m.joined_at,dates.purchase_date);
         db.prepare("UPDATE members SET joined_at=?,expires_at=?,plan_months=?,payment_status='paid',amount=?,renewal_status='not_contacted',renewal_amount=0,renewal_paid_at='',renewal_note='',declined_at='',renewal_revision=renewal_revision+1 WHERE id=?").run(dates.purchase_date,dates.expires_at,plan,payment.amount,m.id);
         log(`${user.username}: xác nhận gia hạn khách #${m.id}, ngày mua ${dates.purchase_date}, hạn ${m.expires_at || 'chưa đặt'} → ${dates.expires_at}, đã nhận ${payment.amount} VND`);
-        db.exec('COMMIT'); return { ok:true,applied:true,history_id:Number(result.lastInsertRowid), ...dates };
+        db.exec('RELEASE renewal_save'); return { ok:true,applied:true,history_id:Number(result.lastInsertRowid), ...dates };
       }
       db.prepare('UPDATE members SET renewal_status=?,renewal_amount=?,renewal_paid_at=?,renewal_note=?,declined_at=?,renewal_revision=renewal_revision+1 WHERE id=?').run(payment.status,payment.amount,payment.paid_at,payment.note,payment.status === 'declined' ? (m.declined_at || new Date().toISOString()) : '',m.id);
       log(`${user.username}: cập nhật gia hạn khách #${m.id}: ${payment.status}, đã nhận ${payment.amount} VND`);
-      db.exec('COMMIT'); return { ok:true,applied:false };
-    } catch (error) { db.exec('ROLLBACK'); throw error; }
+      db.exec('RELEASE renewal_save'); return { ok:true,applied:false };
+    } catch (error) { db.exec('ROLLBACK TO renewal_save; RELEASE renewal_save'); throw error; }
   };
 }

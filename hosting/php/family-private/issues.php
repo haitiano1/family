@@ -1,0 +1,31 @@
+<?php
+declare(strict_types=1);
+function issueTarget(PDO $db,array $i): array|false {
+    if(!$i['family_id'])return false;$f=one($db,'SELECT * FROM families WHERE id=?',[$i['family_id']]);if(!$f)return false;
+    if($i['target_type']==='manager')return $f['manager_id']===$i['target_id']?one($db,'SELECT * FROM accounts WHERE id=?',[$i['target_id']]):false;
+    return one($db,'SELECT * FROM members WHERE id=? AND family_id=?',[$i['target_id'],$f['id']]);
+}
+function issueList(PDO $db): array {return array_map(function($i)use($db){$target=issueTarget($db,$i);return [...$i,'target_current_email'=>$target['email']??'','target_available'=>(bool)$target];},all($db,'SELECT * FROM issues ORDER BY id DESC'));}
+function saveIssue(PDO $db,?int $id,array $d): array {
+    $old=$id?one($db,'SELECT * FROM issues WHERE id=?',[$id]):null;if($id&&!$old)fail('Không tìm thấy lỗi.',404);
+    if($old&&(!is_int($d['revision']??null)||$d['revision']!==$old['revision']))fail('Lỗi đã thay đổi. Tải lại rồi thử lại.',409);
+    $title=text($d['title']??$old['title']??'',200);if(!$title)fail('Nhập nội dung lỗi.');$note=text($d['note']??$old['note']??'');$status=$d['status']??$old['status']??'todo';if(!in_array($status,['todo','doing','done'],true))fail('Trạng thái lỗi không hợp lệ.');$now=stamp();
+    if(!$old){
+        if($status!=='todo')fail('Lỗi mới bắt đầu ở Chờ fix.');$f=one($db,'SELECT * FROM families WHERE id=?',[(int)($d['family_id']??0)]);if(!$f)fail('Chọn Family đang tồn tại.');$type=$d['target_type']??'manager';if(!in_array($type,['manager','member'],true))fail('Chọn mail gặp lỗi.');
+        $target=$type==='manager'?one($db,'SELECT * FROM accounts WHERE id=?',[$f['manager_id']]):one($db,'SELECT * FROM members WHERE id=? AND family_id=?',[(int)($d['target_id']??0),$f['id']]);if(!$target)fail('Mail khách không thuộc Family này.');
+        q($db,'INSERT INTO issues(family_id,family_name,target_type,target_id,subject_email,original_email,title,note,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?)',[$f['id'],$f['name'],$type,$target['id'],$target['email'],$target['email'],$title,$note,$now,$now]);$new=(int)$db->lastInsertId();logEntry($db,"Cá nhân: báo lỗi {$target['email']}: $title");return ['id'=>$new];
+    }
+    $subject=$old['subject_email'];$resolution=$old['resolution'];$resolved=$old['resolution_email'];$resolutionNote=$old['resolution_note'];$done=$old['done_at'];
+    if($status==='done'&&$old['status']!=='done'){
+        if(!in_array($d['resolution']??'', ['keep','replace'],true))fail('Chọn Giữ nguyên mail hoặc Đổi sang mail mới.');$resolution=$d['resolution'];$target=issueTarget($db,$old);
+        if($resolution==='replace'){
+            $replacement=email($d['replacement_email']??'');if(!$target||$target['email']!==($d['expected_email']??$old['subject_email']))fail('Mail trong Family đã thay đổi hoặc bị xóa. Tải lại để kiểm tra; chưa đổi mail.',409);if($replacement===$target['email'])fail('Mail mới cần khác mail hiện tại.');
+            $f=one($db,'SELECT f.*,a.email AS manager_email FROM families f JOIN accounts a ON a.id=f.manager_id WHERE f.id=?',[$old['family_id']]);
+            if($old['target_type']==='manager'){if(one($db,'SELECT id FROM accounts WHERE email=? AND id!=?',[$replacement,$target['id']])||one($db,'SELECT id FROM members WHERE family_id=? AND email=?',[$f['id'],$replacement]))fail('Mail mới đã tồn tại hoặc trùng khách trong Family.',409);q($db,'UPDATE accounts SET email=? WHERE id=?',[$replacement,$target['id']]);}
+            else{if($replacement===$f['manager_email']||one($db,'SELECT id FROM members WHERE family_id=? AND email=? AND id!=?',[$f['id'],$replacement,$target['id']]))fail('Mail mới đã có trong Family.',409);q($db,'UPDATE members SET email=?,renewal_revision=renewal_revision+1 WHERE id=?',[$replacement,$target['id']]);}
+            $resolutionNote="Đã đổi từ {$target['email']} sang $replacement.";$subject=$replacement;
+        }else{$subject=$target['email']??$old['subject_email'];$resolutionNote="Giữ nguyên mail $subject.";}
+        $resolved=$subject;$done=$now;
+    }elseif($status!=='done'){$resolution='';$resolved='';$resolutionNote='';$done='';}
+    q($db,'UPDATE issues SET title=?,note=?,status=?,subject_email=?,resolution=?,resolution_email=?,resolution_note=?,done_at=?,updated_at=?,revision=revision+1 WHERE id=?',[$title,$note,$status,$subject,$resolution,$resolved,$resolutionNote,$done,$now,$id]);logEntry($db,"Cá nhân: lỗi #$id → $status".($resolutionNote?' · '.$resolutionNote:''));return ['ok'=>true];
+}

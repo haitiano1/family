@@ -27,8 +27,8 @@ Mở **Files → File Manager** của website Family. Nếu có lựa chọn, ch
 │   └── .user.ini
 └── family-private/
     ├── config.example.php
-    ├── core.php, business.php, import.php
-    ├── schema.sql
+    ├── core.php, business.php, import.php, audit.php, issues.php
+    ├── schema.sql, features.sql
     ├── cron.php
     └── .htaccess
 ```
@@ -72,6 +72,12 @@ Cần Internet để dùng. Nhắc hạn0–2ngày theo giờ Việt Nam hiển 
 Gia hạn YouTube luôn nối từ hạn cũ, kể cả trả muộn. Khách chọn Không gia hạn chuyển vào lưu trữ sau7ngày lịch từ ngày chọn. Bản PHP kiểm tra khi tải dữ liệu/mở ứng dụng (tự xử lý bù). Để kiểm tra lưu trữ cả khi không mở ứng dụng, có thể thiết lập **Advanced → Cron Jobs**, chọn PHP và đường dẫn đầy đủ tới `family-private/cron.php`; chạy mỗi ngày hoặc mỗi giờ theo tùy chọn hPanel. Cron cần PHP8.2+ và chỉ báo kết quả, không in dữ liệu khách/mật khẩu.
 
 ## 6. Cập nhật và sao lưu
+
+Bản0.6 thêm tìm kiếm Family, Báo lỗi, bảng Chờ fix/Đang fix/Đã fix và Nhật ký trước/sau. Khi Đã fix, chọn Giữ nguyên hoặc Đổi mail; việc đổi đúng mail quản lý/khách và hoàn tất lỗi được lưu trong cùng transaction. Mail ban đầu và nội dung “Đã đổi từ A sang B” được giữ, các ngày/Contact/thanh toán của khách không bị thay đổi. Có chọn trạng thái trên thẻ để dùng iPhone, không bắt buộc kéo thả.
+
+Nhật ký chi tiết ghi từ lúc cập nhật, giữ log cũ dưới dạng nội dung. Ghi các thao tác thêm/sửa/xóa/nhập/gia hạn/lưu trữ/khôi phục và chuyển trạng thái/đổi mail khi fix; refresh/xem trang không ghi thêm. Xóa Family lưu cả khách bị xóa theo vào nhật ký. Có tìm kiếm/phân trang/Xem chi tiết trước-sau. Nhật ký hỗ trợ đối chiếu và giữ thông tin, chưa có nút hoàn tác tự động. Bản sao lưu v2 có lỗi/nhật ký; vẫn nhận JSON v1 từ bản cũ.
+
+Để cập nhật website đã cài, xem [UPDATE.md](https://github.com/haitiano1/family/blob/main/hosting/php/UPDATE.md) và tải family-hostinger-update.zip. MySQL schema1 nâng cấp cộng thêm lên2 tự động; giữ database và config.php. SQLite phát triển lên10 có backup before-v10.
 
 Dữ liệu nằm trong database MySQL riêng, không nằm trong thư mục file giao diện. Tải sao lưu JSON qua ứng dụng trước cập nhật và định kỳ. Cập nhật bằng gói PHP mới đúng website Family, giữ config.php và database; không xóa database.
 

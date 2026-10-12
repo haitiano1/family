@@ -8,7 +8,7 @@ export function archiveDue(m, current = today(), mode = 'expiry') {
 }
 export function initArchive(db, { fail, log, mode = 'expiry' }) {
   function sweep(current = today()) {
-    db.exec('BEGIN IMMEDIATE');
+    db.exec('SAVEPOINT archive_save');
     try {
       const members = db.prepare('SELECT m.*,f.name AS family_name,f.service,a.email AS manager_email FROM members m JOIN families f ON f.id=m.family_id JOIN accounts a ON a.id=f.manager_id').all().filter(m => archiveDue(m,current,mode));
       for (const m of members) {
@@ -19,8 +19,8 @@ export function initArchive(db, { fail, log, mode = 'expiry' }) {
         db.prepare('DELETE FROM members WHERE id=?').run(m.id);
         log(`Hệ thống: chuyển khách #${m.id} vào lưu trữ #${archiveId}; không thao tác Google`);
       }
-      db.exec('COMMIT'); return members.length;
-    } catch (error) { db.exec('ROLLBACK'); throw error; }
+      db.exec('RELEASE archive_save'); return members.length;
+    } catch (error) { db.exec('ROLLBACK TO archive_save; RELEASE archive_save'); throw error; }
   }
   function list() {
     return db.prepare('SELECT * FROM archived_customers WHERE restored_at IS NULL ORDER BY id DESC').all().map(r => {
@@ -29,7 +29,7 @@ export function initArchive(db, { fail, log, mode = 'expiry' }) {
     });
   }
   function restore(id, familyId, user) {
-    db.exec('BEGIN IMMEDIATE');
+    db.exec('SAVEPOINT archive_save');
     try {
       const row = db.prepare('SELECT * FROM archived_customers WHERE id=?').get(id);
       if (!row) fail('Không tìm thấy khách lưu trữ.',404); if (row.restored_at) fail('Khách đã được khôi phục.',409);
@@ -43,8 +43,8 @@ export function initArchive(db, { fail, log, mode = 'expiry' }) {
       db.prepare('UPDATE archived_customers SET restored_at=?,restored_by=?,restored_member_id=? WHERE id=?').run(new Date().toISOString(),user.username,restoredId,id);
       db.prepare('UPDATE renewal_history SET member_id=? WHERE archive_id=?').run(restoredId,id);
       log(`${user.username}: khôi phục khách lưu trữ #${id} vào Family #${family.id}; gia hạn tiếp theo trở về Chưa nhắc`);
-      db.exec('COMMIT'); return { ok:true,member_id:restoredId };
-    } catch (error) { db.exec('ROLLBACK'); throw error; }
+      db.exec('RELEASE archive_save'); return { ok:true,member_id:restoredId };
+    } catch (error) { db.exec('ROLLBACK TO archive_save; RELEASE archive_save'); throw error; }
   }
   return { sweep,list,restore,mode };
 }

@@ -9,7 +9,7 @@ import path from 'node:path';
 const root=path.resolve(import.meta.dirname,'../..'),prefix='family-php-'+process.pid,network=prefix+'-net',mysql=prefix+'-mysql',dir=mkdtempSync(tmpdir()+'/family-php-'),password=randomBytes(24).toString('hex');
 const containers=[];let count=0;
 const docker=(...args)=>execFileSync('docker',['--config',process.env.FAMILY_DOCKER_CONFIG || process.env.DOCKER_CONFIG || path.join(dir,'docker-config'),...args],{encoding:'utf8',maxBuffer:5e6,stdio:['ignore','pipe','pipe']}).trim();
-const sql=text=>docker('exec','-e','MYSQL_PWD='+password,mysql,'mysql','-uroot','-N','-e',text);
+const sql=text=>docker('exec','-e','MYSQL_PWD='+password,mysql,'mysql','-h127.0.0.1','-uroot','-N','-e',text);
 const port=name=>JSON.parse(docker('inspect',name))[0].NetworkSettings.Ports['80/tcp'][0].HostPort;
 before(async()=>{
  execFileSync('python3',['scripts/package-php.py'],{cwd:root});
@@ -98,7 +98,7 @@ test('PHP products use two-day Vietnam reminders and backup restores exactly int
  const day=(await a('state')).today,plus=n=>new Date(Date.parse(day)+n*86400000).toISOString().slice(0,10);
  const p=await a('other-products','POST',{product:'ChatGPT',customer_name:'Buyer',contact:'Facebook note',joined_at:day,expires_at:plus(2),note:'Sản phẩm phụ'},201);assert.equal((await a('state')).other_reminders.due_soon,1);
  await a('other-products/'+p.id,'PATCH',{product:'Spotify',email:'buyer@example.com',expires_at:plus(-1),note:'Expired'});assert.equal((await a('state')).other_reminders.expired,1);
- const backup=await a('backup');await b('restore','POST',backup);assert.deepEqual((await b('backup')).tables,backup.tables);await b('restore','POST',backup,409);
+ const backup=await a('backup');await b('restore','POST',backup);const restoredBackup=await b('backup');for(const t of Object.keys(backup.tables))if(t!=='audit_events')assert.deepEqual(restoredBackup.tables[t],backup.tables[t]);assert.deepEqual(restoredBackup.tables.audit_events.slice(0,-1),backup.tables.audit_events);assert.equal(restoredBackup.tables.audit_events.at(-1).action,'Khôi phục dữ liệu');await b('restore','POST',backup,409);
  await a('other-products/'+p.id,'DELETE');assert.equal((await a('state')).other_products.length,0);
  const empty=await fixture();await empty.login();const invalid=structuredClone(backup);delete invalid.tables.other_purchases[0].note;await empty.req('restore','POST',invalid,400);assert.equal((await empty.req('state')).other_products.length,0);
 });
@@ -129,13 +129,46 @@ test('Node SQLite backup migrates to PHP MySQL with complete renewal history and
   initRenewals(db,{fail,...validators(fail),log})(1,{revision:0,status:'paid',amount:100000,paid_at:'2026-01-15',plan_months:3,apply_now:true},{username:'Cục bộ'});
   db.prepare("INSERT INTO members(id,family_id,email,contact,renewal_status,declined_at) VALUES(2,1,'archive@example.com','Zalo archive','declined','2020-01-01T00:00:00.000Z')").run();initArchive(db,{fail,log,mode:'declined'}).sweep();
   db.prepare('INSERT INTO other_purchases(product,customer_name,email,contact,joined_at,expires_at,payment_status,amount,note,created_at) VALUES(?,?,?,?,?,?,?,?,?,?)').run('Netflix','Khách Việt','buyer@example.com','Contact','','','unknown',0,'Gói phụ',stamp);
-  const backup=JSON.parse(JSON.stringify(customerBackup(db))),f=await fixture();await f.login();const invalid=structuredClone(backup);invalid.tables.members[0].family_id=99999;await f.req('restore','POST',invalid,400);assert.equal((await f.req('state')).accounts.length,0);
-  await f.req('restore','POST',backup);const imported=await f.req('backup');assert.deepEqual(imported.tables,backup.tables);
-  const dest=initDatabase(dir+'/node-restored');try{restoreCustomers(dest,imported,fail);assert.deepEqual(JSON.parse(JSON.stringify(customerBackup(dest))).tables,backup.tables);}finally{dest.close();}
+  const {initIssues}=await import('../../issues.js'),{withAudit,auditLog}=await import('../../audit.js');
+  const issues=initIssues(db,{fail,...validators(fail),log:message=>auditLog(db,message)});const issue=await withAudit(db,'Thêm lỗi',()=>issues.save(null,{family_id:1,target_type:'member',target_id:1,title:'Lỗi được sao lưu',note:'Giữ ghi chú lỗi'}));await withAudit(db,'Sửa lỗi',()=>issues.save(issue.id,{status:'done',revision:0,resolution:'keep'}));
+  const backup=JSON.parse(JSON.stringify(customerBackup(db))),f=await fixture();assert.equal(backup.tables.issues[0].resolution,'keep');assert.equal(backup.tables.audit_events.length,2);await f.login();const invalid=structuredClone(backup);invalid.tables.members[0].family_id=99999;await f.req('restore','POST',invalid,400);assert.equal((await f.req('state')).accounts.length,0);
+  await f.req('restore','POST',backup);const imported=await f.req('backup');for(const t of Object.keys(backup.tables))if(t!=='audit_events')assert.deepEqual(imported.tables[t],backup.tables[t]);assert.deepEqual(imported.tables.audit_events.slice(0,-1),backup.tables.audit_events);assert.equal(imported.tables.audit_events.at(-1).action,'Khôi phục dữ liệu');
+  const dest=initDatabase(dir+'/node-restored');try{restoreCustomers(dest,imported,fail);assert.deepEqual(JSON.parse(JSON.stringify(customerBackup(dest))).tables,imported.tables);}finally{dest.close();}
   db.exec('DROP TABLE other_purchases;PRAGMA user_version=7');
   const {createRequire}=await import('node:module');const {exportBackup}=createRequire(import.meta.url)('../../export-backup.cjs');
   const sourceFile=dir+'/node-source/family.sqlite',before=readFileSync(sourceFile);
   const legacy=exportBackup(sourceFile,dir+'/old-windows-backup.json');assert.equal(legacy.tables.other_purchases.length,0);assert.deepEqual(readFileSync(sourceFile),before);assert.equal(db.prepare('PRAGMA user_version').get().user_version,7);
-  const oldTarget=await fixture();await oldTarget.login();await oldTarget.req('restore','POST',legacy);assert.deepEqual((await oldTarget.req('backup')).tables,legacy.tables);
+  const oldTarget=await fixture();await oldTarget.login();await oldTarget.req('restore','POST',legacy);const legacyResult=await oldTarget.req('backup');for(const t of Object.keys(legacy.tables))if(t!=='audit_events')assert.deepEqual(legacyResult.tables[t],legacy.tables[t]);assert.deepEqual(legacyResult.tables.audit_events.slice(0,-1),legacy.tables.audit_events);
  }finally{db.close();}
+});
+
+test('PHP Family issues support keep/replace for manager and customer with atomic conflict/stale guards',async()=>{
+ const f=await fixture();await f.login();const a=f.req;
+ const family=await a('families','POST',{name:'Fix Family',manager_email:'manager-a@example.com'},201);const member=await a('members','POST',{family_id:family.id,email:'customer-a@example.com',contact:'Zalo contact',note:'Customer note'},201);
+ const issue=await a('issues','POST',{family_id:family.id,target_type:'manager',title:'Manager error'},201);
+ await a('issues/'+issue.id,'PATCH',{status:'done',revision:0},400);await a('issues/'+issue.id,'PATCH',{status:'doing',revision:0});
+ sql(`CREATE TRIGGER ${f.db}.reject_issue_completion BEFORE UPDATE ON ${f.db}.issues FOR EACH ROW SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT='Injected issue write failure'`);
+ const journalBefore=(await a('journal')).total;await a('issues/'+issue.id,'PATCH',{status:'done',revision:1,resolution:'replace',replacement_email:'manager-b@example.com'},500);
+ assert.equal((await a('state')).families[0].manager_email,'manager-a@example.com');assert.equal((await a('state')).issues[0].status,'doing');assert.equal((await a('journal')).total,journalBefore);
+ sql(`DROP TRIGGER ${f.db}.reject_issue_completion`);await a('issues/'+issue.id,'PATCH',{status:'done',revision:1,resolution:'replace',replacement_email:'manager-b@example.com'});
+ let state=await a('state');assert.equal(state.families[0].manager_email,'manager-b@example.com');assert.equal(state.issues[0].original_email,'manager-a@example.com');assert.match(state.issues[0].resolution_note,/manager-a@example.com.*manager-b@example.com/);
+ await a('issues/'+issue.id,'PATCH',{status:'todo',revision:1},409);
+ const customer=await a('issues','POST',{family_id:family.id,target_type:'member',target_id:member.id,title:'Customer error'},201);
+ await a('issues/'+customer.id,'PATCH',{status:'done',revision:0,resolution:'replace',replacement_email:'manager-b@example.com'},409);assert.equal((await a('state')).issues.find(i=>i.id===customer.id).status,'todo');assert.equal((await a('state')).members[0].email,'customer-a@example.com');
+ await a('issues/'+customer.id,'PATCH',{status:'done',revision:0,resolution:'replace',replacement_email:'customer-b@example.com'});state=await a('state');assert.equal(state.members[0].email,'customer-b@example.com');assert.equal(state.members[0].note,'Customer note');assert.equal(state.members[0].contact,'Zalo contact');
+ const keep=await a('issues','POST',{family_id:family.id,title:'Keep'},201);await a('issues/'+keep.id,'PATCH',{status:'done',revision:0,resolution:'keep'});assert.equal((await a('state')).families[0].manager_email,'manager-b@example.com');
+ await f.restart();assert.equal((await a('state')).issues.filter(i=>i.status==='done').length,3);
+});
+
+test('PHP journal retains before/after edits and deletion cascades; v1 MySQL upgrades preserve data',async()=>{
+ const f=await fixture();await f.login();const a=f.req;
+ const family=await a('families','POST',{name:'Gia đình Việt',manager_email:'manager@example.com'},201);const member=await a('members','POST',{family_id:family.id,email:'guest@example.com',contact:'Original contact',note:'Original note'},201);
+ // Simulate the installed previous PHP schema: same customer tables, no feature tables.
+ sql(`DROP TABLE ${f.db}.issues;DROP TABLE ${f.db}.audit_events;UPDATE ${f.db}.app_meta SET value='1' WHERE name='schema_version'`);
+ let state=await a('state');assert.equal(state.members[0].contact,'Original contact');assert.equal(state.families[0].name,'Gia đình Việt');assert.equal(sql(`SELECT value FROM ${f.db}.app_meta WHERE name='schema_version'`),'2');
+ await a('members/'+member.id,'PATCH',{email:'guest@example.com',contact:'Edited contact',note:'Edited note'});let journal=await a('journal?search=guest@example.com');const changed=journal.entries.find(e=>e.action==='Sửa khách');const detail=await a('journal/audit/'+changed.id);assert.equal(detail.changes[0].before.contact,'Original contact');assert.equal(detail.changes[0].after.contact,'Edited contact');
+ const count=(await a('journal')).total;await a('members/'+member.id,'PATCH',{email:'bad'},400);assert.equal((await a('journal')).total,count);
+ const issue=await a('issues','POST',{family_id:family.id,title:'Still open'},201);await a('families/'+family.id,'DELETE');state=await a('state');assert.equal(state.issues[0].id,issue.id);assert.equal(state.issues[0].family_id,null);assert.equal(state.issues[0].target_available,false);
+ journal=await a('journal?search=manager@example.com');const deletion=journal.entries.find(e=>e.action==='Xóa Family');assert.ok(deletion);const deleted=await a('journal/audit/'+deletion.id);assert.equal(deleted.changes.find(c=>c.table==='members').before.contact,'Edited contact');assert.equal(deleted.changes.find(c=>c.table==='members').after,null);
+ assert.ok((await a('journal?search='+encodeURIComponent('GIA ĐÌNH VIỆT'))).total>0);
 });

@@ -3,6 +3,8 @@ declare(strict_types=1);
 require dirname(__DIR__).'/family-private/core.php';
 require dirname(__DIR__).'/family-private/business.php';
 require dirname(__DIR__).'/family-private/import.php';
+require dirname(__DIR__).'/family-private/audit.php';
+require dirname(__DIR__).'/family-private/issues.php';
 try {
     $c=config();checkRequest($c);$route=parse_url($_SERVER['REQUEST_URI'],PHP_URL_PATH);$method=$_SERVER['REQUEST_METHOD'];
     if ($route==='/api/access' && $method==='POST') {
@@ -14,12 +16,18 @@ try {
     if(!authorized($c))fail('Nhập mật khẩu truy cập để mở dữ liệu.',401);
     if($route==='/api/access/close'&&$method==='POST'){accessCookie($c,true);reply(['ok'=>true]);}
     $db=db($c);
+    if($route==='/api/state'||(!in_array($method,['GET','HEAD'],true)))beginAudit($db,auditAction($method,$route),$route==='/api/state'?'Hệ thống':'Cá nhân');
+    if($route==='/api/journal'&&$method==='GET')reply(journal($db));
+    if(preg_match('~^/api/journal/(audit|log)/(\d+)$~D',$route,$p)&&$method==='GET')reply(journalEntry($db,$p[1],(int)$p[2]));
+    if(preg_match('~^/api/issues(?:/(\d+))?$~D',$route,$p)&&in_array($method,['POST','PATCH'],true)){
+        $id=isset($p[1])?(int)$p[1]:null;if(($method==='POST'&&$id)||($method==='PATCH'&&!$id))fail('Không tìm thấy.',404);reply(saveIssue($db,$id,body()),$id?200:201);
+    }
     if($route==='/api/backup'&&$method==='GET'){header('Content-Disposition: attachment; filename="family-backup-'.today().'.json"');reply(backup($db));}
     if($route==='/api/restore'&&$method==='POST')reply(restoreBackup($db,body(32000000)));
     if($route==='/api/state'&&$method==='GET'){
         sweep($db);$members=array_map(fn($m)=>[...$m,...expiry($m['expires_at'])],all($db,'SELECT m.*,f.name AS family_name,f.service,a.email AS manager_email FROM members m JOIN families f ON f.id=m.family_id JOIN accounts a ON a.id=f.manager_id ORDER BY m.id DESC'));
         $products=array_map(fn($p)=>[...$p,...expiry($p['expires_at'])],all($db,'SELECT * FROM other_purchases ORDER BY id DESC'));$count=fn($rows,$status)=>count(array_filter($rows,fn($r)=>$r['expiry_status']===$status));
-        reply(['hosted'=>true,'other_products'=>$products,'other_reminders'=>['due_soon'=>$count($products,'due_soon'),'expired'=>$count($products,'expired')],'accounts'=>all($db,'SELECT a.*,f.id AS family_id,f.name AS family_name,f.service FROM accounts a LEFT JOIN families f ON f.manager_id=a.id ORDER BY a.id DESC'),'families'=>all($db,'SELECT f.*,a.email AS manager_email FROM families f JOIN accounts a ON a.id=f.manager_id ORDER BY f.id DESC'),'members'=>$members,'archives'=>archives($db),'archive_mode'=>'declined','logs'=>all($db,'SELECT * FROM logs ORDER BY id DESC LIMIT 100'),'today'=>today(),'reminders'=>['expired'=>$count($members,'expired'),'due_soon'=>$count($members,'due_soon'),'unpaid'=>count(array_filter($members,fn($m)=>in_array($m['payment_status'],['unpaid','partial'],true))),'renewal_waiting'=>count(array_filter($members,fn($m)=>in_array($m['renewal_status'],['awaiting_payment','partial'],true))),'renewal_paid_pending'=>count(array_filter($members,fn($m)=>$m['renewal_status']==='paid'))]]);
+        reply(['hosted'=>true,'issues'=>issueList($db),'other_products'=>$products,'other_reminders'=>['due_soon'=>$count($products,'due_soon'),'expired'=>$count($products,'expired')],'accounts'=>all($db,'SELECT a.*,f.id AS family_id,f.name AS family_name,f.service FROM accounts a LEFT JOIN families f ON f.manager_id=a.id ORDER BY a.id DESC'),'families'=>all($db,'SELECT f.*,a.email AS manager_email FROM families f JOIN accounts a ON a.id=f.manager_id ORDER BY f.id DESC'),'members'=>$members,'archives'=>archives($db),'archive_mode'=>'declined','logs'=>all($db,'SELECT * FROM logs ORDER BY id DESC LIMIT 100'),'today'=>today(),'reminders'=>['expired'=>$count($members,'expired'),'due_soon'=>$count($members,'due_soon'),'unpaid'=>count(array_filter($members,fn($m)=>in_array($m['payment_status'],['unpaid','partial'],true))),'renewal_waiting'=>count(array_filter($members,fn($m)=>in_array($m['renewal_status'],['awaiting_payment','partial'],true))),'renewal_paid_pending'=>count(array_filter($members,fn($m)=>$m['renewal_status']==='paid'))]]);
     }
     if(preg_match('~^/api/import/(preview|commit)$~D',$route,$p)&&$method==='POST')reply(importCustomers($db,body(2000000),$p[1]==='commit',$c));
     if(preg_match('~^/api/members/(\d+)/renewal(/apply)?$~D',$route,$p)&&$method===(isset($p[2])?'POST':'PATCH'))reply(renew($db,(int)$p[1],body(),isset($p[2])));

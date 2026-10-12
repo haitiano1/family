@@ -6,6 +6,7 @@ class FamilyError extends RuntimeException {
 }
 function fail(string $message,int $status=400): never {throw new FamilyError($message,$status);}
 function reply(mixed $data,int $status=200): never {
+    if(function_exists('finishAudit'))finishAudit($status<400);
     http_response_code($status);header('Content-Type: application/json; charset=utf-8');header('Cache-Control: no-store');
     echo json_encode($data,JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES|JSON_THROW_ON_ERROR);exit;
 }
@@ -52,7 +53,7 @@ function one(PDO $db,string $sql,array $args=[]): array|false {return q($db,$sql
 function all(PDO $db,string $sql,array $args=[]): array {return q($db,$sql,$args)->fetchAll();}
 function stamp(): string {return gmdate('Y-m-d\TH:i:s.000\Z');}
 function today(): string {return (new DateTimeImmutable('now',new DateTimeZone('Asia/Ho_Chi_Minh')))->format('Y-m-d');}
-function logEntry(PDO $db,string $message): void {q($db,'INSERT INTO logs(message,created_at) VALUES (?,?)',[$message,stamp()]);}
+function logEntry(PDO $db,string $message): void {if(isset($GLOBALS['audit_scope'])){$GLOBALS['audit_scope']['messages'][]=$message;return;}q($db,'INSERT INTO logs(message,created_at) VALUES (?,?)',[$message,stamp()]);}
 function body(int $limit=16384): array {
     if (!preg_match('~^application/json(?:;|$)~i',$_SERVER['CONTENT_TYPE']??'')) fail('Yêu cầu cần Content-Type application/json.',415);
     $stream=fopen('php://input','rb');$raw=stream_get_contents($stream,$limit+1);fclose($stream);
@@ -85,6 +86,7 @@ function expiry(string $value): array {
     return ['expiry_status'=>$days<0?'expired':($days<=2?'due_soon':'active'),'days_left'=>$days];
 }
 function transaction(PDO $db,callable $operation): mixed {
+    if($db->inTransaction())return $operation();
     $db->beginTransaction();try {$result=$operation();$db->commit();return $result;}catch (Throwable $e) {if ($db->inTransaction()) $db->rollBack();throw $e;}
 }
 function initializeSchema(PDO $db): void {
@@ -92,11 +94,12 @@ function initializeSchema(PDO $db): void {
     if ($tables && !in_array('app_meta',$tables,true)) fail('Database đang chứa dữ liệu khác. Tạo database trống riêng cho Family.',503);
     if (in_array('app_meta',$tables,true)) {
         $version=one($db,"SELECT value FROM app_meta WHERE name='schema_version'");
-        if (($version['value']??'')==='1') return;
-        if ($version) fail('Database dùng phiên bản khác. Hãy dùng mã nguồn tương ứng.',503);
+        if (($version['value']??'')==='2') return;
+        if ($version && !in_array($version['value'],['1'],true)) fail('Database dùng phiên bản khác. Hãy dùng mã nguồn tương ứng.',503);
     }
     foreach(explode(';',file_get_contents(__DIR__.'/schema.sql')) as $sql) if (trim($sql)) $db->exec($sql);
-    q($db,"INSERT INTO app_meta(name,value) VALUES ('schema_version','1') ON DUPLICATE KEY UPDATE value=value");
+    foreach(explode(';',file_get_contents(__DIR__.'/features.sql')) as $sql)if(trim($sql))$db->exec($sql);
+    q($db,"INSERT INTO app_meta(name,value) VALUES ('schema_version','2') ON DUPLICATE KEY UPDATE value='2'");
 }
 function errorReply(Throwable $e): never {
     if ($e instanceof FamilyError) reply(['error'=>$e->getMessage()],$e->status);

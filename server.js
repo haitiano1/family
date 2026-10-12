@@ -9,6 +9,8 @@ import { initArchive } from './archive.js';
 import { initRenewals } from './renewal.js';
 import { initImporter } from './importer.js';
 import { today, expiry } from './domain.js';
+import { beginAudit,finishAudit,cancelAudit,auditLog,auditAction,journal,journalEntry,withAudit } from './audit.js';
+import { initIssues } from './issues.js';
 import { hosting } from './hosting.js';
 import { customerBackup, restoreCustomers } from './backup.js';
 
@@ -20,25 +22,28 @@ const all = (sql, ...args) => db.prepare(sql).all(...args);
 const one = (sql, ...args) => db.prepare(sql).get(...args);
 const run = (sql, ...args) => db.prepare(sql).run(...args);
 const now = () => new Date().toISOString();
-const log = message => run('INSERT INTO logs(message,created_at) VALUES (?,?)', message, now());
+const log = message => auditLog(db,message);
 const fail = (message, status = 400) => { throw Object.assign(new Error(message), { status }); };
 const actor = { username:'Cục bộ' };
 const { email,text,label,service,calendarDate,memberData } = validators(fail);
 const saveOtherProduct=initOtherProducts(db,{fail,text,email,calendarDate,log});
+const issues=initIssues(db,{fail,text,email,log});
 const archive = initArchive(db, { fail,log, mode:'declined' });
-archive.sweep();
-const housekeeper = setInterval(() => { try { archive.sweep(); } catch { console.error('Archive sweep failed. Retry on the next interval.'); } },60000); housekeeper.unref();
+await withAudit(db,'Tự động lưu trữ',()=>archive.sweep(),'Hệ thống');
+let requestQueue=Promise.resolve();
+const housekeeper = setInterval(() => { requestQueue=requestQueue.then(()=>withAudit(db,'Tự động lưu trữ',()=>archive.sweep(),'Hệ thống')).catch(()=>console.error('Archive sweep failed. Retry on the next interval.')); },60000); housekeeper.unref();
 const renewMember = initRenewals(db, { fail, text, calendarDate, log });
 const importCustomers = initImporter(db, { fail, email, text, memberData, log });
 async function body(req, limit = 16384) {
+  if(Object.hasOwn(req,'famBody'))return req.famBody;
   if (!/^application\/json(?:;|$)/i.test(req.headers['content-type'] || '')) fail('Yêu cầu cần Content-Type application/json.', 415);
   let length = 0; const chunks = [];
   for await (const chunk of req) { length += chunk.length; if (length > limit) fail('Dữ liệu quá lớn.', 413); chunks.push(chunk); }
   try { const parsed = JSON.parse(Buffer.concat(chunks).toString('utf8') || '{}'); if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) fail('Dữ liệu cần là một đối tượng.'); return parsed; }
   catch { fail('JSON không hợp lệ.'); }
 }
-function send(res, status, value) { res.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' }); res.end(JSON.stringify(value)); }
-const server = http.createServer(async (req, res) => {
+function send(res, status, value) { if(res.famCapture){res.famPending={status,value};return;}  res.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' }); res.end(JSON.stringify(value)); }
+async function handle(req, res) {
   try {
     res.setHeader('X-Content-Type-Options', 'nosniff');
     res.setHeader('Referrer-Policy', 'no-referrer');
@@ -61,6 +66,9 @@ const server = http.createServer(async (req, res) => {
     if (access.enabled && req.method==='POST' && url.pathname==='/api/access/close') {
       res.setHeader('Set-Cookie','fam_access=; HttpOnly; Secure; SameSite=Strict; Path=/; Max-Age=0');return send(res,200,{ok:true});
     }
+    if(req.method==='GET'&&url.pathname==='/api/journal')return send(res,200,journal(db,url.searchParams));
+    if(req.method==='GET'&&/^\/api\/journal\/(audit|log)\/\d+$/.test(url.pathname)){const [,,,kind,id]=url.pathname.split('/');const entry=journalEntry(db,kind,Number(id));if(!entry)fail('Không tìm thấy nhật ký.',404);return send(res,200,entry);}
+    if(['POST','PATCH'].includes(req.method)&&/^\/api\/issues(?:\/\d+)?$/.test(url.pathname)){const id=req.method==='PATCH'?Number(url.pathname.split('/').pop()):null;if((req.method==='POST'&&url.pathname!=='/api/issues')||(req.method==='PATCH'&&!id))fail('Không tìm thấy.',404);return send(res,id?200:201,issues.save(id,await body(req)));}
     if (req.method==='GET' && url.pathname==='/api/backup') {
       res.setHeader('Content-Disposition',`attachment; filename="family-backup-${today()}.json"`);
       return send(res,200,customerBackup(db));
@@ -98,12 +106,12 @@ const server = http.createServer(async (req, res) => {
       const members = all('SELECT m.*,f.name AS family_name,f.service,a.email AS manager_email FROM members m JOIN families f ON f.id=m.family_id JOIN accounts a ON a.id=f.manager_id ORDER BY m.id DESC').map(m => ({ ...m, ...expiry(m.expires_at) }));
       const other_products=all('SELECT * FROM other_purchases ORDER BY id DESC').map(p=>({...p,...expiry(p.expires_at)}));
       return send(res, 200, {
-        hosted:access.enabled,
+        hosted:access.enabled,issues:issues.list(),
         other_products,other_reminders:{due_soon:other_products.filter(p=>p.expiry_status==='due_soon').length,expired:other_products.filter(p=>p.expiry_status==='expired').length},
         accounts: all('SELECT a.*, f.id AS family_id, f.name AS family_name, f.service FROM accounts a LEFT JOIN families f ON f.manager_id=a.id ORDER BY a.id DESC'),
         families: all('SELECT f.*, a.email AS manager_email FROM families f JOIN accounts a ON a.id=f.manager_id ORDER BY f.id DESC'),
         members, archives:archive.list(), archive_mode:archive.mode,
-        logs: all('SELECT * FROM logs ORDER BY id DESC LIMIT 100'), today: today(),
+        logs: all('SELECT id,message,created_at FROM logs UNION ALL SELECT id,message,created_at FROM audit_events ORDER BY created_at DESC,id DESC LIMIT 100'), today: today(),
         reminders: { expired: members.filter(m => m.expiry_status === 'expired').length, due_soon: members.filter(m => m.expiry_status === 'due_soon').length, unpaid: members.filter(m => ['unpaid','partial'].includes(m.payment_status)).length, renewal_waiting: members.filter(m => ['awaiting_payment','partial'].includes(m.renewal_status)).length, renewal_paid_pending: members.filter(m => m.renewal_status === 'paid').length }
       });
     }
@@ -123,27 +131,27 @@ const server = http.createServer(async (req, res) => {
       const data = await body(req); const name = label(data.name), product = service(data.service || 'youtube'), note = text(data.note);
       if (req.method === 'POST' && url.pathname === '/api/families') {
         const managerEmail = data.manager_email ? email(data.manager_email) : null;
-        db.exec('BEGIN IMMEDIATE');
+        db.exec('SAVEPOINT family_save');
         try {
           let manager = managerEmail ? one('SELECT * FROM accounts WHERE email=?',managerEmail) : one('SELECT * FROM accounts WHERE id=?',Number(data.manager_id));
           if (!manager && managerEmail) { const result=run('INSERT INTO accounts(email,note,created_at) VALUES (?,?,?)',managerEmail,'',now()); manager={id:Number(result.lastInsertRowid)}; }
           if (!manager) fail('Nhập email quản lý Family hợp lệ.');
           const result = run('INSERT INTO families(name,manager_id,service,note,created_at) VALUES (?,?,?,?,?)',name,manager.id,product,note,now());
-          log(`${actor.username}: tạo Family ${name}`); db.exec('COMMIT'); return send(res,201,{id:Number(result.lastInsertRowid)});
-        } catch(error) {db.exec('ROLLBACK');throw error;}
+          log(`${actor.username}: tạo Family ${name}`); db.exec('RELEASE family_save'); return send(res,201,{id:Number(result.lastInsertRowid)});
+        } catch(error) {db.exec('ROLLBACK TO family_save; RELEASE family_save');throw error;}
       }
       if (req.method === 'PATCH') {
         const id=Number(url.pathname.split('/').pop()); const old=one('SELECT * FROM families WHERE id=?',id);if (!old) fail('Không tìm thấy Family.',404);
         const managerEmail=data.manager_email ? email(data.manager_email) : null;
-        db.exec('BEGIN IMMEDIATE');
+        db.exec('SAVEPOINT family_save');
         try {
           let manager=managerEmail ? one('SELECT * FROM accounts WHERE email=?',managerEmail) : one('SELECT * FROM accounts WHERE id=?',Number(data.manager_id));
           if (!manager && managerEmail) {const result=run('INSERT INTO accounts(email,note,created_at) VALUES (?,?,?)',managerEmail,'',now());manager={id:Number(result.lastInsertRowid),email:managerEmail};}
           if (!manager) fail('Nhập email quản lý Family hợp lệ.');
           if (one('SELECT id FROM members WHERE family_id=? AND email=?',id,manager.email)) fail('Email quản lý trùng một khách trong nhóm.');
           run('UPDATE families SET name=?,manager_id=?,service=?,note=? WHERE id=?',name,manager.id,product,note,id);
-          log(`${actor.username}: sửa Family #${id}`);db.exec('COMMIT');return send(res,200,{ok:true});
-        } catch(error) {db.exec('ROLLBACK');throw error;}
+          log(`${actor.username}: sửa Family #${id}`);db.exec('RELEASE family_save');return send(res,200,{ok:true});
+        } catch(error) {db.exec('ROLLBACK TO family_save; RELEASE family_save');throw error;}
       }
     }
     if (['POST', 'PATCH'].includes(req.method) && /^\/api\/members(?:\/\d+)?$/.test(url.pathname)) {
@@ -180,5 +188,17 @@ const server = http.createServer(async (req, res) => {
     const constraint = /UNIQUE constraint/.test(error.message);
     send(res, constraint ? 409 : error.status || 500, { error: constraint ? 'Hồ sơ đã tồn tại; một email quản lý chỉ thuộc một Family.' : error.status ? error.message : 'Lỗi hệ thống.' });
   }
+}
+const server=http.createServer(async(req,res)=>{
+  let path;
+  try{path=new URL(req.url,'http://localhost').pathname;if(!['GET','HEAD'].includes(req.method)&&path.startsWith('/api/'))req.famBody=await body(req,path==='/api/restore'?32000000:path.startsWith('/api/import/')?2000000:16384);}
+  catch(error){return send(res,error.status||400,{error:error.message});}
+  requestQueue=requestQueue.then(async()=>{
+    const audited=path==='/api/state'||(!['GET','HEAD'].includes(req.method)&&path.startsWith('/api/')&&!path.startsWith('/api/access'));
+    if(!audited)return handle(req,res);
+    beginAudit(db,auditAction(req.method,path),path==='/api/state'?'Hệ thống':'Cá nhân');res.famCapture=true;
+    try{await handle(req,res);const pending=res.famPending;if(!pending)throw Error('Missing response');if(pending.status>=400)cancelAudit(db);else finishAudit(db);res.famCapture=false;send(res,pending.status,pending.value);}
+    catch(error){try{cancelAudit(db);}catch{}res.famCapture=false;send(res,500,{error:'Không thể lưu thao tác và nhật ký. Dữ liệu chưa thay đổi.'});}
+  }).catch(()=>{if(!res.writableEnded)send(res,500,{error:'Lỗi hệ thống.'});});
 });
 server.listen(Number(process.env.PORT || 3000), process.env.HOST || '127.0.0.1', () => console.log(`Fam Manager started on port ${server.address().port}`));
