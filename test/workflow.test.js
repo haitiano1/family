@@ -11,16 +11,16 @@ import { expiry } from '../domain.js';
 
 async function fixture(prepare) {
   const dir = mkdtempSync(path.join(tmpdir(), 'fam-test-')); if (prepare) prepare(dir);
-  let child, base, code;
+  let child, base;
   async function start() {
-    let output = ''; code = undefined;
+    let output = '';
     child = spawn(process.execPath, ['server.js'], { env: { ...process.env, PORT: '0', DATA_DIR: dir }, stdio: ['ignore', 'pipe', 'pipe'] });
     base = await new Promise((resolve, reject) => {
       const timer = setTimeout(() => reject(new Error('Startup timed out')), 10000);
       child.once('error', error => { clearTimeout(timer); reject(error); });
       child.stderr.on('data', d => { output += d.toString(); });
       child.stdout.on('data', data => {
-        output += data.toString(); code = output.match(/setup code: (\w+)/)?.[1];
+        output += data.toString();
         const match = output.match(/port (\d+)/); if (match) { clearTimeout(timer); resolve('http://127.0.0.1:' + match[1]); }
       });
       child.once('exit', exit => { clearTimeout(timer); reject(new Error('Server exited: ' + exit + '\n' + output)); });
@@ -38,9 +38,9 @@ async function fixture(prepare) {
     return request;
   };
   const admin = client();
-  async function setup() { await admin('auth/setup', 'POST', { code, username: 'owner', password: 'Private-app-password-123' }, 201); await admin('auth/login', 'POST', { username: 'owner', password: 'Private-app-password-123' }); }
+  async function setup() { await admin('auth/setup', 'POST', { username: 'owner', password: 'Private-app-password-123' }, 201); await admin('auth/login', 'POST', { username: 'owner', password: 'Private-app-password-123' }); }
   try { await start(); } catch (error) { await stop(); rmSync(dir, { recursive: true, force: true }); throw error; }
-  return { start, stop, dir, client, admin, setup, get base() { return base; }, get code() { return code; }, async close() { await stop(); rmSync(dir, { recursive: true, force: true }); } };
+  return { start, stop, dir, client, admin, setup, get base() { return base; }, async close() { await stop(); rmSync(dir, { recursive: true, force: true }); } };
 }
 
 test('CRUD, customer dates/payments, persistence, Google manual outcomes and capacity', async () => {
@@ -90,10 +90,10 @@ test('authentication, role enforcement, CSRF, session invalidation and admin pro
   const f = await fixture(); const admin = f.admin, guest = f.client(), viewer = f.client(), operator = f.client();
   try {
     await guest('state', 'GET', undefined, 401);
-    await guest('auth/setup', 'POST', { code: 'wrong', username: 'owner', password: 'Private-app-password-123' }, 403);
-    await guest('auth/setup', 'POST', { code: '界'.repeat(12), username: 'owner', password: 'Private-app-password-123' }, 403);
+    await guest('auth/setup', 'POST', { username: 'owner', password: 'short' }, 400);
+    await guest('auth/setup', 'POST', { username: 'owner', password: 'Private-app-password-123' }, 403, { Origin: 'https://foreign.example' });
     await f.setup();
-    await guest('auth/setup', 'POST', { code: f.code, username: 'other', password: 'Private-app-password-123' }, 409);
+    await guest('auth/setup', 'POST', { username: 'other', password: 'Private-app-password-123' }, 409);
     await guest('auth/login', 'POST', { username: 'owner', password: 'wrong' }, 401);
     await admin('accounts', 'POST', { email: 'mgr@example.com' }, 403, { 'X-CSRF-Token': 'bad' });
     await admin('accounts', 'POST', { email: 'mgr@example.com' }, 403, { Origin: 'https://foreign.example' });
@@ -159,5 +159,44 @@ test('login attempts are rate limited and cannot create unbounded sessions', asy
     await f.setup(); const bad = f.client();
     for (let n = 0; n < 15; n++) await bad('auth/login', 'POST', { username: 'owner', password: 'wrong' }, 401);
     await bad('auth/login', 'POST', { username: 'owner', password: 'wrong' }, 429);
+  } finally { await f.close(); }
+});
+
+test('first local admin needs no code and only one competing setup can succeed', async () => {
+  const f = await fixture();
+  try {
+    assert.equal((await f.client()('auth/status')).setup_required, true);
+    const results = await Promise.all(['first', 'second'].map(username => fetch(f.base + '/api/auth/setup', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username, password: 'abcdefg', role: 'viewer' })
+    })));
+    assert.deepEqual(results.map(r => r.status).sort(), [201, 409]);
+    const db = new DatabaseSync(path.join(f.dir, 'family.sqlite'));
+    const records = db.prepare('SELECT username,role FROM users').all(); db.close();
+    assert.equal(records.length, 1); assert.equal(records[0].role, 'admin');
+    const user = f.client(); await user('auth/login', 'POST', { username: records[0].username, password: 'abcdefg' });
+    assert.equal((await user('state')).user.role, 'admin');
+    assert.equal((await user('auth/status')).setup_required, false);
+    await f.stop(); await f.start();
+    assert.equal((await f.client()('auth/status')).setup_required, false);
+    await f.client()('auth/setup', 'POST', { username: 'third', password: 'abcdefg' }, 409);
+  } finally { await f.close(); }
+});
+
+test('7 character passwords work for creating users and changing passwords; 6 is rejected', async () => {
+  const f = await fixture();
+  try {
+    const a = f.admin;
+    await a('auth/setup', 'POST', { username: 'owner', password: 'abcdef' }, 400);
+    await a('auth/setup', 'POST', { username: 'owner', password: 'abcdefg' }, 201);
+    await a('auth/login', 'POST', { username: 'owner', password: 'abcdefg' });
+    await a('users', 'POST', { username: 'staff', password: 'abcdef', role: 'operator' }, 400);
+    const u = await a('users', 'POST', { username: 'staff', password: '1234567', role: 'operator' }, 201);
+    await a('users/' + u.id, 'PATCH', { role: 'operator', disabled: false, password: 'abcdef' }, 400);
+    await a('users/' + u.id, 'PATCH', { role: 'operator', disabled: false, password: '7654321' });
+    const staff = f.client(); await staff('auth/login', 'POST', { username: 'staff', password: '7654321' });
+    await staff('auth/password', 'POST', { current_password: '7654321', password: 'abcdef' }, 400);
+    await staff('auth/password', 'POST', { current_password: '7654321', password: 'gfedcba' });
+    await staff('auth/login', 'POST', { username: 'staff', password: 'gfedcba' });
+    assert.equal((await staff('state')).user.role, 'operator');
   } finally { await f.close(); }
 });

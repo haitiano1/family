@@ -5,9 +5,8 @@ const digest = value => createHash('sha256').update(value).digest('hex');
 export function initAuth(db, fail, log) {
   db.exec(`CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY, username TEXT UNIQUE NOT NULL, password_hash TEXT NOT NULL, role TEXT NOT NULL CHECK(role IN ('admin','operator','viewer')), disabled INTEGER NOT NULL DEFAULT 0, created_at TEXT NOT NULL);
   CREATE TABLE IF NOT EXISTS sessions (token_hash TEXT PRIMARY KEY, user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE, csrf TEXT NOT NULL, expires_at INTEGER NOT NULL);`);
-  let setupCode = db.prepare('SELECT COUNT(*) AS n FROM users').get().n ? null : randomBytes(6).toString('hex');
+  const needsSetup = () => db.prepare('SELECT COUNT(*) AS n FROM users').get().n === 0;
   let settingUp = false;
-  if (setupCode) console.log(`First admin setup code: ${setupCode}`);
   const attempts = new Map();
   const publicUser = row => row && { id: row.id, username: row.username, role: row.role, disabled: Boolean(row.disabled) };
   const cleanUsername = value => {
@@ -15,7 +14,7 @@ export function initAuth(db, fail, log) {
     if (!/^[a-z0-9_.-]{3,50}$/.test(name)) fail('Tên đăng nhập gồm 3–50 ký tự: chữ không dấu, số, dấu chấm, gạch dưới hoặc gạch ngang.');
     return name;
   };
-  const checkPassword = value => { if (typeof value !== 'string' || value.length < 12 || value.length > 128) fail('Mật khẩu ứng dụng cần 12–128 ký tự.'); return value; };
+  const checkPassword = value => { if (typeof value !== 'string' || value.length < 7 || value.length > 128) fail('Mật khẩu ứng dụng cần 7–128 ký tự.'); return value; };
   async function hashPassword(value) {
     checkPassword(value); const salt = randomBytes(16).toString('hex');
     const hash = await scrypt(value, salt, 64);
@@ -45,20 +44,26 @@ export function initAuth(db, fail, log) {
     const username = cleanUsername(data.username); const roleName = first ? 'admin' : data.role;
     if (!['admin', 'operator', 'viewer'].includes(roleName)) fail('Vai trò không hợp lệ.');
     const hash = await hashPassword(data.password);
-    const result = db.prepare('INSERT INTO users(username,password_hash,role,created_at) VALUES (?,?,?,?)').run(username, hash, roleName, new Date().toISOString());
+    // Serialize the first-admin check and insert even when two processes share the database.
+    if (first) db.exec('BEGIN IMMEDIATE');
+    let result;
+    try {
+      if (first && !needsSetup()) fail('Quản trị viên đã được tạo.', 409);
+      result = db.prepare('INSERT INTO users(username,password_hash,role,created_at) VALUES (?,?,?,?)').run(username, hash, roleName, new Date().toISOString());
+      if (first) db.exec('COMMIT');
+    } catch (error) { if (first) db.exec('ROLLBACK'); throw error; }
     log(`Tạo người dùng ứng dụng ${username} (${roleName})`); return Number(result.lastInsertRowid);
   }
   async function handle(req, res, pathname, data, send) {
     if (req.method === 'GET' && pathname === '/api/auth/status') {
-      const s = session(req); return send(res, 200, { setup_required: Boolean(setupCode), user: publicUser(s) || null, csrf: s?.csrf || null });
+      const s = session(req); return send(res, 200, { setup_required: needsSetup(), user: publicUser(s) || null, csrf: s?.csrf || null });
     }
     if (req.method === 'POST' && pathname === '/api/auth/setup') {
       throttle(req);
-      if (!setupCode || settingUp) fail('Quản trị viên đã được tạo hoặc đang khởi tạo.', 409);
-      const supplied = String(data.code || '');
-      if (Buffer.byteLength(supplied) !== Buffer.byteLength(setupCode) || !timingSafeEqual(Buffer.from(supplied), Buffer.from(setupCode))) fail('Mã khởi tạo không đúng.', 403);
+      if (!['127.0.0.1', '::1', '::ffff:127.0.0.1'].includes(req.socket.remoteAddress)) fail('Chỉ thiết lập quản trị viên trên máy đang chạy ứng dụng.', 403);
+      if (!needsSetup() || settingUp) fail('Quản trị viên đã được tạo hoặc đang khởi tạo.', 409);
       settingUp = true;
-      try { const id = await createUser(data, true); setupCode = null; return send(res, 201, { id }); }
+      try { const id = await createUser(data, true); return send(res, 201, { id }); }
       finally { settingUp = false; }
     }
     if (req.method === 'POST' && pathname === '/api/auth/login') {

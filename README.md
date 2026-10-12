@@ -1,4 +1,4 @@
-# Fam Manager 0.2
+# Fam Manager 0.2.1
 
 Ứng dụng Windows/cục bộ quản lý khách hàng, hạn sử dụng và hồ sơ Google Family. Mặc định dịch vụ là **YouTube Premium**. Node.js 24 trở lên; không cần cài thư viện ngoài.
 
@@ -8,8 +8,8 @@
 2. Trên https://github.com/haitiano1/family chọn **Code → Download ZIP**.
 3. Nhấp chuột phải ZIP → **Extract All / Giải nén tất cả**. Mở thư mục chứa `START-WINDOWS.cmd`; không chạy trực tiếp trong ZIP.
 4. Nhấp đúp **START-WINDOWS.cmd**, giữ cửa sổ dòng lệnh mở. Khi thấy `Fam Manager started on port 3000`, mở Chrome hoặc Edge và nhập `http://127.0.0.1:3000` vào thanh địa chỉ.
-5. Lần đầu giao diện yêu cầu tạo quản trị viên. Tìm dòng `First admin setup code: ...` trong cửa sổ dòng lệnh, nhập phần mã sau dấu `:` vào ô **Mã khởi tạo**. Mã đổi mỗi lần khởi động cho đến khi đã tạo quản trị viên.
-6. Chọn tên đăng nhập từ 3 ký tự, không dấu, và mật khẩu ứng dụng từ 12 ký tự. Đây là tài khoản ứng dụng, **không phải mật khẩu Google**. Lưu mật khẩu ở nơi an toàn.
+5. Lần đầu giao diện yêu cầu tạo quản trị viên. Chỉ cần chọn tên đăng nhập và mật khẩu ứng dụng; không cần mã khởi tạo. Tài khoản đầu tiên tự có quyền quản trị viên. Bước này chỉ được phép từ máy đang chạy ứng dụng và tự đóng sau khi đã tạo tài khoản.
+6. Chọn tên đăng nhập từ 3 ký tự, không dấu, và mật khẩu ứng dụng từ 7 ký tự. Đây là tài khoản ứng dụng, **không phải mật khẩu Google**. Lưu mật khẩu ở nơi an toàn.
 7. Tạo quản trị viên xong, đăng nhập bằng tài khoản vừa tạo.
 
 Những lần sau chỉ chạy `START-WINDOWS.cmd` và đăng nhập. Đóng cửa sổ dòng lệnh để dừng. Không mở hai bản cùng cổng 3000; lỗi `EADDRINUSE` nghĩa là cổng đang được sử dụng.
@@ -21,7 +21,7 @@ Những lần sau chỉ chạy `START-WINDOWS.cmd` và đăng nhập. Đóng c�
 3. Tải ZIP mới từ GitHub và giải nén vào một thư mục riêng.
 4. Mở thư mục mới, chọn tất cả tệp/thư mục bên trong và **Copy**. Mở thư mục ứng dụng cũ chứa `START-WINDOWS.cmd`, chọn **Paste**, rồi chọn thay thế các tệp trùng tên. Gói GitHub không chứa `data`, nên thư mục dữ liệu cũ được giữ lại. Không xóa thư mục ứng dụng cũ hoặc `data`.
 5. Chạy lại `START-WINDOWS.cmd` từ thư mục ứng dụng cũ. Bản mới tự nâng cấp dữ liệu, tạo thêm bản sao lưu `data/before-v2-*.sqlite` trước khi nâng cấp.
-6. Tạo tài khoản quản trị viên theo hướng dẫn trên. Mở trang ứng dụng, nhấn **Ctrl+F5** để tải giao diện mới nếu còn hiển thị bản cũ.
+6. Nếu chưa có tài khoản ứng dụng, tạo quản trị viên bằng tên đăng nhập và mật khẩu theo hướng dẫn trên; không cần mã khởi tạo. Nếu đã có, đăng nhập như trước. Mở trang ứng dụng, nhấn **Ctrl+F5** để tải giao diện mới nếu còn hiển thị bản cũ.
 7. Kiểm tra lại tài khoản, Family và khách đã nhập trước đó.
 
 Bản sao lưu trước nâng cấp không chứa người dùng mới hoặc các thay đổi sau nâng cấp. Muốn quay về bản cũ, dừng ứng dụng và phục hồi toàn bộ bản sao đã tạo ở bước 2. Không thay dữ liệu khi ứng dụng đang chạy.
