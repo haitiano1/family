@@ -1,7 +1,7 @@
 import {test,before,after} from 'node:test';
 import assert from 'node:assert/strict';
 import {execFileSync,spawn} from 'node:child_process';
-import {mkdtempSync,chmodSync,writeFileSync,rmSync,mkdirSync} from 'node:fs';
+import {mkdtempSync,chmodSync,writeFileSync,rmSync,mkdirSync,readFileSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {once} from 'node:events';
 import {randomBytes} from 'node:crypto';
@@ -132,5 +132,10 @@ test('Node SQLite backup migrates to PHP MySQL with complete renewal history and
   const backup=JSON.parse(JSON.stringify(customerBackup(db))),f=await fixture();await f.login();const invalid=structuredClone(backup);invalid.tables.members[0].family_id=99999;await f.req('restore','POST',invalid,400);assert.equal((await f.req('state')).accounts.length,0);
   await f.req('restore','POST',backup);const imported=await f.req('backup');assert.deepEqual(imported.tables,backup.tables);
   const dest=initDatabase(dir+'/node-restored');try{restoreCustomers(dest,imported,fail);assert.deepEqual(JSON.parse(JSON.stringify(customerBackup(dest))).tables,backup.tables);}finally{dest.close();}
+  db.exec('DROP TABLE other_purchases;PRAGMA user_version=7');
+  const {createRequire}=await import('node:module');const {exportBackup}=createRequire(import.meta.url)('../../export-backup.cjs');
+  const sourceFile=dir+'/node-source/family.sqlite',before=readFileSync(sourceFile);
+  const legacy=exportBackup(sourceFile,dir+'/old-windows-backup.json');assert.equal(legacy.tables.other_purchases.length,0);assert.deepEqual(readFileSync(sourceFile),before);assert.equal(db.prepare('PRAGMA user_version').get().user_version,7);
+  const oldTarget=await fixture();await oldTarget.login();await oldTarget.req('restore','POST',legacy);assert.deepEqual((await oldTarget.req('backup')).tables,legacy.tables);
  }finally{db.close();}
 });

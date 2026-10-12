@@ -55,7 +55,9 @@ Thử thêm một Family/khách giả, tải lại trang và kiểm tra còn d�
 
 ## 4. Chuyển dữ liệu từ Windows
 
-Cập nhật bản Windows từ GitHub, giữ nguyên thư mục data cũ. Mở bản Windows → **Sao lưu / Chuyển dữ liệu → Tải file sao lưu**.
+Nếu bản Windows có nút **Sao lưu / Chuyển dữ liệu → Tải file sao lưu**, dùng nút đó để lấy JSON.
+
+Nếu đang dùng bản cũ với IMPORT-CSV-WINDOWS.cmd, có thể tiếp tục nhập CSV bằng cách đó trên Windows. Tải [family-windows-export.zip](https://github.com/haitiano1/family/raw/refs/heads/main/downloads/family-windows-export.zip), giải nén, chép hai file EXPORT-BACKUP-WINDOWS.cmd và export-backup.cjs vào **thư mục app cũ chứa START-WINDOWS.cmd và data**. Đóng server, chạy EXPORT-BACKUP-WINDOWS.cmd để tạo file JSON ngay trong thư mục này. Nếu data đã có khách, xuất luôn; không cần nhập lại CSV. Exporter chỉ đọc database cũ, không nâng cấp/thay đổi SQLite và không cần cập nhật app cũ.
 
 Trên máy tính, mở **địa chỉ website Family mới**, dùng cùng nút chọn file JSON vừa tải và bấm **Khôi phục dữ liệu**. Chỉ khôi phục vào ứng dụng trống; file lỗi sẽ rollback toàn bộ. Giữ khách/Family/Contact/lịch sử gia hạn/lưu trữ/sản phẩm phụ/nhật ký; không chuyển tài khoản hoặc mật khẩu admin cũ. Đối chiếu số khách/Family và một vài hồ sơ trước tiếp tục quản lý. Không đăng bản sao lưu lên GitHub hoặc thư mục công khai của website.
 
