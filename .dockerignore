@@ -1,0 +1,12 @@
+.git
+data
+node_modules
+test
+*.log
+*.sqlite
+*.sqlite-*
+*.csv
+*.xlsx
+family-backup-*.json
+.env
+.env.*

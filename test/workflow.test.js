@@ -9,12 +9,12 @@ import { once } from 'node:events';
 import { DatabaseSync } from 'node:sqlite';
 import { expiry } from '../domain.js';
 
-async function fixture(prepare) {
+async function fixture(prepare, environment={}) {
   const dir = mkdtempSync(path.join(tmpdir(), 'fam-test-')); if (prepare) prepare(dir);
   let child, base;
   async function start() {
     let output = '';
-    child = spawn(process.execPath, ['server.js'], { env: { ...process.env, PORT: '0', DATA_DIR: dir }, stdio: ['ignore', 'pipe', 'pipe'] });
+    child = spawn(process.execPath, ['server.js'], { env: { ...process.env, HOST:'127.0.0.1', PUBLIC_ORIGIN:'', RENDER_EXTERNAL_URL:'', ACCESS_PASSWORD:'', PORT: '0', DATA_DIR: dir, ...environment }, stdio: ['ignore', 'pipe', 'pipe'] });
     base = await new Promise((resolve, reject) => {
       const timer = setTimeout(() => reject(new Error('Startup timed out')), 10000);
       child.once('error', error => { clearTimeout(timer); reject(error); });
@@ -28,22 +28,20 @@ async function fixture(prepare) {
   }
   async function stop() { if (child && child.exitCode === null) { const exited = once(child, 'exit'); child.kill(); await exited; } }
   const client = () => {
-    let cookie = '', csrf = '';
     const request = async (endpoint, method = 'GET', data, status = 200, extra = {}) => {
-      const response = await fetch(base + '/api/' + endpoint, { method, headers: { 'Content-Type': 'application/json', ...(cookie ? { Cookie: cookie } : {}), ...(csrf ? { 'X-CSRF-Token': csrf } : {}), ...extra }, body: data ? JSON.stringify(data) : undefined });
+      const response = await fetch(base + '/api/' + endpoint, { method, headers: { 'Content-Type': 'application/json', 'X-Fam-Request':'1', ...extra }, body: data ? JSON.stringify(data) : undefined });
       assert.equal(response.status, status, await response.clone().text());
-      if (response.headers.has('set-cookie')) cookie = response.headers.get('set-cookie').split(';')[0];
-      const value = await response.json(); if (value.csrf) csrf = value.csrf; return value;
+      return response.json();
     };
     return request;
   };
   const admin = client();
-  async function setup() { await admin('auth/setup', 'POST', { username: 'owner', password: 'Private-app-password-123' }, 201); await admin('auth/login', 'POST', { username: 'owner', password: 'Private-app-password-123' }); }
+  async function setup() {}
   try { await start(); } catch (error) { await stop(); rmSync(dir, { recursive: true, force: true }); throw error; }
   return { start, stop, dir, client, admin, setup, get base() { return base; }, async close() { await stop(); rmSync(dir, { recursive: true, force: true }); } };
 }
 
-test('CRUD, customer dates/payments, persistence, Google manual outcomes and capacity', async () => {
+test('Customer CRUD, dates/payments, persistence and Family capacity', async () => {
   const f = await fixture(); const request = f.admin;
   try {
     await f.setup(); assert.equal((await request('state')).accounts.length, 0);
@@ -64,62 +62,15 @@ test('CRUD, customer dates/payments, persistence, Google manual outcomes and cap
     await request('accounts/' + account.id, 'PATCH', { email: 'newmanager@example.com', note: 'Updated' });
     for (let n = 0; n < 4; n++) await request('members', 'POST', { family_id: family.id, email: `guest${n}@example.com` }, 201);
     await request('members', 'POST', { family_id: family.id, email: 'overflow@example.com' }, 400);
-    for (const action of ['change_password', 'setup_2fa', 'check_trial', 'healthcheck']) {
-      const result = await request('jobs', 'POST', { action, account_id: account.id }, 201); assert.equal(result.status, 'blocked'); assert.equal(result.guide.automated, false);
-      if (action === 'check_trial') assert.equal(result.guide.url, 'https://www.youtube.com/paid_memberships');
-    }
-    for (const action of ['invite', 'remove_member', 'delete_family']) {
-      const j = await request('jobs', 'POST', { action, family_id: family.id, email: 'guest@example.com' }, 201);
-      assert.equal(j.status, 'blocked'); await request('jobs/' + j.id, 'PATCH', { status: 'manual_done', detail: 'Confirmed by owner on Google' });
-      await request('jobs/' + j.id, 'PATCH', { status: 'cancelled', detail: 'Again' }, 409);
-    }
-    await request('jobs', 'POST', { action: 'invented', account_id: account.id }, 400);
-    state = await request('state'); assert.equal(state.members.length, 5); assert.equal(state.families.length, 1); assert.equal(state.jobs.length, 7);
-    assert.equal(state.members.find(m => m.id === member.id).payment_status, 'paid'); assert.ok(state.logs.length > 0); assert.equal(state.integration, false);
+    state = await request('state'); assert.equal(state.members.length, 5); assert.equal(state.families.length, 1); assert.equal('jobs' in state,false);
+    assert.equal(state.members.find(m => m.id === member.id).payment_status, 'paid'); assert.ok(state.logs.length > 0); assert.equal('user' in state,false);
     await f.stop(); await f.start();
-    state = await request('state'); assert.equal(state.accounts[0].email, 'newmanager@example.com'); assert.equal(state.jobs.length, 7);
+    state = await request('state'); assert.equal(state.accounts[0].email, 'newmanager@example.com'); assert.equal('jobs' in state,false);
     await request('accounts/' + account.id, 'DELETE', undefined, 400);
     await request('members/' + member.id, 'DELETE'); await request('families/' + family.id, 'DELETE'); assert.equal((await request('state')).members.length, 0);
     await request('accounts/' + account.id, 'DELETE'); assert.equal((await request('state')).accounts.length, 0);
     for (const asset of ['/', '/app.js', '/style.css']) assert.equal((await fetch(f.base + asset)).status, 200);
     assert.equal((await fetch(f.base + '/../../server.js')).status, 404);
-  } finally { await f.close(); }
-});
-
-test('authentication, role enforcement, CSRF, session invalidation and admin protection', async () => {
-  const f = await fixture(); const admin = f.admin, guest = f.client(), viewer = f.client(), operator = f.client();
-  try {
-    await guest('state', 'GET', undefined, 401);
-    await guest('auth/setup', 'POST', { username: 'owner', password: 'short' }, 400);
-    await guest('auth/setup', 'POST', { username: 'owner', password: 'Private-app-password-123' }, 403, { Origin: 'https://foreign.example' });
-    await f.setup();
-    await guest('auth/setup', 'POST', { username: 'other', password: 'Private-app-password-123' }, 409);
-    await guest('auth/login', 'POST', { username: 'owner', password: 'wrong' }, 401);
-    await admin('accounts', 'POST', { email: 'mgr@example.com' }, 403, { 'X-CSRF-Token': 'bad' });
-    await admin('accounts', 'POST', { email: 'mgr@example.com' }, 403, { Origin: 'https://foreign.example' });
-    const hostStatus = await new Promise((resolve, reject) => { const req = http.get(f.base + '/api/state', { headers: { Host: 'evil.example' } }, res => { res.resume(); resolve(res.statusCode); }); req.on('error', reject); });
-    assert.equal(hostStatus, 403);
-    const a = await admin('accounts', 'POST', { email: 'mgr@example.com' }, 201);
-    const family = await admin('families', 'POST', { name: 'Group', manager_id: a.id }, 201);
-    const v = await admin('users', 'POST', { username: 'readonly', password: 'Viewer-password-123', role: 'viewer' }, 201);
-    const o = await admin('users', 'POST', { username: 'staff', password: 'Staff-password-123', role: 'operator' }, 201);
-    await viewer('auth/login', 'POST', { username: 'readonly', password: 'Viewer-password-123' });
-    await operator('auth/login', 'POST', { username: 'staff', password: 'Staff-password-123' });
-    await viewer('state'); await viewer('accounts', 'POST', { email: 'no@example.com' }, 403); await viewer('users', 'GET', undefined, 403);
-    await operator('members', 'POST', { family_id: family.id, email: 'guest@example.com' }, 201);
-    await operator('families/' + family.id, 'DELETE', undefined, 403); await operator('users', 'GET', undefined, 403);
-    await operator('jobs', 'POST', { action: 'delete_family', family_id: family.id }, 403);
-    const blocked = await admin('jobs', 'POST', { action: 'delete_family', family_id: family.id }, 201);
-    await operator('jobs/' + blocked.id, 'PATCH', { status: 'manual_done', detail: 'Not allowed' }, 403);
-    await admin('users/' + v.id, 'PATCH', { role: 'viewer', disabled: true }); await viewer('state', 'GET', undefined, 401);
-    await admin('users/' + o.id, 'PATCH', { role: 'viewer', disabled: false }); await operator('state', 'GET', undefined, 401);
-    await admin('users/1', 'PATCH', { role: 'viewer', disabled: false }, 400);
-    const listed = (await admin('users')).users; assert.equal('password_hash' in listed[0], false);
-    const db = new DatabaseSync(path.join(f.dir, 'family.sqlite')); const hash = db.prepare('SELECT password_hash FROM users WHERE id=1').get().password_hash; assert.ok(!hash.includes('Private-app-password-123')); db.close();
-    const another = f.client(); await another('auth/login', 'POST', { username: 'owner', password: 'Private-app-password-123' });
-    await admin('auth/password', 'POST', { current_password: 'Private-app-password-123', password: 'New-private-password-123' });
-    await another('state', 'GET', undefined, 401); await admin('state', 'GET', undefined, 401);
-    await admin('auth/login', 'POST', { username: 'owner', password: 'New-private-password-123' }); await admin('auth/logout', 'POST', {}); await admin('state', 'GET', undefined, 401);
   } finally { await f.close(); }
 });
 
@@ -138,10 +89,10 @@ test('existing v1 database is backed up and migrated without losing customer rec
     db.close();
   });
   try {
-    await f.setup(); let state = await f.admin('state'); assert.equal(state.accounts[0].note, 'Existing note'); assert.equal(state.members[0].email, 'legacyguest@example.com'); assert.equal(state.members[0].expiry_status, 'unknown'); assert.equal(state.families[0].service, 'youtube'); assert.equal(state.jobs.length, 1);
-    const backups = readdirSync(f.dir).filter(n => n.startsWith('before-v7-')); assert.equal(backups.length, 1);
+    await f.setup(); let state = await f.admin('state'); assert.equal(state.accounts[0].note, 'Existing note'); assert.equal(state.members[0].email, 'legacyguest@example.com'); assert.equal(state.members[0].expiry_status, 'unknown'); assert.equal(state.families[0].service, 'youtube'); assert.equal('jobs' in state,false);
+    const backups = readdirSync(f.dir).filter(n => n.startsWith('before-v9-')); assert.equal(backups.length, 1);
     const backup = new DatabaseSync(path.join(f.dir, backups[0])); assert.equal(backup.prepare('SELECT email FROM members').get().email, 'legacyguest@example.com'); assert.equal(backup.prepare('PRAGMA user_version').get().user_version, 0); backup.close();
-    await f.stop(); await f.start(); state = await f.admin('state'); assert.equal(state.members.length, 1); assert.equal(readdirSync(f.dir).filter(n => n.startsWith('before-v7-')).length, 1);
+    await f.stop(); await f.start(); state = await f.admin('state'); assert.equal(state.members.length, 1); assert.equal(readdirSync(f.dir).filter(n => n.startsWith('before-v9-')).length, 1);
   } finally { await f.close(); }
 });
 
@@ -151,54 +102,6 @@ test('expiry rules use inclusive end date and the next two calendar days', () =>
   assert.deepEqual(expiry('2026-10-12', '2026-10-12'), { expiry_status: 'due_soon', days_left: 0 });
   assert.deepEqual(expiry('2026-10-14', '2026-10-12'), { expiry_status: 'due_soon', days_left: 2 });
   assert.deepEqual(expiry('2026-10-15', '2026-10-12'), { expiry_status: 'active', days_left: 3 });
-});
-
-test('login attempts are rate limited and cannot create unbounded sessions', async () => {
-  const f = await fixture();
-  try {
-    await f.setup(); const bad = f.client();
-    for (let n = 0; n < 15; n++) await bad('auth/login', 'POST', { username: 'owner', password: 'wrong' }, 401);
-    await bad('auth/login', 'POST', { username: 'owner', password: 'wrong' }, 429);
-  } finally { await f.close(); }
-});
-
-test('first local admin needs no code and only one competing setup can succeed', async () => {
-  const f = await fixture();
-  try {
-    assert.equal((await f.client()('auth/status')).setup_required, true);
-    const results = await Promise.all(['first', 'second'].map(username => fetch(f.base + '/api/auth/setup', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username, password: 'abcdefg', role: 'viewer' })
-    })));
-    assert.deepEqual(results.map(r => r.status).sort(), [201, 409]);
-    const db = new DatabaseSync(path.join(f.dir, 'family.sqlite'));
-    const records = db.prepare('SELECT username,role FROM users').all(); db.close();
-    assert.equal(records.length, 1); assert.equal(records[0].role, 'admin');
-    const user = f.client(); await user('auth/login', 'POST', { username: records[0].username, password: 'abcdefg' });
-    assert.equal((await user('state')).user.role, 'admin');
-    assert.equal((await user('auth/status')).setup_required, false);
-    await f.stop(); await f.start();
-    assert.equal((await f.client()('auth/status')).setup_required, false);
-    await f.client()('auth/setup', 'POST', { username: 'third', password: 'abcdefg' }, 409);
-  } finally { await f.close(); }
-});
-
-test('7 character passwords work for creating users and changing passwords; 6 is rejected', async () => {
-  const f = await fixture();
-  try {
-    const a = f.admin;
-    await a('auth/setup', 'POST', { username: 'owner', password: 'abcdef' }, 400);
-    await a('auth/setup', 'POST', { username: 'owner', password: 'abcdefg' }, 201);
-    await a('auth/login', 'POST', { username: 'owner', password: 'abcdefg' });
-    await a('users', 'POST', { username: 'staff', password: 'abcdef', role: 'operator' }, 400);
-    const u = await a('users', 'POST', { username: 'staff', password: '1234567', role: 'operator' }, 201);
-    await a('users/' + u.id, 'PATCH', { role: 'operator', disabled: false, password: 'abcdef' }, 400);
-    await a('users/' + u.id, 'PATCH', { role: 'operator', disabled: false, password: '7654321' });
-    const staff = f.client(); await staff('auth/login', 'POST', { username: 'staff', password: '7654321' });
-    await staff('auth/password', 'POST', { current_password: '7654321', password: 'abcdef' }, 400);
-    await staff('auth/password', 'POST', { current_password: '7654321', password: 'gfedcba' });
-    await staff('auth/login', 'POST', { username: 'staff', password: 'gfedcba' });
-    assert.equal((await staff('state')).user.role, 'operator');
-  } finally { await f.close(); }
 });
 
 test('CSV preview is read-only; confirmation creates groups and customers atomically with deduplication', async () => {
@@ -222,7 +125,7 @@ test('CSV preview is read-only; confirmation creates groups and customers atomic
   } finally { await f.close(); }
 });
 
-test('CSV errors and stale preview cannot partially import; viewer cannot import and operator cannot create groups', async () => {
+test('CSV errors and stale preview cannot partially import', async () => {
   const f = await fixture();
   try {
     await f.setup(); const a=f.admin;
@@ -233,13 +136,10 @@ test('CSV errors and stale preview cannot partially import; viewer cannot import
     p=await a('import/preview','POST',six); assert.equal(p.summary.errors,1); await a('import/commit','POST',{...six,preview_token:p.preview_token},400); assert.equal((await a('state')).members.length,0);
     const valid={...payload,csv:'Email\nvalid@example.com',mapping:{email:0}};
     p=await a('import/preview','POST',valid); await a('members','POST',{family_id:fam.id,email:'other@example.com'},201); await a('import/commit','POST',{...valid,preview_token:p.preview_token},409); assert.equal((await a('state')).members.length,1);
-    await a('users','POST',{username:'view',role:'viewer',password:'abcdefg'},201); await a('users','POST',{username:'staff',role:'operator',password:'abcdefg'},201);
-    const v=f.client(); await v('auth/login','POST',{username:'view',password:'abcdefg'}); await v('import/preview','POST',valid,403);
-    const o=f.client(); await o('auth/login','POST',{username:'staff',password:'abcdefg'}); await o('import/preview','POST',{...valid,create_groups:true},403); await o('import/preview','POST',valid);
   } finally { await f.close(); }
 });
 
-test('upgrading v2 retains users, active sessions and old customer records while adding the plan field', async () => {
+test('upgrading v2 retains customer records while adding current fields', async () => {
   const f=await fixture();
   try {
     await f.setup(); const a=f.admin;
@@ -247,9 +147,9 @@ test('upgrading v2 retains users, active sessions and old customer records while
     await a('members','POST',{email:'guest@example.com',family_id:family.id,expires_at:'2026-12-12',contact:'Existing contact',payment_status:'paid'},201);
     await f.stop();
     const old=new DatabaseSync(path.join(f.dir,'family.sqlite')); old.exec('ALTER TABLE members DROP COLUMN plan_months; PRAGMA user_version=2'); old.close();
-    await f.start(); const state=await a('state'); assert.equal(state.user.username,'owner'); assert.equal(state.members[0].email,'guest@example.com'); assert.equal(state.members[0].contact,'Existing contact'); assert.equal(state.members[0].payment_status,'paid'); assert.equal(state.members[0].plan_months,0);
-    const backups=readdirSync(f.dir).filter(n=>n.startsWith('before-v7-')); assert.equal(backups.length,1);
-    const saved=new DatabaseSync(path.join(f.dir,backups[0])); assert.equal(saved.prepare('PRAGMA user_version').get().user_version,2); assert.equal(saved.prepare('SELECT username FROM users').get().username,'owner'); saved.close();
+    await f.start(); const state=await a('state'); assert.equal('user' in state,false); assert.equal(state.members[0].email,'guest@example.com'); assert.equal(state.members[0].contact,'Existing contact'); assert.equal(state.members[0].payment_status,'paid'); assert.equal(state.members[0].plan_months,0);
+    const backups=readdirSync(f.dir).filter(n=>n.startsWith('before-v9-')); assert.equal(backups.length,1);
+    const saved=new DatabaseSync(path.join(f.dir,backups[0])); assert.equal(saved.prepare('PRAGMA user_version').get().user_version,2); assert.equal(saved.prepare('SELECT email FROM members').get().email,'guest@example.com'); saved.close();
   } finally { await f.close(); }
 });
 
@@ -273,10 +173,9 @@ test('renewal payments are distinct from the current period; applying a paid ren
     await a(endpoint+'/apply','POST',{revision:m.renewal_revision,expires_at:'2026-11-01',plan_months:1},400);
     const payload={revision:m.renewal_revision,expires_at:'2027-02-01',plan_months:3};
     await a(endpoint+'/apply','POST',payload); await a(endpoint+'/apply','POST',payload,409);
-    const history=(await a('members/'+member.id+'/renewal-history')).history; assert.equal(history.length,1); assert.equal(history[0].old_expires_at,'2026-11-01'); assert.equal(history[0].new_expires_at,'2027-02-01'); assert.equal(history[0].amount,150000); assert.equal(history[0].created_by,'owner');
+    const history=(await a('members/'+member.id+'/renewal-history')).history; assert.equal(history.length,1); assert.equal(history[0].old_expires_at,'2026-11-01'); assert.equal(history[0].new_expires_at,'2027-02-01'); assert.equal(history[0].amount,150000); assert.equal(history[0].created_by,'Cục bộ');
     m=(await a('state')).members[0]; assert.equal(m.expires_at,'2027-02-01'); assert.equal(m.plan_months,3); assert.equal(m.payment_status,'paid'); assert.equal(m.amount,150000); assert.equal(m.renewal_status,'not_contacted'); assert.equal(m.renewal_amount,0);
     await f.stop(); await f.start(); assert.equal((await a('members/'+member.id+'/renewal-history')).history.length,1);
-    await a('users','POST',{username:'viewer',role:'viewer',password:'abcdefg'},201); const viewer=f.client(); await viewer('auth/login','POST',{username:'viewer',password:'abcdefg'}); await viewer('members/'+member.id+'/renewal-history'); await viewer(endpoint,'PATCH',{revision:m.renewal_revision,status:'reminded',amount:0,paid_at:''},403);
     await a('members/'+member.id,'DELETE'); const db=new DatabaseSync(path.join(f.dir,'family.sqlite')); const saved=db.prepare('SELECT * FROM renewal_history').get(); assert.equal(saved.member_id,null); assert.equal(saved.email,'guest@example.com'); db.close();
   } finally { await f.close(); }
 });
@@ -324,7 +223,7 @@ test('invitation-pending sixth customer imports with a custom plan and does not 
   } finally {await f.close();}
 });
 
-test('offline CSV importer preserves existing app users and skips duplicate customer imports', async () => {
+test('offline CSV importer preserves customer data and skips duplicate imports', async () => {
   const f=await fixture();
   try {
     await f.setup();await f.stop();
@@ -334,7 +233,7 @@ test('offline CSV importer preserves existing app users and skips duplicate cust
     }
     assert.match(await runImport(),/1 new customers/);assert.match(await runImport(),/Already imported/);
     assert.ok(readdirSync(f.dir).some(n=>n.startsWith('before-csv-')));
-    await f.start();const state=await f.admin('state');assert.equal(state.user.username,'owner');assert.equal(state.members.length,1);assert.equal(state.members[0].plan_months,13);
+    await f.start();const state=await f.admin('state');assert.equal('user' in state,false);assert.equal(state.members.length,1);assert.equal(state.members[0].plan_months,13);
   } finally {await f.close();}
 });
 
@@ -352,4 +251,87 @@ test('late payment renews from the old expiry, not the receipt or confirmation d
     await a('members/'+second.id+'/renewal','PATCH',{revision:0,status:'paid',amount:150000,paid_at:'2026-01-15',plan_months:3,apply_now:true},400);
     const unchanged=(await a('state')).members.find(m=>m.id===second.id);assert.equal(unchanged.expires_at,'');assert.equal(unchanged.renewal_status,'not_contacted');
   }finally{await f.close();}
+});
+
+test('local app opens without login, retires auth/Google endpoints and rejects foreign-origin mutations', async () => {
+  const f=await fixture();
+  try {
+    const state=await f.admin('state');assert.equal(state.members.length,0);assert.equal('user' in state,false);assert.equal('jobs' in state,false);
+    for(const endpoint of ['auth/status','users','jobs']) await f.admin(endpoint,'GET',undefined,404);
+    await f.admin('auth/login','POST',{username:'x',password:'x'},404);
+    await f.admin('accounts','POST',{email:'test@example.com'},403,{'X-Fam-Request':''});
+    await f.admin('accounts','POST',{email:'test@example.com'},403,{Origin:'https://foreign.example'});
+    const status=await new Promise((resolve,reject)=>{const req=http.get(f.base+'/api/state',{headers:{Host:'evil.example'}},res=>{res.resume();resolve(res.statusCode);});req.on('error',reject);});assert.equal(status,403);
+    const db=new DatabaseSync(path.join(f.dir,'family.sqlite'));assert.equal(db.prepare("SELECT COUNT(*) AS n FROM sqlite_master WHERE type='table' AND name IN ('users','sessions','jobs')").get().n,0);db.close();
+  }finally{await f.close();}
+});
+
+test('Family email can be added/edited directly with transactional conflict handling',async()=>{
+ const f=await fixture();try{
+  const a=f.admin;const first=await a('families','POST',{name:'First',manager_email:'first@example.com'},201);const second=await a('families','POST',{name:'Second',manager_email:'second@example.com'},201);
+  await a('families/'+first.id,'PATCH',{name:'Edited',manager_email:'edited@example.com',note:'Group note'});
+  await a('families/'+second.id,'PATCH',{name:'Conflict',manager_email:'edited@example.com'},409);
+  const state=await a('state');assert.equal(state.families.find(f=>f.id===first.id).manager_email,'edited@example.com');assert.equal(state.families.find(f=>f.id===second.id).manager_email,'second@example.com');
+ }finally{await f.close();}
+});
+
+test('other digital products accept standalone customers and appear in two-day expiry counts',async()=>{
+ const f=await fixture();try{
+  const a=f.admin;const current=(await a('state')).today;
+  const plus=days=>new Date(Date.parse(current)+days*86400000).toISOString().slice(0,10);
+  const purchase=await a('other-products','POST',{product:'Netflix',customer_name:'Side customer',contact:'Zalo note',joined_at:current,expires_at:plus(2),note:'Gói phụ',payment_status:'paid',amount:100000},201);
+  let state=await a('state');assert.equal(state.families.length,0);assert.equal(state.other_products.length,1);assert.equal(state.other_reminders.due_soon,1);assert.equal(state.other_products[0].note,'Gói phụ');
+  await a('other-products','POST',{product:'Spotify'},400);await a('other-products','POST',{product:'ChatGPT',customer_name:'Test',joined_at:current,expires_at:plus(-1)},400);
+  await a('other-products/'+purchase.id,'PATCH',{product:'Custom plan',email:'buyer@example.com',contact:'Facebook link',joined_at:'',expires_at:plus(-1),payment_status:'partial',amount:50000,note:'Custom note'});
+  state=await a('state');assert.equal(state.other_reminders.due_soon,0);assert.equal(state.other_reminders.expired,1);assert.equal(state.other_products[0].product,'Custom plan');
+  await f.stop();await f.start();assert.equal((await a('state')).other_products[0].note,'Custom note');
+  await a('other-products/'+purchase.id,'DELETE');assert.equal((await a('state')).other_products.length,0);
+ }finally{await f.close();}
+});
+
+test('old admin and job data is preserved on disk but not exposed or required by the new app',async()=>{
+ const f=await fixture(dir=>{const db=new DatabaseSync(path.join(dir,'family.sqlite'));db.exec("CREATE TABLE users(id INTEGER PRIMARY KEY,username TEXT,password_hash TEXT);INSERT INTO users VALUES(1,'oldadmin','old-hash');CREATE TABLE jobs(id INTEGER PRIMARY KEY,action TEXT);INSERT INTO jobs VALUES(1,'old-action');PRAGMA user_version=7;");db.close();});
+ try{const state=await f.admin('state');assert.equal('user' in state,false);assert.equal('jobs' in state,false);assert.equal(state.other_products.length,0);const db=new DatabaseSync(path.join(f.dir,'family.sqlite'));assert.equal(db.prepare('SELECT password_hash FROM users').get().password_hash,'old-hash');assert.equal(db.prepare('SELECT action FROM jobs').get().action,'old-action');db.close();}finally{await f.close();}
+});
+
+test('hosted API and backups require access while health and iPhone assets remain public',async()=>{
+ const f=await fixture(undefined,{PUBLIC_ORIGIN:'https://family.example.com',ACCESS_PASSWORD:'test-private-access'});
+ try{
+  const a=f.admin;
+  await a('state','GET',undefined,401);await a('backup','GET',undefined,401);
+  assert.equal((await fetch(f.base+'/healthz')).status,200);
+  const first=await fetch(f.base+'/',{redirect:'manual'});assert.equal(first.status,302);assert.equal(first.headers.get('location'),'/access');
+  assert.equal((await fetch(f.base+'/access')).status,200);
+  const manifest=await (await fetch(f.base+'/manifest.webmanifest')).json();assert.equal(manifest.display,'standalone');
+  for(const icon of manifest.icons){const response=await fetch(f.base+icon.src);assert.equal(response.status,200);assert.match(response.headers.get('content-type'),/image\/png/);assert.ok((await response.arrayBuffer()).byteLength>100);}
+  await a('access','POST',{password:'wrong'},401);
+  const login=await fetch(f.base+'/api/access',{method:'POST',headers:{'Content-Type':'application/json','X-Fam-Request':'1',Origin:'https://family.example.com'},body:JSON.stringify({password:'test-private-access'})});assert.equal(login.status,200);
+  const cookie=login.headers.get('set-cookie').split(';')[0];const headers={Cookie:cookie,Origin:'https://family.example.com',Host:'family.example.com'};
+  const family=await a('families','POST',{name:'Hosted',manager_email:'hosted@example.com'},201,headers);assert.ok(family.id);
+  assert.equal((await a('state','GET',undefined,200,headers)).hosted,true);
+  await a('families','POST',{name:'Foreign',manager_email:'foreign@example.com'},403,{...headers,Origin:'https://foreign.example'});
+  assert.equal((await a('backup','GET',undefined,200,headers)).tables.families.length,1);
+  const locked=await fetch(f.base+'/api/access/close',{method:'POST',headers:{...headers,'Content-Type':'application/json','X-Fam-Request':'1'},body:'{}'});assert.equal(locked.status,200);assert.match(locked.headers.get('set-cookie'),/Max-Age=0/);
+ }finally{await f.close();}
+});
+
+test('portable backup restores all customer data transactionally without overwriting existing records',async()=>{
+ const source=await fixture(),target=await fixture();
+ try{
+  const a=source.admin,b=target.admin;
+  const family=await a('families','POST',{name:'Family',manager_email:'manager@example.com'},201);
+  const member=await a('members','POST',{family_id:family.id,email:'buyer@example.com',customer_name:'Buyer',contact:'https://facebook.com/example',note:'Original note',plan_months:3,joined_at:'2025-10-05',expires_at:'2026-01-05'},201);
+  await a('members/'+member.id+'/renewal','PATCH',{revision:0,status:'paid',amount:150000,paid_at:'2026-01-15',plan_months:3,apply_now:true});
+  const archived=await a('members','POST',{family_id:family.id,email:'archived@example.com',contact:'Zalo archive'},201);
+  await a('members/'+archived.id+'/renewal','PATCH',{revision:0,status:'declined'});
+  const db=new DatabaseSync(path.join(source.dir,'family.sqlite'));db.prepare('UPDATE members SET declined_at=? WHERE id=?').run('2020-01-01T00:00:00.000Z',archived.id);db.close();await a('state');
+  await a('other-products','POST',{product:'ChatGPT',customer_name:'Buyer',contact:'Other contact',note:'Side product'},201);
+  const backup=await a('backup');assert.equal('users' in backup.tables,false);assert.equal('jobs' in backup.tables,false);
+  const invalid=structuredClone(backup);invalid.tables.members[0].family_id=9999;
+  await b('restore','POST',invalid,400);assert.equal((await b('state')).accounts.length,0);
+  const restored=await b('restore','POST',backup);assert.equal(restored.customers,1);assert.equal(restored.families,1);assert.equal(restored.other_products,1);
+  const after=await b('backup');assert.deepEqual(after.tables,backup.tables);
+  await b('restore','POST',backup,409);assert.equal((await b('state')).members.length,1);
+  await target.stop();await target.start();assert.equal((await b('state')).members[0].contact,'https://facebook.com/example');assert.equal((await b('state')).archives.length,1);
+ }finally{await source.close();await target.close();}
 });

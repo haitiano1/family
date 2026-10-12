@@ -101,7 +101,6 @@ export function initImporter(db, { fail, email, text, memberData, log }) {
     return { summary, items, groups, token };
   }
   function handle(data, user, commit = false) {
-    if (data.create_groups && user.role !== 'admin') fail('Chỉ quản trị viên được tạo nhóm mới hoặc giữ hồ sơ vượt giới hạn khi nhập CSV.', 403);
     const token = data.preview_token; const input = { ...data }; delete input.preview_token;
     db.exec(commit ? 'BEGIN IMMEDIATE' : 'BEGIN');
     try {

@@ -1,3 +1,8 @@
 data/
 node_modules/
 *.log
+*.sqlite
+*.sqlite-*
+.env
+.env.*
+family-backup-*.json

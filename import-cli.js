@@ -20,7 +20,7 @@ try {
   const log=message=>db.prepare('INSERT INTO logs(message,created_at) VALUES (?,?)').run(message,new Date().toISOString());
   const importer=initImporter(db,{...validation,fail,log});
   const payload={csv:parsed.normalizedCSV,delimiter:',',mapping:suggestMapping(parsed.headers),create_groups:true,duplicates:'skip',match_by_manager:true};
-  const user={username:'Windows CSV import',role:'admin'};
+  const user={username:'Nhập CSV'};
   const preview=importer(payload,user);
   if (preview.summary.errors) {
     console.error(`Import stopped: ${preview.summary.errors} invalid rows. No customer imported.`);
@@ -33,7 +33,7 @@ try {
     db.exec(`VACUUM INTO '${backup.replaceAll("'","''")}'`);
     const result=importer({...payload,preview_token:preview.preview_token},user,true);
     console.log(`Import complete: ${result.summary.create} new customers, ${result.summary.skip} existing records skipped, ${result.summary.new_families} new families.`);
-    console.log('Existing application users/passwords and customer data were preserved. A backup is in the data directory.');
+    console.log('Existing customer data and history were preserved. A backup is in the data directory.');
     console.log('Passwords and countdown columns were not imported. Invitation-pending records are kept separately from member slots.');
   }
 } catch (error) { console.error(error.message);process.exitCode=1; }

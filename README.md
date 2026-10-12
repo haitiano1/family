@@ -1,123 +1,73 @@
-# Fam Manager 0.3.4
+# YouTube Family — Quản lý khách hàng 0.4
 
-Ứng dụng Windows/cục bộ quản lý khách hàng, hạn sử dụng và hồ sơ Google Family. Mặc định dịch vụ là **YouTube Premium**. Node.js 24 trở lên; không cần cài thư viện ngoài.
+Ứng dụng quản lý cho cá nhân: **mở web là vào Tổng quan**, không cần tài khoản đăng nhập. Tập trung quản lý khách YouTube, Family, gia hạn và sản phẩm bán thêm. Không còn các mục admin, bảo mật tài khoản, Jobs hoặc thao tác Google. Có thể chạy trên hosting và thêm biểu tượng vào màn hình chính iPhone; xem [hướng dẫn Hostinger](HOSTINGER.md). Bản hosting dùng một mật khẩu truy cập chung, không có tài khoản/role admin.
 
-## Cài mới trên Windows 10 / 11
+## Chạy trên Windows 10 / 11
 
-1. Cài **Node.js 24 LTS** từ https://nodejs.org/ (tệp Windows `.msi`). Giữ tùy chọn mặc định; không cần cài công cụ phát triển bổ sung.
-2. Trên https://github.com/haitiano1/family chọn **Code → Download ZIP**.
-3. Nhấp chuột phải ZIP → **Extract All / Giải nén tất cả**. Mở thư mục chứa `START-WINDOWS.cmd`; không chạy trực tiếp trong ZIP.
-4. Nhấp đúp **START-WINDOWS.cmd**, giữ cửa sổ dòng lệnh mở. Khi thấy `Fam Manager started on port 3000`, mở Chrome hoặc Edge và nhập `http://127.0.0.1:3000` vào thanh địa chỉ.
-5. Lần đầu giao diện yêu cầu tạo quản trị viên. Chỉ cần chọn tên đăng nhập và mật khẩu ứng dụng; không cần mã khởi tạo. Tài khoản đầu tiên tự có quyền quản trị viên. Bước này chỉ được phép từ máy đang chạy ứng dụng và tự đóng sau khi đã tạo tài khoản.
-6. Chọn tên đăng nhập từ 3 ký tự, không dấu, và mật khẩu ứng dụng từ 7 ký tự. Đây là tài khoản ứng dụng, **không phải mật khẩu Google**. Lưu mật khẩu ở nơi an toàn.
-7. Tạo quản trị viên xong, đăng nhập bằng tài khoản vừa tạo.
+1. Cài **Node.js 24 LTS** từ https://nodejs.org/ với tùy chọn mặc định.
+2. Tải **Code → Download ZIP** tại https://github.com/haitiano1/family, giải nén.
+3. Mở thư mục chứa **START-WINDOWS.cmd**, nhấp đúp tệp đó và giữ cửa sổ dòng lệnh mở.
+4. Khi thấy `Fam Manager started on port 3000`, mở Chrome/Edge, nhập `http://127.0.0.1:3000`.
+5. Giao diện vào ngay Tổng quan và danh sách khách. Đóng cửa sổ dòng lệnh khi dùng xong.
 
-Những lần sau chỉ chạy `START-WINDOWS.cmd` và đăng nhập. Đóng cửa sổ dòng lệnh để dừng. Không mở hai bản cùng cổng 3000; lỗi `EADDRINUSE` nghĩa là cổng đang được sử dụng.
+Lần sau chạy lại START-WINDOWS.cmd và mở cùng địa chỉ. Nếu `EADDRINUSE`, một bản ứng dụng đang giữ cổng 3000; dừng bản cũ trước khi chạy lại. Giữ địa chỉ mặc định trên máy cục bộ.
 
-## Cập nhật từ bản cũ — giữ dữ liệu
+## Cập nhật và giữ dữ liệu cũ
 
-1. Đóng cửa sổ dòng lệnh của ứng dụng cũ. Không chạy hai bản khi cập nhật.
-2. Sao chép **toàn bộ thư mục ứng dụng cũ** sang thư mục khác để làm bản sao lưu, bao gồm `data`.
-3. Tải ZIP mới từ GitHub và giải nén vào một thư mục riêng.
-4. Mở thư mục mới, chọn tất cả tệp/thư mục bên trong và **Copy**. Mở thư mục ứng dụng cũ chứa `START-WINDOWS.cmd`, chọn **Paste**, rồi chọn thay thế các tệp trùng tên. Gói GitHub không chứa `data`, nên thư mục dữ liệu cũ được giữ lại. Không xóa thư mục ứng dụng cũ hoặc `data`.
-5. Chạy lại `START-WINDOWS.cmd` từ thư mục ứng dụng cũ. Bản mới tự nâng cấp dữ liệu, tạo thêm bản sao lưu `data/before-v7-*.sqlite` trước khi nâng cấp. Tài khoản ứng dụng và hồ sơ cũ được giữ nguyên.
-6. Nếu chưa có tài khoản ứng dụng, tạo quản trị viên bằng tên đăng nhập và mật khẩu theo hướng dẫn trên; không cần mã khởi tạo. Nếu đã có, đăng nhập như trước. Mở trang ứng dụng, nhấn **Ctrl+F5** để tải giao diện mới nếu còn hiển thị bản cũ.
-7. Kiểm tra lại tài khoản, Family và khách đã nhập trước đó.
+1. Đóng cửa sổ ứng dụng.
+2. Sao lưu **toàn bộ thư mục ứng dụng**, bao gồm `data`.
+3. Tải ZIP mới, giải nén riêng và sao chép toàn bộ nội dung bên trong thư mục mới sang thư mục ứng dụng cũ. Thay thế tệp trùng tên, **giữ nguyên thư mục data**.
+4. Chạy START-WINDOWS.cmd và nhấn **Ctrl+F5** trên trình duyệt.
 
-Bản sao lưu trước nâng cấp không chứa người dùng mới hoặc các thay đổi sau nâng cấp. Muốn quay về bản cũ, dừng ứng dụng và phục hồi toàn bộ bản sao đã tạo ở bước 2. Không thay dữ liệu khi ứng dụng đang chạy.
+Dữ liệu khách, Family, Contact, thanh toán, gia hạn, lưu trữ và bản sao cũ được giữ. Startup nâng cấp SQLite bằng thay đổi cộng thêm, sao lưu trước nâng cấp vào `data/before-v9-*.sqlite`. Dữ liệu admin/Jobs cũ, nếu có, vẫn nằm trong bản dữ liệu cũ nhưng không được ứng dụng mới sử dụng hoặc trả qua API. Không cần tạo admin hoặc đăng nhập sau cập nhật. Bookmark cũ đến các trang đã bỏ được đưa về Tổng quan.
 
-## Khách và gia hạn
+## Khách hàng và Family
 
-- **Tài khoản**: thêm hoặc sửa email quản lý và ghi chú.
-- **Family**: thêm/sửa tên nhóm, tài khoản quản lý, dịch vụ và ghi chú. Một Family ghi nhận tối đa 5 chỗ thành viên cùng manager; hồ sơ khách đã mời nhưng chưa vào được giữ riêng và chưa tính chỗ.
-- Mở Family → **Thêm khách**: email, tên, liên hệ, ngày vào, ngày hết hạn, thanh toán, số tiền đã ghi nhận và ghi chú.
-- **Khách & Gia hạn**: tìm khách, lọc sắp hết hạn, đã quá hạn, chưa thanh toán đủ hoặc chưa đặt hạn.
-- **Sửa / Gia hạn**: chỉnh hồ sơ, gói và thanh toán kỳ hiện tại. **Gia hạn**: theo dõi việc nhắc khách và tiền nhận cho lần tiếp theo; **Xác nhận hạn mới** hoàn tất và lưu lịch sử riêng.
-- Nhắc gia hạn ở **Tổng quan** tính theo ngày Việt Nam. Hạn có hiệu lực hết ngày đã nhập; cảnh báo sắp hết hạn từ hôm nay đến 2 ngày tiếp theo. Ngày sau hạn mới là quá hạn.
-- Cảnh báo chỉ hiển thị khi mở ứng dụng, không gửi email/SMS/thông báo nền. Không tự động thu tiền hoặc kick khách. Khách cũ chưa có ngày hết hạn được giữ nguyên và hiển thị “Chưa đặt hạn”.
+- **Tổng quan:** mở ngay danh sách khách với tìm kiếm/bộ lọc, số Family, hạn còn 2 ngày và đã quá hạn; sản phẩm phụ đến hạn xuất hiện riêng.
+- **Family:** thêm/sửa tên, email quản lý và ghi chú ngay trong form; không cần thêm email quản lý ở một trang tài khoản khác trước. Mở Family để xem/thêm khách.
+- **Khách & Gia hạn:** tên, email, Contact (Facebook/Zalo/ghi chú liên hệ), gói, ngày mua, hạn, thanh toán và ghi chú. Có thể thêm khách trực tiếp và chọn Family nhận khách.
+- Gói chuẩn 1/2/3/6/12 tháng; gói đã nhập tùy chỉnh như 13 tháng được giữ, hỗ trợ đến 120 tháng.
+- Giữ toàn bộ hồ sơ khách đã mời nhưng chưa vào; các ghi chú “chưa vào” không mất và chưa tính vào 5 chỗ thành viên đang ghi nhận.
+- **Nhắc hạn:** tạo mẫu tin và sao chép để bạn tự gửi qua Zalo/Facebook, không gửi tự động. Contact được hiển thị dưới email và trong form sửa khách.
+- Ngày tính theo múi giờ Việt Nam. Còn 0–2 ngày là sắp hết hạn; ngày sau hạn mới là quá hạn. Ô không có ngày hết hạn không bị đoán ngày.
 
-## Trạng thái thanh toán gia hạn
+## Thanh toán và gia hạn
 
-Trong **Khách & Gia hạn**, thanh toán kỳ hiện tại và gia hạn tiếp theo là hai cột riêng. Khách đã trả tiền kỳ hiện tại không đồng nghĩa đã trả tiền cho kỳ tiếp theo.
+Thanh toán kỳ hiện tại tách với gia hạn tiếp theo: Chưa nhắc / Đã nhắc / Chờ thanh toán / Đã trả một phần / Đã thanh toán gia hạn / Không gia hạn.
 
-1. Bấm **Gia hạn** ở dòng khách. Chọn **Chưa nhắc gia hạn**, **Đã nhắc khách**, **Chờ thanh toán**, **Đã trả một phần**, **Đã thanh toán gia hạn** hoặc **Không gia hạn**.
-2. Ghi số tiền đã nhận, ngày nhận tiền và ghi chú. Với trả một phần/đã thanh toán, cần số tiền lớn hơn 0 và ngày nhận tiền không ở tương lai. Đây là dữ liệu bạn ghi nhận, không kết nối ngân hàng hoặc kiểm tra chuyển khoản.
-3. Chọn gói gia hạn. Mặc định bật **Tự cập nhật ngày mua và hạn khi đã thanh toán đủ**. Khi trạng thái Đã thanh toán gia hạn, bấm **Lưu gia hạn** sẽ ghi tiền, tự cập nhật ngày mua/hạn và lưu lịch sử trong một lần. Chờ tiền/trả một phần chỉ ghi nhận trạng thái, không đổi ngày. Bỏ dấu chọn nếu chỉ muốn ghi nhận tiền trước, chưa tăng hạn.
-4. Với khách đã trả đủ tiền nhưng chưa tăng hạn, vẫn có **Xác nhận hạn mới**: chọn gói và xem trước ngày tự tính rồi xác nhận. Ngày mua mới là ngày bắt đầu kỳ mới, không phải ngày nhận tiền. Luôn nối kỳ từ ngày hết hạn cũ, kể cả khách trả tiền muộn hoặc đã quá hạn; ngày nhận tiền không thay đổi mốc kỳ. Ví dụ hết hạn 05/01/2026, trả tiền 15/01/2026 và gia hạn 3 tháng thì kỳ mới là 05/01/2026–05/04/2026. Nếu chưa có hạn cũ, cần bổ sung ngày hết hạn trước khi gia hạn. Ví dụ kỳ 05/10/2026–05/01/2027, gia hạn sớm gói 3 tháng thành 05/01/2027–05/04/2027. Ngày cuối tháng được giới hạn đúng số ngày của tháng, kể cả năm nhuận.
-5. Hệ thống lưu ngày mua cũ/mới, hạn cũ/mới, gói, số tiền, ngày nhận tiền riêng, ghi chú và người thực hiện trong **Lịch sử**; cập nhật thanh toán/số tiền của kỳ hiện tại bằng lần vừa gia hạn. Việc tăng hạn ở đây không đổi đăng ký/gói trên Google.
-6. Sau xác nhận, lần gia hạn tiếp theo trở về **Chưa nhắc**, số tiền/ngày nhận tạm được làm trống; lần đã hoàn tất vẫn có trong **Lịch sử**. Số tiền ở cột kỳ hiện tại là của kỳ hiện tại, không phải tổng doanh thu.
+1. Bấm **Gia hạn**, chọn trạng thái, gói, tiền đã nhận, ngày nhận tiền và ghi chú.
+2. Mặc định bật tự cập nhật kỳ khi đã thanh toán đủ. Bấm **Lưu gia hạn** ghi tiền, cập nhật ngày mua/hạn và lưu lịch sử trong một lần. Chờ tiền/trả một phần chưa đổi ngày.
+3. Kỳ mới **luôn nối từ ngày hết hạn cũ**, kể cả trả tiền muộn. Ví dụ hạn 05/01/2026, nhận tiền 15/01/2026, gói 3 tháng → kỳ mới 05/01/2026–05/04/2026. Ngày nhận tiền nằm riêng trong lịch sử. Nếu chưa có hạn cũ, cần bổ sung trước khi gia hạn.
+4. Nếu bỏ tùy chọn cập nhật ngày, chỉ ghi nhận tiền trước. Dùng **Xác nhận hạn mới** sau đó để áp dụng.
+5. Ngày cuối tháng được giới hạn đúng tháng, kể cả năm nhuận. Lịch sử giữ ngày mua/hạn cũ/mới, tiền, ngày nhận và ghi chú. Số tiền cột kỳ hiện tại là của kỳ hiện tại, không phải tổng doanh thu.
 
-Không tự động nhắc qua Zalo/Facebook hoặc kick khách. Nhân viên và quản trị viên được ghi nhận gia hạn; tài khoản chỉ xem được đọc lịch sử. Khách nhập từ CSV ban đầu có trạng thái gia hạn Chưa nhắc; cột Ngày pay đếm ngược không suy ra thanh toán. Nhập lại CSV hay sửa hồ sơ không xóa trạng thái/lịch sử gia hạn đã ghi nhận; nếu thông tin khách thay đổi khi hộp thoại đang mở, phải tải lại để tránh xác nhận nhầm. Chỉnh ngày hết hạn trực tiếp trong Sửa hồ sơ chỉ là sửa dữ liệu, không tạo lịch sử gia hạn hoàn tất.
+Sau gia hạn, lần tiếp theo trở về Chưa nhắc; lịch sử không mất. Việc tính sai ở những bản cũ không tự sửa hồi tố. Chỉnh ngày trực tiếp bằng form sửa hồ sơ không tạo lịch sử gia hạn hoàn tất.
 
-## Nhắc khách trước 2 ngày và khách lưu trữ
+## Sản phẩm khác
 
-- **Tổng quan** và bộ lọc sắp hết hạn hiển thị khách còn từ 0 đến 2 ngày, tính theo ngày Việt Nam. Quá hạn hiển thị riêng. Không gửi tin tự động.
-- Bấm **Nhắc hạn** ở dòng khách để tạo mẫu tin có tên, email và hạn hiện tại. Chọn **Sao chép**, rồi dán và tự gửi qua Zalo/Facebook. Sao chép không tự đánh dấu đã gửi; sau khi gửi bạn có thể chọn trạng thái Đã nhắc khách.
-- Khách chọn **Không gia hạn** được chuyển sang **Khách lưu trữ** sau 7 ngày lịch kể từ ngày chọn theo ngày Việt Nam, dù ngày hết hạn là ngày nào. Đổi sang trạng thái khác trước thời điểm đó sẽ hủy lịch lưu trữ. Khách đã mang trạng thái Không gia hạn từ bản cũ, chưa có ngày chọn, bắt đầu đếm 7 ngày từ lần nâng cấp này.
-- Việc chuyển lưu trữ được kiểm tra khi khởi động, khi tải dữ liệu và mỗi phút khi ứng dụng chạy. Nếu ứng dụng đóng, các khách đủ thời gian được chuyển khi mở lại. Không tự kick khách hoặc xóa tài khoản Google.
-- Dữ liệu không bị mất: bản chụp toàn bộ hồ sơ và lịch sử ở cùng cơ sở dữ liệu **data/family.sqlite**. Tab **Khách lưu trữ** có **Xem dữ liệu** và **Khôi phục**. Tệp CSV gốc không cần lưu để khôi phục.
-- Khôi phục vào một Family hiện có và còn chỗ; thông tin khách, hạn, thanh toán và lịch sử được giữ, trạng thái gia hạn tiếp theo trở về Chưa nhắc. Nhân viên/quản trị viên được khôi phục; người chỉ xem có thể đọc dữ liệu lưu trữ. Lưu trữ giải phóng chỗ trong hồ sơ nội bộ, không chứng minh nhóm Google đã trống chỗ.
-- Không xóa thư mục data hoặc đưa nó lên GitHub. Sao lưu khi ứng dụng đã dừng. Lịch sử ngày mua của các lần gia hạn trước bản 0.3.2 có thể trống vì bản cũ chưa lưu thông tin đó.
+Mục **Sản phẩm khác** dành cho Netflix, Spotify, Google One, ChatGPT và tên sản phẩm tự nhập khi chọn **Khác**.
 
-## Nhập nhanh toàn bộ bảng Family trên Windows
+- Bấm **Thêm sản phẩm đã bán**, nhập tên/email khách, Contact, ngày mua, hạn, thanh toán, số tiền và ghi chú. Không cần Family; chỉ cần tên hoặc email khách.
+- Có thể chọn một khách Family để lấy sẵn tên/email/Contact; hồ sơ sản phẩm phụ là bản ghi riêng, không sửa hồ sơ YouTube của khách đó.
+- Để trống hạn nếu sản phẩm không có hạn. Sản phẩm còn 0–2 ngày hoặc đã quá hạn tự xuất hiện ở **Tổng quan** khi mở ứng dụng, với nút **Nhắc hạn** để sao chép tin.
+- Có tìm kiếm, lọc theo hạn, sửa và xóa hồ sơ sản phẩm. Nếu khách mua nhiều sản phẩm, thêm từng bản ghi riêng.
+- Mục này dùng để lưu thông tin/ghi chú và theo dõi hạn; chưa có luồng thanh toán gia hạn riêng như khách YouTube. Sửa ngày trong form khi gia hạn sản phẩm phụ.
 
-Dùng cho bảng cũ có nhiều Family xếp nối tiếp trong cùng tab, với dòng email quản lý/mật khẩu ở đầu mỗi nhóm và tên/email khách bên dưới.
+## Khách lưu trữ
 
-1. Cập nhật mã nguồn mới, giữ nguyên thư mục `data` và sao lưu thư mục ứng dụng.
-2. **Đóng cửa sổ đang chạy Fam Manager** trước khi nhập.
-3. Nhấp đúp **IMPORT-CSV-WINDOWS.cmd** trong cùng thư mục với START-WINDOWS.cmd.
-4. Chọn tệp CSV gốc trong cửa sổ chọn tệp. Công cụ tự tách nhóm, ghép khách, tạo Family/tài khoản quản lý còn thiếu và nhập dữ liệu trong một giao dịch. Không cần ghép cột thủ công.
-5. Đợi dòng **Import complete**; nếu tệp đã nhập rồi, hiện **Already imported** và giữ nguyên các hồ sơ đã có. Mở lại START-WINDOWS.cmd và kiểm tra danh sách khách.
+Khách chọn **Không gia hạn** được chuyển vào **Khách lưu trữ** sau 7 ngày lịch tính từ ngày chọn theo giờ Việt Nam. Đổi trạng thái trước đó sẽ hủy lịch chuyển. Ứng dụng kiểm tra khi mở, tải dữ liệu và mỗi phút khi chạy; nếu đóng, xử lý bù khi mở lại.
 
-Công cụ chạy trên máy bạn, không tải dữ liệu lên GitHub hoặc Google, không yêu cầu mật khẩu quản trị viên vì đây là công cụ làm việc trực tiếp với tệp dữ liệu của chủ máy. Cần quyền đọc/ghi thư mục ứng dụng. Tài khoản đăng nhập, lịch sử và dữ liệu cũ được giữ; trước khi ghi, sao lưu SQLite vào `data/before-csv-*.sqlite`. Khách trùng email trong cùng Family được bỏ qua mặc định, không ghi đè hồ sơ đã được bạn sửa/gia hạn. Công cụ chưa được chạy trên Windows trong môi trường kiểm thử, nhưng phần nhập Node đã được kiểm thử với CSV thực tế và kiểm thử tự động; giao diện chọn tệp dùng Windows PowerShell có sẵn.
+Thông tin và lịch sử nằm trong `data/family.sqlite`. Có **Xem dữ liệu** và **Khôi phục** vào Family còn chỗ. Sau khôi phục, trạng thái gia hạn về Chưa nhắc; hạn, thanh toán, Contact và lịch sử được giữ. Sản phẩm phụ không tự lưu trữ theo quy tắc này.
 
-Các dòng mật khẩu/xác minh của quản lý, dòng trống, tiêu đề lặp và cột đếm ngược không nhập. Tên, email, gói, ngày và Contact/ghi chú khách được giữ. “1 năm” được chuẩn hóa thành 12 tháng; gói tùy chỉnh như 13 tháng giữ nguyên. Ô trống không bị đoán thêm dữ liệu. Ngày mua thiếu năm chỉ được bổ sung nếu gói và hạn xác định được cùng ngày/tháng; ví dụ 10/8 và hạn 10/02/2027 với gói 6 tháng xác định năm 2026. Khách ghi “chưa vào” vẫn có hồ sơ và ghi chú, chưa tính vào chỗ thành viên; không thêm cảnh báo vào hồ sơ đó. Mật khẩu không được nhập hoặc giữ trong bản sao dữ liệu mới.
+## Nhập Google Sheets CSV
 
-## Nhập khách từ Google Sheets
+**Cách đơn giản trên Windows:** đóng ứng dụng, nhấp đúp **IMPORT-CSV-WINDOWS.cmd**, chọn CSV gốc. Khi thấy **Import complete**, mở lại START-WINDOWS.cmd. Công cụ sao lưu vào `data/before-csv-*.sqlite`, giữ dữ liệu cũ và bỏ qua khách trùng. Không cần ghép cột hoặc tài khoản đăng nhập.
 
-1. Dừng ứng dụng và sao lưu thư mục ứng dụng gồm cả `data` trước khi cập nhật lên bản 0.3. Chạy lại và đăng nhập quản trị viên.
-2. Trong Google Sheets, mở tab Family muốn nhập: **Tệp → Tải xuống → Giá trị được phân tách bằng dấu phẩy (.csv)**. Mỗi tệp chỉ chứa tab đang mở.
-3. Vào **Khách & Gia hạn → Nhập khách từ CSV**, chọn tệp vừa tải.
-4. Ứng dụng nhận dạng bảng cũ có email quản lý ở ô đầu, mật khẩu ở ô thứ hai, rồi Gói mua / Ngày mua / Ngày đến hạn. Có thể có nhiều dòng quản lý và nhiều Family trong một tab. Ô mật khẩu đầu bảng được bỏ; cột tên và email khách phía dưới được giữ nguyên. Các cột mang tên pass/password/mật khẩu không cho chọn. Chỉ cột được chọn mới gửi tới máy ứng dụng; không lưu tệp CSV gốc.
-5. Kiểm tra ghép cột: tên khách → Tên khách, mail → Email khách, gói mua → Gói mua, ngày mua → Ngày mua, ngày đến hạn → Ngày hết hạn, Contact → Liên hệ. **Ngày pay đếm ngược không nhập**; số ngày còn lại tính lại từ hạn theo ngày Việt Nam. Không gán cột này cho thanh toán hoặc số tiền.
-6. Nếu có Family trùng email quản lý, hệ thống đề xuất Family đó. Nếu chưa có, quản trị viên có thể bật **Cho phép tạo hồ sơ Family/tài khoản quản lý còn thiếu**, kiểm tra email quản lý mặc định và nhập tên Family. Không tạo nhóm trên Google. CSV nhiều Family cần cột tên Family và/hoặc email quản lý; mỗi dòng phải xác định được nhóm. Nếu tên Family trùng nhau thì cần email quản lý để phân biệt.
-7. Chọn **Bỏ qua** khách trùng (mặc định) hoặc **Cập nhật cột đã chọn**. Khi cập nhật, cột không chọn và ô trống giữ nguyên thông tin cũ; không chuyển khách qua Family khác. Email trùng trong cùng Family của CSV giữ dòng đầu; email ở Family khác là hồ sơ riêng.
-8. Bấm **Xem trước dữ liệu**. Kiểm tra số khách, Family mới, gói, ngày mua, ngày hết hạn và dòng lỗi, rồi chọn **Xác nhận nhập**. Xem trước không ghi cơ sở dữ liệu. Nếu có dòng lỗi hoặc Family quá 5 khách thì không nhập dòng nào; sửa tệp và xem trước lại. Nếu dữ liệu ứng dụng thay đổi sau xem trước, phải xem trước lại.
-9. Kiểm tra danh sách khách; tiếp tục với tab Family khác. Không gửi mật khẩu hoặc tệp khách lên GitHub. Bạn không cần chia sẻ Google Sheet hoặc cung cấp thông tin đăng nhập Google cho ứng dụng.
+**Nhập trong web:** vào **Nhập khách CSV**, chọn tệp, kiểm tra cột và nhóm, bấm Xem trước rồi Xác nhận nhập. Có thể cập nhật các cột được chọn của khách đã có; ô trống và cột không chọn giữ nguyên dữ liệu cũ. Nếu có lỗi, không ghi dòng nào; nếu dữ liệu thay đổi sau xem trước, phải xem trước lại.
 
-Nhận ngày `dd/mm/yyyy` hoặc `yyyy-mm-dd`; gói từ 1 đến 120 tháng, kể cả “1 năm” (12 tháng) và 13 tháng; thanh toán “Đã thanh toán”, “Chưa thanh toán”, “Thanh toán một phần” nếu sheet có cột riêng. Nếu không có thanh toán, khách mới có trạng thái **Chưa ghi nhận**, không bị coi là chưa trả tiền. Số tiền nhận số nguyên VND như `100000`, `100.000`, `100,000`. Contact giữ nguyên liên kết Facebook/Zalo hoặc ghi chú (tối đa 1000 ký tự). Giới hạn mỗi tệp 1 MB, 10.000 khách, 100 cột; xem trước hiển thị tối đa 200 dòng và 200 lỗi đầu. Bộ nhập ghép Family theo email quản lý và giữ tên hồ sơ cũ nếu đã có. Hỗ trợ nhiều Family xếp nối tiếp trong một tab, CSV UTF-8, dấu phẩy/chấm phẩy/tab, dấu nháy và ô có xuống dòng; chưa nhập trực tiếp XLSX hoặc tự đồng bộ Google Sheets.
+Google Sheets: **Tệp → Tải xuống → Giá trị được phân tách bằng dấu phẩy (.csv)**. Hỗ trợ nhiều Family xếp nối tiếp trong cùng tab: dòng email quản lý được dùng ghép nhóm, các ô mật khẩu/xác minh ở dòng đó được bỏ. Tên, email, gói, ngày, Contact và ghi chú của khách được giữ; cột Ngày pay đếm ngược được tính lại từ hạn, không suy ra thanh toán. “1 năm” chuyển thành 12 tháng, 13 tháng giữ nguyên. Ngày thiếu năm chỉ được bổ sung khi gói và hạn xác định được cùng ngày/tháng. Ô trống giữ nguyên; không tự đoán dữ liệu.
 
-## Đăng nhập và phân quyền
-
-| Vai trò | Quyền |
-| --- | --- |
-| Quản trị viên | Toàn bộ hồ sơ, yêu cầu Google, xóa hồ sơ Family/tài khoản và quản lý người dùng |
-| Nhân viên | Xem, thêm/sửa hồ sơ, quản lý khách, ghi nhận yêu cầu/kết quả; không xóa Family/tài khoản quản lý hoặc yêu cầu xóa Google Family |
-| Chỉ xem | Đọc dữ liệu; không tạo/sửa/xóa hồ sơ hoặc kết quả |
-
-Vào **Người dùng** bằng tài khoản quản trị viên để tạo tài khoản, sửa quyền, khóa người dùng hoặc đặt mật khẩu mới. Không thể tự khóa/hạ quyền tài khoản quản trị viên đang sử dụng hoặc bỏ quản trị viên hoạt động cuối cùng. Mọi vai trò hiện xem được toàn bộ khách; chưa có phân công khách riêng cho nhân viên.
-
-Vào **Tài khoản ứng dụng** để đổi mật khẩu của mình. Đổi mật khẩu/quyền hoặc khóa tài khoản sẽ đăng xuất các phiên của người đó. Phiên có thời hạn 8 giờ. Mật khẩu được băm bằng scrypt với salt riêng; cookie HttpOnly/SameSite và CSRF bảo vệ yêu cầu thay đổi. Máy cục bộ vẫn là phạm vi được hỗ trợ; chưa triển khai truy cập Internet hoặc nhiều máy. Bản sao SQLite chứa dữ liệu khách và hash mật khẩu, cần giữ riêng tư. Nếu quên mật khẩu và không còn quản trị viên khác, hiện chưa có quy trình khôi phục tự phục vụ; không xóa cơ sở dữ liệu để thử sửa lỗi.
-
-## Google / YouTube Premium
-
-**Chưa có tự động hóa hoặc đồng bộ trực tiếp với Google.** API YouTube công khai được kiểm tra không có thao tác quản lý Family Premium hoặc kiểm tra ưu đãi trial. API `members`/`membershipsLevels` dành cho hội viên kênh, không phải Family Premium.
-
-1. Từ Family hoặc tài khoản, tạo yêu cầu mời/kick, xóa nhóm, đổi mật khẩu, thiết lập 2FA, kiểm tra trial hoặc healthcheck.
-2. Trang chi tiết Job hiển thị tài khoản cần đăng nhập và nút **Mở trang Google**.
-3. Đăng nhập **đúng tài khoản** trên Google, kiểm tra đúng đối tượng, tự thực hiện thao tác và xác minh kết quả ở đó.
-4. Quay lại Job → **Ghi nhận kết quả**, chọn đã làm/thất bại/hủy và nhập ghi chú.
-5. Kết quả có nhãn **tự xác nhận**, không phải kết quả ứng dụng đã xác minh. Hồ sơ thành viên không tự thay đổi; chỉ chỉnh hồ sơ khi bạn đã kiểm tra thực tế.
-
-Ứng dụng không thu thập mật khẩu Google, OTP, mã khôi phục hoặc cookie Google; không lưu chúng trong ghi chú. Đọc điều kiện YouTube về gói Family, nơi cư trú, nhóm gia đình và việc đổi nhóm trước khi sử dụng. Việc mở liên kết không tự chọn tài khoản Google hoặc thực hiện thao tác.
-
-Nguồn để đối chiếu khả năng và điều kiện:
-- https://github.com/googleapis/discovery-artifact-manager/blob/master/discoveries/youtube.v3.json
-- https://github.com/googleapis/discovery-artifact-manager/blob/master/discoveries/index.json
-- https://developers.google.com/youtube/v3/docs
-- https://support.google.com/youtube/answer/7507349?hl=vi
-
-Các trang Google đăng nhập và kết quả Premium thực tế cần được kiểm thử trên máy/tài khoản của bạn. Chưa có credentials hoặc công cụ được cấp quyền để triển khai thao tác tự động. Không coi danh sách API công khai là bằng chứng Google không có API nội bộ.
+CSV UTF-8 tối đa 1 MB, 10.000 dòng, 100 cột; nhận dấu phẩy/chấm phẩy/tab và ô có nháy/xuống dòng. Ngày dd/mm/yyyy hoặc yyyy-mm-dd; Contact tối đa 1000 ký tự. Chưa nhập XLSX: các link ẩn dưới tên trong sheet có thể không còn URL trong CSV. Không lưu tệp CSV gốc hoặc đưa dữ liệu khách lên GitHub. Nhập CSV hiện dành cho khách Family, không nhập sản phẩm phụ.
 
 ## Phát triển và cloud
 
@@ -127,6 +77,14 @@ npm test
 npm start
 ```
 
-`npm run dev` bật tự khởi động lại khi sửa mã. Dùng checkout có sẵn; môi trường cloud đã cô lập, không tạo Git worktree trừ khi được yêu cầu. Node.js 24+ cung cấp `node:sqlite`. Không cần `npm install`. `DATA_DIR` và `PORT` có thể đổi nơi lưu và cổng. Mặc định giữ `HOST=127.0.0.1`; Host header ngoài localhost/loopback bị từ chối. Không expose bản này trực tiếp ra Internet.
+Node.js 24+ cung cấp node:sqlite, không cần npm install hoặc dịch vụ ngoài. `npm run dev` bật watch. Dùng checkout sẵn; môi trường task đã cô lập, không tạo Git worktree trừ khi được yêu cầu. Dữ liệu trong data bị loại khỏi Git. `DATA_DIR` và `PORT` có thể đổi nơi lưu/cổng. Tiến trình phải khởi động lại trong task mới.
 
-Dữ liệu ở `data/family.sqlite`, bị loại khỏi Git. Session nằm trong SQLite nên có thể còn hiệu lực sau khởi động lại đến khi hết hạn; tiến trình server phải khởi động lại trong task mới. `GET /api/auth/status` là kiểm tra khởi động công khai; `GET /api/state` yêu cầu đăng nhập. Kiểm thử dùng cơ sở dữ liệu tạm và bao gồm nâng cấp bản cũ, quyền truy cập, CSRF, phiên đăng nhập, giới hạn thử đăng nhập, khách/gia hạn, tác vụ thủ công và tính lặp lại.
+Mặc định chỉ lắng nghe 127.0.0.1, mở ngay Tổng quan không cần cookie. Host ngoài localhost/loopback bị từ chối. Yêu cầu thay đổi dùng JSON, Origin cùng địa chỉ và header X-Fam-Request. Endpoint auth/users/jobs cũ không còn hoạt động.
+
+Chế độ hosting: cần `HOST=0.0.0.0`, `PUBLIC_ORIGIN=https://dia-chi-website` và `ACCESS_PASSWORD` dài hơn 6 ký tự, cùng HTTPS proxy và thư mục `DATA_DIR` được giữ qua cập nhật. Không có những cấu hình này, server từ chối mở ra bên ngoài. Mật khẩu nhập trong bảng cấu hình hosting, không lưu vào Git. Cookie HTTPS giữ truy cập 30 ngày; đổi mật khẩu hosting sẽ vô hiệu hóa cookie cũ. Nút **Khóa ứng dụng** xóa cookie trên thiết bị hiện tại. Trang `/healthz` chỉ báo server hoạt động, không trả dữ liệu khách. Docker/Compose chuẩn bị cho VPS; không tải Dockerfile vào File Manager của Web Hosting để chạy.
+
+**Sao lưu / Chuyển dữ liệu:** tải JSON ngay trong ứng dụng, khôi phục qua cùng nút ở ứng dụng đang trống. Giữ đầy đủ khách, Family, Contact, lịch sử gia hạn, lưu trữ, sản phẩm phụ và nhật ký; không chuyển admin/mật khẩu cũ. Khôi phục lỗi sẽ hủy toàn bộ thao tác; nếu đã có dữ liệu, ứng dụng từ chối để tránh ghi đè. Tệp sao lưu có thông tin khách, nên giữ riêng. Hai bản chạy cục bộ và hosting không tự đồng bộ; sau chuyển, dùng địa chỉ hosting trên cả máy tính và điện thoại.
+
+Trên iPhone: mở địa chỉ HTTPS bằng Safari → Chia sẻ → Thêm vào Màn hình chính → Thêm. Có icon và chế độ mở riêng như ứng dụng. Cần Internet, chưa có thông báo đẩy hoặc làm việc offline; nhắc hạn hiển thị khi mở Tổng quan. Không cần đưa lên App Store.
+
+Kiểm thử dùng SQLite tạm: CRUD, nhập CSV, chống trùng/thay đổi khi xem trước, nâng cấp dữ liệu cũ, kỳ gia hạn từ hạn cũ, lưu trữ/khôi phục, mở trực tiếp không đăng nhập, tạo Family bằng email, sản phẩm phụ và nhắc hạn. Có thêm kiểm thử truy cập hosting, asset iPhone, sao lưu/khôi phục đầy đủ và tránh ghi đè. Windows batch chưa được chạy trên Linux; phần nhập Node đã được kiểm thử độc lập.
