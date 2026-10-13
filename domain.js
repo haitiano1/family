@@ -15,6 +15,14 @@ export function isPendingPayment(member) {
 export function sortCustomers(members) {
   return [...members].sort((a,b)=>(a.expires_at||'9999-99-99').localeCompare(b.expires_at||'9999-99-99') || a.id-b.id);
 }
+export function sortFamilies(families, members, filter='') {
+  const counts=new Map();for(const m of members)counts.set(m.family_id,(counts.get(m.family_id)||0)+1);
+  const rows=families.filter(f=>filter!=='spare'||(counts.get(f.id)||0)<5);
+  return [...rows].sort(filter==='name'?(a,b)=>b.name.localeCompare(a.name,'vi',{numeric:true})||b.id-a.id:(a,b)=>(a.trial_date||'9999-99-99').localeCompare(b.trial_date||'9999-99-99')||b.id-a.id);
+}
+export function purchaseExpiry(purchaseDate, months) {
+  return renewalDates(purchaseDate,purchaseDate,months).expires_at;
+}
 // Calendar days elapsed at the report date; the first day is day zero.
 export function trialUsageDays(trialDate, reportedOn) {
   if (![trialDate,reportedOn].every(value=>typeof value==='string'&&/^\d{4}-\d{2}-\d{2}$/.test(value)&&Number.isFinite(Date.parse(value))&&new Date(value).toISOString().slice(0,10)===value)) return null;

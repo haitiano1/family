@@ -7,9 +7,9 @@ const file = path.join(dir, 'family.sqlite');
 const existing = existsSync(file);
 const db = new DatabaseSync(file);
 const currentVersion = db.prepare('PRAGMA user_version').get().user_version;
-if (currentVersion > 11) throw new Error('Database is newer than this application. Use the latest application version.');
-if (existing && currentVersion < 11) {
-  const backup = path.join(dir, `before-v11-${Date.now()}.sqlite`);
+if (currentVersion > 12) throw new Error('Database is newer than this application. Use the latest application version.');
+if (existing && currentVersion < 12) {
+  const backup = path.join(dir, `before-v12-${Date.now()}.sqlite`);
   db.exec(`VACUUM INTO '${backup.replaceAll("'", "''")}'`);
   console.log('Saved pre-upgrade database backup in the data directory.');
 }
@@ -19,7 +19,7 @@ CREATE TABLE IF NOT EXISTS families (id INTEGER PRIMARY KEY, name TEXT NOT NULL,
 CREATE TABLE IF NOT EXISTS members (id INTEGER PRIMARY KEY, family_id INTEGER NOT NULL REFERENCES families(id) ON DELETE CASCADE, email TEXT NOT NULL, UNIQUE(family_id,email));
 CREATE TABLE IF NOT EXISTS logs (id INTEGER PRIMARY KEY, message TEXT NOT NULL, created_at TEXT NOT NULL);`);
 const additions = {
-  families: { service: "TEXT NOT NULL DEFAULT 'youtube'", note: "TEXT NOT NULL DEFAULT ''", trial_date: "TEXT NOT NULL DEFAULT ''" },
+  families: { service: "TEXT NOT NULL DEFAULT 'youtube'", note: "TEXT NOT NULL DEFAULT ''", trial_date: "TEXT NOT NULL DEFAULT ''", archived_at:"TEXT NOT NULL DEFAULT ''" },
   members: { customer_name: "TEXT NOT NULL DEFAULT ''", contact: "TEXT NOT NULL DEFAULT ''", joined_at: "TEXT NOT NULL DEFAULT ''", expires_at: "TEXT NOT NULL DEFAULT ''", payment_status: "TEXT NOT NULL DEFAULT 'unpaid'", amount: 'INTEGER NOT NULL DEFAULT 0', plan_months: 'INTEGER NOT NULL DEFAULT 0', note: "TEXT NOT NULL DEFAULT ''", renewal_status: "TEXT NOT NULL DEFAULT 'not_contacted'", renewal_amount: 'INTEGER NOT NULL DEFAULT 0', renewal_paid_at: "TEXT NOT NULL DEFAULT ''", renewal_note: "TEXT NOT NULL DEFAULT ''", renewal_revision: 'INTEGER NOT NULL DEFAULT 0', declined_at: "TEXT NOT NULL DEFAULT ''", membership_status: "TEXT NOT NULL DEFAULT 'unknown'" },
 
 };
@@ -41,7 +41,9 @@ try {
   CREATE TABLE IF NOT EXISTS audit_events(id INTEGER PRIMARY KEY,action TEXT NOT NULL,actor TEXT NOT NULL,message TEXT NOT NULL,details TEXT NOT NULL,created_at TEXT NOT NULL);`);
   const issueColumns=new Set(db.prepare('PRAGMA table_info(issues)').all().map(c=>c.name));
   for(const name of ['trial_date','reported_on'])if(!issueColumns.has(name))db.exec(`ALTER TABLE issues ADD COLUMN ${name} TEXT NOT NULL DEFAULT ''`);
-  db.exec('PRAGMA user_version=11; COMMIT');
+  if(!db.prepare('PRAGMA table_info(other_purchases)').all().some(c=>c.name==='plan_months'))db.exec('ALTER TABLE other_purchases ADD COLUMN plan_months INTEGER NOT NULL DEFAULT 0');
+  if(!db.prepare('PRAGMA table_info(archived_customers)').all().some(c=>c.name==='family_archive_id'))db.exec('ALTER TABLE archived_customers ADD COLUMN family_archive_id INTEGER REFERENCES families(id)');
+  db.exec('PRAGMA user_version=12; COMMIT');
 } catch (error) { db.exec('ROLLBACK'); throw error; }
 return db;
 }

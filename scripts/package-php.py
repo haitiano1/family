@@ -24,7 +24,7 @@ with zipfile.ZipFile(DEST,'w',zipfile.ZIP_DEFLATED) as z:
         info=zipfile.ZipInfo(name);info.external_attr=0o100644<<16;info.compress_type=zipfile.ZIP_DEFLATED;z.writestr(info,content)
 print('Created downloads/family-hostinger.zip (PHP source + shared assets only).')
 # Existing installations need only changed code/assets; configuration is never bundled.
-update_names=['public_html/app.js','public_html/domain.js','public_html/contacts.js','public_html/index.html','public_html/style.css','public_html/api.php','family-private/core.php','family-private/business.php','family-private/audit.php','family-private/issues.php','family-private/features.sql','family-private/cron.php']
+update_names=['public_html/app.js','public_html/domain.js','public_html/contacts.js','public_html/index.html','public_html/style.css','public_html/api.php','family-private/core.php','family-private/business.php','family-private/audit.php','family-private/issues.php','family-private/features.sql','family-private/cron.php','family-private/import.php']
 with zipfile.ZipFile(DEST) as z:
     update_contents=[(name,z.read(name)) for name in update_names]
 with zipfile.ZipFile(ROOT/'downloads'/'family-hostinger-update.zip','w',zipfile.ZIP_DEFLATED) as z:

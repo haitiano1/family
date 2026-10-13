@@ -42,7 +42,7 @@ export function initImporter(db, { fail, email, text, memberData, log }) {
     for (const key of ['allow_overflow','match_by_manager']) if (data[key] != null && typeof data[key] !== 'boolean') fail('Tùy chọn nhập không hợp lệ.');
     if (data.create_groups != null && typeof data.create_groups !== 'boolean') fail('Tùy chọn tạo nhóm không hợp lệ.');
     const accounts = db.prepare('SELECT * FROM accounts ORDER BY id').all();
-    const families = db.prepare('SELECT f.*,a.email AS manager_email FROM families f JOIN accounts a ON a.id=f.manager_id ORDER BY f.id').all();
+    const families = db.prepare("SELECT f.*,a.email AS manager_email FROM families f JOIN accounts a ON a.id=f.manager_id WHERE f.archived_at='' ORDER BY f.id").all();
     const members = db.prepare('SELECT * FROM members ORDER BY id').all();
     const fallback = families.find(f => f.id === Number(data.family_id));
     if (!fallback && !data.default_manager && mapping.family_name < 0 && mapping.manager_email < 0) fail('Chọn Family nhận khách hoặc chọn cột Family/email quản lý.');

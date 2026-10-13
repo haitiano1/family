@@ -68,7 +68,7 @@ test('Customer CRUD, dates/payments, persistence and Family capacity', async () 
     state = await request('state'); assert.equal(state.accounts[0].email, 'newmanager@example.com'); assert.equal('jobs' in state,false);
     await request('accounts/' + account.id, 'DELETE', undefined, 400);
     await request('members/' + member.id, 'DELETE'); await request('families/' + family.id, 'DELETE'); assert.equal((await request('state')).members.length, 0);
-    await request('accounts/' + account.id, 'DELETE'); assert.equal((await request('state')).accounts.length, 0);
+    await request('accounts/' + account.id, 'DELETE', undefined, 400);state=await request('state');assert.equal(state.archives.length,5);assert.equal(state.archived_families[0].manager_email,'newmanager@example.com');
     for (const asset of ['/', '/app.js', '/style.css', '/contacts.js', '/domain.js']) assert.equal((await fetch(f.base + asset)).status, 200);
     assert.equal((await fetch(f.base + '/../../server.js')).status, 404);
   } finally { await f.close(); }
@@ -90,9 +90,9 @@ test('existing v1 database is backed up and migrated without losing customer rec
   });
   try {
     await f.setup(); let state = await f.admin('state'); assert.equal(state.accounts[0].note, 'Existing note'); assert.equal(state.members[0].email, 'legacyguest@example.com'); assert.equal(state.members[0].expiry_status, 'unknown'); assert.equal(state.families[0].service, 'youtube'); assert.equal('jobs' in state,false);
-    const backups = readdirSync(f.dir).filter(n => n.startsWith('before-v11-')); assert.equal(backups.length, 1);
+    const backups = readdirSync(f.dir).filter(n => n.startsWith('before-v12-')); assert.equal(backups.length, 1);
     const backup = new DatabaseSync(path.join(f.dir, backups[0])); assert.equal(backup.prepare('SELECT email FROM members').get().email, 'legacyguest@example.com'); assert.equal(backup.prepare('PRAGMA user_version').get().user_version, 0); backup.close();
-    await f.stop(); await f.start(); state = await f.admin('state'); assert.equal(state.members.length, 1); assert.equal(readdirSync(f.dir).filter(n => n.startsWith('before-v11-')).length, 1);
+    await f.stop(); await f.start(); state = await f.admin('state'); assert.equal(state.members.length, 1); assert.equal(readdirSync(f.dir).filter(n => n.startsWith('before-v12-')).length, 1);
   } finally { await f.close(); }
 });
 
@@ -148,7 +148,7 @@ test('upgrading v2 retains customer records while adding current fields', async 
     await f.stop();
     const old=new DatabaseSync(path.join(f.dir,'family.sqlite')); old.exec('ALTER TABLE members DROP COLUMN plan_months; PRAGMA user_version=2'); old.close();
     await f.start(); const state=await a('state'); assert.equal('user' in state,false); assert.equal(state.members[0].email,'guest@example.com'); assert.equal(state.members[0].contact,'Existing contact'); assert.equal(state.members[0].payment_status,'paid'); assert.equal(state.members[0].plan_months,0);
-    const backups=readdirSync(f.dir).filter(n=>n.startsWith('before-v11-')); assert.equal(backups.length,1);
+    const backups=readdirSync(f.dir).filter(n=>n.startsWith('before-v12-')); assert.equal(backups.length,1);
     const saved=new DatabaseSync(path.join(f.dir,backups[0])); assert.equal(saved.prepare('PRAGMA user_version').get().user_version,2); assert.equal(saved.prepare('SELECT email FROM members').get().email,'guest@example.com'); saved.close();
   } finally { await f.close(); }
 });
@@ -400,11 +400,11 @@ test('Family trial date snapshots stay fixed at report time; only done cases can
 test('v10 SQLite migration and legacy v1/v2 backups preserve customers and old issue report dates without guessing trial dates',async()=>{
  const f=await fixture();try{
   const a=f.admin,family=await a('families','POST',{name:'Old Family',manager_email:'old@example.com'},201);await a('members','POST',{family_id:family.id,email:'guest@example.com',contact:'Original Zalo'},201);await a('issues','POST',{family_id:family.id,title:'Old case'},201);
-  const backup=await a('backup');assert.equal(backup.version,3);
+  const backup=await a('backup');assert.equal(backup.version,4);
   for(const version of [1,2]){const legacy=structuredClone(backup);legacy.version=version;for(const row of legacy.tables.families)delete row.trial_date;for(const row of legacy.tables.issues){delete row.trial_date;delete row.reported_on;row.created_at='2026-08-14T23:30:00.000Z';}if(version===1){delete legacy.tables.issues;delete legacy.tables.audit_events;}
    const destination=await fixture();try{await destination.admin('restore','POST',legacy);const state=await destination.admin('state');assert.equal(state.members[0].contact,'Original Zalo');assert.equal(state.families[0].trial_date,'');if(version===2){assert.equal(state.issues[0].reported_on,'2026-08-15');assert.equal(state.issues[0].days_used,null);}}finally{await destination.close();}
   }
-  await f.stop();const db=new DatabaseSync(path.join(f.dir,'family.sqlite'));db.exec("ALTER TABLE families DROP COLUMN trial_date;ALTER TABLE issues DROP COLUMN trial_date;ALTER TABLE issues DROP COLUMN reported_on;UPDATE issues SET created_at='2026-08-14T23:30:00.000Z';PRAGMA user_version=10");db.close();await f.start();const state=await a('state');assert.equal(state.members[0].contact,'Original Zalo');assert.equal(state.issues[0].reported_on,'2026-08-15');assert.equal(state.issues[0].days_used,null);assert.equal(state.families[0].trial_date,'');assert.equal(readdirSync(f.dir).filter(n=>n.startsWith('before-v11-')).length,1);
+  await f.stop();const db=new DatabaseSync(path.join(f.dir,'family.sqlite'));db.exec("ALTER TABLE families DROP COLUMN trial_date;ALTER TABLE issues DROP COLUMN trial_date;ALTER TABLE issues DROP COLUMN reported_on;UPDATE issues SET created_at='2026-08-14T23:30:00.000Z';PRAGMA user_version=10");db.close();await f.start();const state=await a('state');assert.equal(state.members[0].contact,'Original Zalo');assert.equal(state.issues[0].reported_on,'2026-08-15');assert.equal(state.issues[0].days_used,null);assert.equal(state.families[0].trial_date,'');assert.equal(readdirSync(f.dir).filter(n=>n.startsWith('before-v12-')).length,1);
  }finally{await f.close();}
 });
 
@@ -426,4 +426,34 @@ test('immediate archival rolls back the renewal and audit when saving the archiv
   await a('members/'+member.id+'/renewal','PATCH',{revision:1,status:'declined',note:'Customer cancelled'},500);assert.deepEqual(db.prepare('SELECT * FROM members WHERE id=?').get(member.id),before);assert.equal(db.prepare('SELECT COUNT(*) AS n FROM archived_customers').get().n,0);assert.equal((await a('journal')).total,count);
   db.exec('DROP TRIGGER reject_archive');db.prepare("UPDATE members SET renewal_status='declined',declined_at='' WHERE id=?").run(member.id);db.close();await f.stop();await f.start();const state=await a('state');assert.equal(state.archives[0].member.contact,'FB preserved');assert.equal(state.members.length,1);assert.equal(state.members[0].id,overdue.id);assert.equal(state.reminders.confirmed_pending,1);
  }finally{await f.close();}
+});
+
+test('new purchases calculate expiry, archived customers and whole Families restore with history, issues and payment intact',async()=>{
+ const f=await fixture(),target=await fixture();try{
+  const a=f.admin,family=await a('families','POST',{name:'Family 48',manager_email:'manager@example.com',trial_date:'2026-10-02',note:'Family preserved'},201);
+  const member=await a('members','POST',{family_id:family.id,email:'buyer@example.com',customer_name:'Khách',contact:'https://zalo.me/123',joined_at:'2024-01-31',plan_months:1,note:'Member note'},201);
+  let state=await a('state');assert.equal(state.members[0].expires_at,'2024-02-29');
+  await a('members/'+member.id+'/renewal','PATCH',{revision:0,status:'paid',paid_at:'2024-03-10',amount:100000,plan_months:3,apply_now:true});
+  const issue=await a('issues','POST',{family_id:family.id,target_type:'member',target_id:member.id,title:'Keep relationship'},201);
+  await a('members/'+member.id+'/renewal','PATCH',{revision:1,status:'awaiting_payment',note:'Payment confirmed'});
+  const deleted=await a('members/'+member.id,'DELETE');state=await a('state');assert.equal(state.members.length,0);assert.equal(state.archives[0].member.renewal_status,'awaiting_payment');assert.equal((await a('archives/'+deleted.archive_id+'/history')).history.length,1);
+  const restored=await a('archives/'+deleted.archive_id+'/restore','POST',{family_id:family.id});state=await a('state');assert.equal(state.members[0].contact,'https://zalo.me/123');assert.equal(state.members[0].renewal_status,'awaiting_payment');assert.equal(state.issues[0].target_id,restored.member_id);assert.equal(state.issues[0].target_available,true);
+  for(let i=0;i<5;i++)await a('members','POST',{family_id:family.id,email:`invite${i}@example.com`,membership_status:'invited'},201);
+  const empty=await a('families','POST',{name:'Empty Family',manager_email:'empty@example.com'},201);await a('families/'+empty.id,'DELETE');
+  await a('families/'+family.id,'DELETE');state=await a('state');assert.equal(state.families.length,0);assert.equal(state.archives.length,6);assert.equal(state.archived_families.length,2);assert.equal(state.issues[0].family_id,family.id);assert.equal(state.issues[0].target_available,false);
+  await a('members','POST',{family_id:family.id,email:'inactive@example.com'},400);await a('families/'+family.id,'PATCH',{name:'Should not edit',manager_email:'manager@example.com'},404);await a('issues','POST',{family_id:family.id,title:'Inactive'},400);
+  const product=await a('other-products','POST',{product:'Spotify',customer_name:'Khách phụ',contact:'https://facebook.com/example',joined_at:'2026-10-13',plan_months:3},201);state=await a('state');assert.equal(state.other_products[0].expires_at,'2027-01-13');assert.equal(state.other_products[0].plan_months,3);
+  const backup=await a('backup');await target.admin('restore','POST',backup);await target.admin('archived-families/'+family.id+'/restore','POST',{});state=await target.admin('state');assert.equal(state.members.length,6);assert.equal(state.archives.length,0);assert.equal(state.archived_families.length,1);assert.equal(state.families[0].trial_date,'2026-10-02');assert.equal(state.members.find(m=>m.email==='buyer@example.com').renewal_status,'awaiting_payment');assert.equal(state.issues[0].id,issue.id);assert.equal(state.issues[0].target_available,true);assert.equal((await target.admin('members/'+state.issues[0].target_id+'/renewal-history')).history.length,1);
+  await target.stop();await target.start();assert.equal((await target.admin('state')).members.length,6);
+  await a('other-products/'+product.id,'PATCH',{product:'Spotify',customer_name:'Khách phụ',joined_at:'2026-10-13',plan_months:12,expires_at:'2028-01-01'});assert.equal((await a('state')).other_products[0].expires_at,'2028-01-01');
+ }finally{await f.close();await target.close();}
+});
+
+test('Family archival is atomic when one customer cannot be archived; v11 migration and v3 backups keep existing manual dates',async()=>{
+ const f=await fixture(),target=await fixture();try{
+  const a=f.admin,family=await a('families','POST',{name:'Safe Family',manager_email:'safe@example.com'},201);await a('members','POST',{family_id:family.id,email:'one@example.com',joined_at:'2026-10-13',expires_at:'2027-02-01',plan_months:3},201);await a('members','POST',{family_id:family.id,email:'two@example.com'},201);
+  const journalCount=(await a('journal')).total,db=new DatabaseSync(path.join(f.dir,'family.sqlite'));db.exec("CREATE TRIGGER reject_second BEFORE INSERT ON archived_customers WHEN NEW.email='two@example.com' BEGIN SELECT RAISE(ABORT,'Injected failure'); END");await a('families/'+family.id,'DELETE',undefined,500);assert.equal(db.prepare('SELECT COUNT(*) AS n FROM members').get().n,2);assert.equal(db.prepare('SELECT archived_at FROM families').get().archived_at,'');assert.equal(db.prepare('SELECT COUNT(*) AS n FROM archived_customers').get().n,0);assert.equal((await a('journal')).total,journalCount);db.exec('DROP TRIGGER reject_second');db.close();
+  const old=await a('backup');old.version=3;for(const row of old.tables.families)delete row.archived_at;for(const row of old.tables.archived_customers)delete row.family_archive_id;for(const row of old.tables.other_purchases)delete row.plan_months;await target.admin('restore','POST',old);assert.equal((await target.admin('state')).members.find(m=>m.email==='one@example.com').expires_at,'2027-02-01');
+  await f.stop();const oldDb=new DatabaseSync(path.join(f.dir,'family.sqlite'));oldDb.exec('ALTER TABLE families DROP COLUMN archived_at;ALTER TABLE archived_customers DROP COLUMN family_archive_id;ALTER TABLE other_purchases DROP COLUMN plan_months;PRAGMA user_version=11');oldDb.close();await f.start();const state=await a('state');assert.equal(state.members.length,2);assert.equal(state.members.find(m=>m.email==='one@example.com').expires_at,'2027-02-01');assert.equal(state.families[0].archived_at,'');assert.equal(readdirSync(f.dir).filter(n=>n.startsWith('before-v12-')).length,1);
+ }finally{await f.close();await target.close();}
 });

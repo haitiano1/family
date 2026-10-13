@@ -8,7 +8,7 @@ import { validators } from './validation.js';
 import { initArchive } from './archive.js';
 import { initRenewals } from './renewal.js';
 import { initImporter } from './importer.js';
-import { today, expiry, isPendingPayment, sortCustomers } from './domain.js';
+import { today, expiry, isPendingPayment, sortCustomers, sortFamilies, purchaseExpiry } from './domain.js';
 import { beginAudit,finishAudit,cancelAudit,auditLog,auditAction,journal,journalEntry,withAudit } from './audit.js';
 import { initIssues } from './issues.js';
 import { hosting } from './hosting.js';
@@ -88,6 +88,7 @@ async function handle(req, res) {
       const data = await body(req, 2000000);
       return send(res, 200, importCustomers(data, actor, url.pathname.endsWith('/commit')));
     }
+    if(req.method==='POST'&&/^\/api\/archived-families\/\d+\/restore$/.test(url.pathname))return send(res,200,archive.restoreFamily(Number(url.pathname.split('/')[3]),actor));
     if (req.method === 'POST' && /^\/api\/archives\/\d+\/restore$/.test(url.pathname)) {
       const data = await body(req); return send(res,200,archive.restore(Number(url.pathname.split('/')[3]),data.family_id,actor));
     }
@@ -109,8 +110,8 @@ async function handle(req, res) {
       return send(res, 200, {
         hosted:access.enabled,issues:issues.list(),
         other_products,other_reminders:{due_soon:other_products.filter(p=>p.expiry_status==='due_soon').length,expired:other_products.filter(p=>p.expiry_status==='expired').length},
-        accounts: all('SELECT a.*, f.id AS family_id, f.name AS family_name, f.service FROM accounts a LEFT JOIN families f ON f.manager_id=a.id ORDER BY a.id DESC'),
-        families: all('SELECT f.*, a.email AS manager_email FROM families f JOIN accounts a ON a.id=f.manager_id ORDER BY f.id DESC'),
+        accounts: all("SELECT a.*, f.id AS family_id, f.name AS family_name, f.service FROM accounts a LEFT JOIN families f ON f.manager_id=a.id AND f.archived_at='' ORDER BY a.id DESC"),
+        families: sortFamilies(all("SELECT f.*, a.email AS manager_email FROM families f JOIN accounts a ON a.id=f.manager_id WHERE f.archived_at=''"),members), archived_families:archive.familyList(),
         members, archives:archive.list(), archive_mode:archive.mode,
         logs: all('SELECT id,message,created_at FROM logs UNION ALL SELECT id,message,created_at FROM audit_events ORDER BY created_at DESC,id DESC LIMIT 100'), today: today(),
         reminders: { expired: members.filter(m => m.expiry_status === 'expired').length, due_soon: members.filter(m => m.expiry_status === 'due_soon').length, confirmed_pending:members.filter(isPendingPayment).length, unpaid: members.filter(m => ['unpaid','partial'].includes(m.payment_status)).length, renewal_waiting: members.filter(m => ['awaiting_payment','partial'].includes(m.renewal_status)).length, renewal_paid_pending: members.filter(m => m.renewal_status === 'paid').length }
@@ -142,7 +143,7 @@ async function handle(req, res) {
         } catch(error) {db.exec('ROLLBACK TO family_save; RELEASE family_save');throw error;}
       }
       if (req.method === 'PATCH') {
-        const id=Number(url.pathname.split('/').pop()); const old=one('SELECT * FROM families WHERE id=?',id);if (!old) fail('Không tìm thấy Family.',404);
+        const id=Number(url.pathname.split('/').pop()); const old=one('SELECT * FROM families WHERE id=?',id);if (!old || old.archived_at) fail('Không tìm thấy Family đang hoạt động.',404);
         const managerEmail=data.manager_email ? email(data.manager_email) : null;
         db.exec('SAVEPOINT family_save');
         try {
@@ -156,11 +157,11 @@ async function handle(req, res) {
       }
     }
     if (['POST', 'PATCH'].includes(req.method) && /^\/api\/members(?:\/\d+)?$/.test(url.pathname)) {
-      const data = await body(req); const values = memberData(data); const id = Number(url.pathname.split('/').pop());
+      const data = await body(req); const values = memberData(data);if(req.method==='POST'&&!values[4]&&values[3]&&values[8])values[4]=purchaseExpiry(values[3],values[8]); const id = Number(url.pathname.split('/').pop());
       const prior = req.method === 'PATCH' ? one('SELECT * FROM members WHERE id=?', id) : null;
       if (req.method === 'PATCH' && !prior) fail('Không tìm thấy khách.', 404);
       const family = one('SELECT f.*,a.email FROM families f JOIN accounts a ON a.id=f.manager_id WHERE f.id=?', prior?.family_id || Number(data.family_id));
-      if (!family) fail('Không tìm thấy Family.'); if (values[0] === family.email) fail('Tài khoản quản lý đã thuộc hồ sơ này.');
+      if (!family || family.archived_at) fail('Không tìm thấy Family đang hoạt động.'); if (values[0] === family.email) fail('Tài khoản quản lý đã thuộc hồ sơ này.');
       if (req.method === 'POST' && url.pathname === '/api/members') {
         if (values[9] !== 'invited' && one("SELECT COUNT(*) AS n FROM members WHERE family_id=? AND membership_status!='invited'", family.id).n >= 5) fail('Hồ sơ đã đủ 6 người gồm tài khoản quản lý.');
         const result = run('INSERT INTO members(family_id,email,customer_name,contact,joined_at,expires_at,payment_status,amount,note,plan_months,membership_status) VALUES (?,?,?,?,?,?,?,?,?,?,?)', family.id, ...values);
@@ -176,6 +177,8 @@ async function handle(req, res) {
       const [, , table, rawId] = url.pathname.split('/'); const id = Number(rawId);
       const row = one(`SELECT * FROM ${table} WHERE id=?`, id); if (!row) fail('Không tìm thấy hồ sơ.', 404);
       if (table === 'accounts' && one('SELECT id FROM families WHERE manager_id=?', id)) fail('Hãy xóa hồ sơ Family liên quan trước.');
+      if(table==='members')return send(res,200,archive.removeMember(id));
+      if(table==='families')return send(res,200,archive.removeFamily(id));
       run(`DELETE FROM ${table} WHERE id=?`, id); log(`${actor.username}: xóa hồ sơ nội bộ ${table} #${id}`); return send(res, 200, { ok: true });
     }
     if (req.method === 'GET') {

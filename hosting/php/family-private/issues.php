@@ -1,7 +1,7 @@
 <?php
 declare(strict_types=1);
 function issueTarget(PDO $db,array $i): array|false {
-    if(!$i['family_id'])return false;$f=one($db,'SELECT * FROM families WHERE id=?',[$i['family_id']]);if(!$f)return false;
+    if(!$i['family_id'])return false;$f=one($db,'SELECT * FROM families WHERE id=?',[$i['family_id']]);if(!$f||$f['archived_at'])return false;
     if($i['target_type']==='manager'){$row=$f['manager_id']===$i['target_id']?one($db,'SELECT * FROM accounts WHERE id=?',[$i['target_id']]):false;return $row&&$row['email']===$i['subject_email']?$row:false;}
     return one($db,'SELECT * FROM members WHERE id=? AND family_id=? AND email=?',[$i['target_id'],$f['id'],$i['subject_email']]);
 }
@@ -13,7 +13,7 @@ function saveIssue(PDO $db,?int $id,array $d): array {
     if($old&&array_key_exists('expected_created_at',$d)&&$d['expected_created_at']!==$old['created_at'])fail('Case đã thay đổi. Tải lại rồi thử lại.',409);
     $title=text($d['title']??$old['title']??'',200);if(!$title)fail('Nhập nội dung lỗi.');$note=text($d['note']??$old['note']??'');$status=$d['status']??$old['status']??'todo';if(!in_array($status,['todo','doing','done'],true))fail('Trạng thái lỗi không hợp lệ.');$now=stamp();
     if(!$old){
-        if($status!=='todo')fail('Lỗi mới bắt đầu ở Chờ fix.');$f=one($db,'SELECT * FROM families WHERE id=?',[(int)($d['family_id']??0)]);if(!$f)fail('Chọn Family đang tồn tại.');$type=$d['target_type']??'manager';if(!in_array($type,['manager','member'],true))fail('Chọn mail gặp lỗi.');
+        if($status!=='todo')fail('Lỗi mới bắt đầu ở Chờ fix.');$f=one($db,'SELECT * FROM families WHERE id=?',[(int)($d['family_id']??0)]);if(!$f||$f['archived_at'])fail('Chọn Family đang tồn tại.');$type=$d['target_type']??'manager';if(!in_array($type,['manager','member'],true))fail('Chọn mail gặp lỗi.');
         $target=$type==='manager'?one($db,'SELECT * FROM accounts WHERE id=?',[$f['manager_id']]):one($db,'SELECT * FROM members WHERE id=? AND family_id=?',[(int)($d['target_id']??0),$f['id']]);if(!$target)fail('Mail khách không thuộc Family này.');
         q($db,'INSERT INTO issues(family_id,family_name,target_type,target_id,subject_email,original_email,title,note,created_at,updated_at,trial_date,reported_on) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)',[$f['id'],$f['name'],$type,$target['id'],$target['email'],$target['email'],$title,$note,$now,$now,$f['trial_date'],today()]);$new=(int)$db->lastInsertId();logEntry($db,"Cá nhân: báo lỗi {$target['email']}: $title");return ['id'=>$new];
     }

@@ -70,6 +70,11 @@ function calendarDate(mixed $value): string {
     if (!$value) return '';
     if (!is_string($value) || !preg_match('/^(\d{4})-(\d{2})-(\d{2})$/D',$value,$p) || !checkdate((int)$p[2],(int)$p[3],(int)$p[1])) fail('Ngày không hợp lệ.');return $value;
 }
+function purchaseExpiry(string $joined,int $months): string {
+    calendarDate($joined);if(!$joined||$months<1||$months>120)fail('Nhập ngày mua và gói tháng hợp lệ.');
+    $target=(new DateTimeImmutable(substr($joined,0,7).'-01',new DateTimeZone('UTC')))->modify("+$months months");
+    return calendarDate($target->format('Y-m-').str_pad((string)min((int)substr($joined,8,2),(int)$target->format('t')),2,'0',STR_PAD_LEFT));
+}
 function integer(mixed $value,int $min,int $max,string $message): int {
     if ($min===0 && is_string($value) && trim($value)==='') return 0;
     if ((!is_int($value) && !is_float($value) && !is_string($value)) || !is_numeric($value) || (float)$value!=(int)$value || (float)$value<$min || (float)$value>$max) fail($message);return (int)$value;
@@ -94,13 +99,14 @@ function initializeSchema(PDO $db): void {
     if ($tables && !in_array('app_meta',$tables,true)) fail('Database đang chứa dữ liệu khác. Tạo database trống riêng cho Family.',503);
     if (in_array('app_meta',$tables,true)) {
         $version=one($db,"SELECT value FROM app_meta WHERE name='schema_version'");
-        if (($version['value']??'')==='3') return;
-        if ($version && !in_array($version['value'],['1','2'],true)) fail('Database dùng phiên bản khác. Hãy dùng mã nguồn tương ứng.',503);
+        if (($version['value']??'')==='4') return;
+        if ($version && !in_array($version['value'],['1','2','3'],true)) fail('Database dùng phiên bản khác. Hãy dùng mã nguồn tương ứng.',503);
     }
     foreach(explode(';',file_get_contents(__DIR__.'/schema.sql')) as $sql) if (trim($sql)) $db->exec($sql);
     foreach(explode(';',file_get_contents(__DIR__.'/features.sql')) as $sql)if(trim($sql))$db->exec($sql);
     foreach(['families'=>['trial_date'],'issues'=>['trial_date','reported_on']]as $table=>$fields){$known=array_column(all($db,"SHOW COLUMNS FROM `$table`"),'Field');foreach($fields as $field)if(!in_array($field,$known,true))$db->exec("ALTER TABLE `$table` ADD COLUMN `$field` VARCHAR(10) NOT NULL DEFAULT ''");}
-    q($db,"INSERT INTO app_meta(name,value) VALUES ('schema_version','3') ON DUPLICATE KEY UPDATE value='3'");
+    foreach(['families'=>['archived_at'=>"VARCHAR(32) NOT NULL DEFAULT ''"],'archived_customers'=>['family_archive_id'=>'BIGINT NULL'],'other_purchases'=>['plan_months'=>'INT NOT NULL DEFAULT 0']] as $table=>$fields){$known=array_column(all($db,"SHOW COLUMNS FROM `$table`"),'Field');foreach($fields as $field=>$type)if(!in_array($field,$known,true))$db->exec("ALTER TABLE `$table` ADD COLUMN `$field` $type");}
+    q($db,"INSERT INTO app_meta(name,value) VALUES ('schema_version','4') ON DUPLICATE KEY UPDATE value='4'");
 }
 function errorReply(Throwable $e): never {
     if ($e instanceof FamilyError) reply(['error'=>$e->getMessage()],$e->status);

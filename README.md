@@ -1,4 +1,4 @@
-# YouTube Family — Quản lý khách hàng 0.8
+# YouTube Family — Quản lý khách hàng 0.9
 
 Ứng dụng quản lý cho cá nhân: **mở web là vào Tổng quan**, không cần tài khoản đăng nhập. Tập trung quản lý khách YouTube, Family, gia hạn và sản phẩm bán thêm. Không còn các mục admin, bảo mật tài khoản, Jobs hoặc thao tác Google. Có bản **PHP + MySQL dành cho Hostinger Premium** và bản Node.js chạy Windows/VPS. Có thể thêm biểu tượng vào màn hình chính iPhone; xem [hướng dẫn Hostinger](HOSTINGER.md). Bản hosting dùng một mật khẩu truy cập chung, không có tài khoản/role admin.
 
@@ -23,7 +23,7 @@ Lần sau chạy lại START-WINDOWS.cmd và mở cùng địa chỉ. Nếu `EAD
 3. Tải ZIP mới, giải nén riêng và sao chép toàn bộ nội dung bên trong thư mục mới sang thư mục ứng dụng cũ. Thay thế tệp trùng tên, **giữ nguyên thư mục data**.
 4. Chạy START-WINDOWS.cmd và nhấn **Ctrl+F5** trên trình duyệt.
 
-Dữ liệu khách, Family, Contact, thanh toán, gia hạn, lưu trữ và bản sao cũ được giữ. Startup nâng cấp SQLite bằng thay đổi cộng thêm, sao lưu trước nâng cấp vào `data/before-v11-*.sqlite`. Dữ liệu admin/Jobs cũ, nếu có, vẫn nằm trong bản dữ liệu cũ nhưng không được ứng dụng mới sử dụng hoặc trả qua API. Không cần tạo admin hoặc đăng nhập sau cập nhật. Bookmark cũ đến các trang đã bỏ được đưa về Tổng quan.
+Dữ liệu khách, Family, Contact, thanh toán, gia hạn, lưu trữ và bản sao cũ được giữ. Startup nâng cấp SQLite bằng thay đổi cộng thêm, sao lưu trước nâng cấp vào `data/before-v12-*.sqlite`. Dữ liệu admin/Jobs cũ, nếu có, vẫn nằm trong bản dữ liệu cũ nhưng không được ứng dụng mới sử dụng hoặc trả qua API. Không cần tạo admin hoặc đăng nhập sau cập nhật. Bookmark cũ đến các trang đã bỏ được đưa về Tổng quan.
 
 ## Chuyển dữ liệu từ bản Windows cũ mà không cập nhật ứng dụng
 
@@ -64,7 +64,7 @@ Sau gia hạn, lần tiếp theo trở về Chưa nhắc; lịch sử không m�
 
 Bảng **Chờ fix → Đang fix → Đã fix** hỗ trợ kéo thả, chọn trạng thái và nút Đã fix trên iPhone. Khi hoàn tất, bắt buộc chọn **Giữ nguyên mail** hoặc **Đổi sang mail mới**. Đổi cập nhật đúng hồ sơ quản lý/khách đã báo lỗi trong cùng lần lưu; thẻ Done ghi rõ mail cũ→mới và giữ mail báo lỗi ban đầu. Không đổi ngày mua/hạn/Contact/thanh toán. Mail trùng hoặc hồ sơ đã thay đổi/xóa sẽ không gây cập nhật một phần; trạng thái và đổi mail cùng rollback. Lỗi vẫn được giữ khi Family bị xóa. Thay đổi đồng thời có revision guard, cần tải lại khi có xung đột.
 
-**Nhật ký** tìm kiếm/phân trang, lưu thời gian/người thao tác/nội dung và **Xem chi tiết trước-sau** cho các thay đổi từ bản này. Ghi thêm/sửa/xóa/import/gia hạn/lưu trữ/khôi phục/sửa lỗi/đổi mail; không ghi refresh/xem trang. Khi xóa Family, dữ liệu khách xóa theo và thay đổi liên kết lịch sử được giữ trong sự kiện đó. Log cũ vẫn đọc được; dữ liệu trước-sau không thể tạo lại cho thao tác đã xảy ra trước bản cập nhật. Nhật ký hiện giúp đối chiếu, chưa có hoàn tác tự động. Bản sao lưu v3 giữ cả bảng lỗi/nhật ký/ngày trial, vẫn nhận v1/v2.
+**Nhật ký** tìm kiếm/phân trang, lưu thời gian/người thao tác/nội dung và **Xem chi tiết trước-sau** cho các thay đổi từ bản này. Ghi thêm/sửa/xóa/import/gia hạn/lưu trữ/khôi phục/sửa lỗi/đổi mail; không ghi refresh/xem trang. Khi xóa Family, cả hồ sơ nhóm và khách được chuyển vào lưu trữ; nhật ký ghi thay đổi và hồ sơ khách đã lưu. Log cũ vẫn đọc được; dữ liệu trước-sau không thể tạo lại cho thao tác đã xảy ra trước bản cập nhật. Nhật ký hiện giúp đối chiếu, chưa có hoàn tác tự động. Bản sao lưu v4 giữ cả lỗi/nhật ký/ngày trial, Family lưu trữ và gói sản phẩm phụ; vẫn nhận v1/v2/v3.
 
 Cập nhật Hostinger bằng [gói cập nhật riêng](https://github.com/haitiano1/family/raw/refs/heads/main/downloads/family-hostinger-update.zip) và [hướng dẫn](hosting/php/UPDATE.md), giữ nguyên config.php/database. Không cần nhập lại khách. MySQL nâng cấp1/2→3 bằng thêm bảng/cột; Node schema11 sao lưu trước nâng cấp. Các bản app cũ không dùng được dữ liệu Node schema11; exporter độc lập hỗ trợ đến11.
 
@@ -100,7 +100,15 @@ Mục **Sản phẩm khác** dành cho Netflix, Spotify, Google One, ChatGPT và
 
 Khách chọn **Không gia hạn** được chuyển vào **Khách lưu trữ ngay trong lần lưu trạng thái**, giữ hồ sơ, Contact và lịch sử gia hạn. Giao diện tự mở Khách lưu trữ sau khi lưu thành công. Bản0.8 thay chính sách chờ7ngày của bản cũ; các hồ sơ đã chọn Không gia hạn từ trước được chuyển khi mở lại/tải dữ liệu. Khách chỉ quá hạn mà chưa chọn Không gia hạn vẫn nằm trong danh sách hoạt động.
 
-Thông tin và lịch sử nằm trong `data/family.sqlite`. Có **Xem dữ liệu** và **Khôi phục** vào Family còn chỗ. Sau khôi phục, trạng thái gia hạn về Chưa nhắc; hạn, thanh toán, Contact và lịch sử được giữ. Sản phẩm phụ không tự lưu trữ theo quy tắc này.
+Thông tin và lịch sử nằm trong `data/family.sqlite`. Có **Xem dữ liệu** và **Khôi phục** vào Family còn chỗ. Sau khôi phục khách Không gia hạn, trạng thái gia hạn về Chưa nhắc. Khách lưu trữ bằng Xóa hồ sơ giữ trạng thái gia hạn đang có. Hạn, thanh toán, Contact và lịch sử được giữ. Sản phẩm phụ không tự lưu trữ theo quy tắc này.
+
+## Gói mua, thứ tự Family và lưu trữ (bản 0.9)
+
+- Form thêm/sửa khách Family và sản phẩm khác có gói 1/2/3/6/12 tháng. Chọn gói hoặc đổi ngày mua sẽ cập nhật ô ngày hết hạn ngay. Cuối tháng được chốt vào ngày hợp lệ cuối cùng, ví dụ 31/01/2024 + 1 tháng = 29/02/2024. Vẫn có thể sửa hạn thủ công. Mở form sửa không tự đổi hạn cũ; CSV giữ quy tắc không đoán ô trống. Gia hạn YouTube vẫn nối từ hạn cũ, ngày nhận tiền lưu riêng.
+- Family có tìm kiếm và đúng 3 lựa chọn: **Tất cả**, **Fam dư slot**, **Theo tên**. Tất cả xếp ngày trial từ cũ đến mới, ngày chưa nhập ở cuối. Fam dư slot lấy số ở cột Khách đang ghi nhận dưới 5 (kể cả 0), gồm cả hồ sơ đã mời/chưa vào; cùng thứ tự trial. Theo tên xếp giảm dần tự nhiên: Family 48, Family 47, Family 46…
+- **Xóa hồ sơ khách** chuyển khách vào Khách lưu trữ; giữ đầy đủ ghi chú, Contact, ngày mua/hạn, tiền và lịch sử. **Xóa hồ sơ Family** lưu cả nhóm, email quản lý/ngày trial/ghi chú và tất cả khách. Family trống cũng được lưu. Không có thao tác xóa vĩnh viễn hồ sơ này.
+- Trong **Khách lưu trữ → Family lưu trữ → Khôi phục Family**, khôi phục cả nhóm và khách còn lưu trữ cùng lần xóa. Khách đã chuyển sang Family khác không bị tạo trùng. Có thể khôi phục từng khách vào Family đang hoạt động. Email quản lý của Family lưu trữ vẫn thuộc hồ sơ đó; hãy khôi phục Family trước khi sử dụng lại email cho nhóm này. Case lỗi giữ liên kết sau khôi phục và mọi thao tác có nhật ký.
+- Sản phẩm khác hiện gói tháng, copy tên sản phẩm/tên khách/email/Contact/ngày mua/hạn/ghi chú. Contact là link bấm mở khi có URL, còn nội dung gốc vẫn được copy đầy đủ. Nhắc hạn ở Tổng quan vẫn áp dụng cho sản phẩm phụ.
 
 ## Nhập Google Sheets CSV
 
