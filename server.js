@@ -82,14 +82,14 @@ async function handle(req, res) {
       return send(res,id ? 200 : 201,saveOtherProduct(id,await body(req),actor));
     }
     if (req.method === 'DELETE' && /^\/api\/other-products\/\d+$/.test(url.pathname)) {
-      const id=Number(url.pathname.split('/').pop());if (!one('SELECT id FROM other_purchases WHERE id=?',id)) fail('Không tìm thấy sản phẩm.',404);
-      run('DELETE FROM other_purchases WHERE id=?',id);log(`${actor.username}: xóa sản phẩm khác #${id}`);return send(res,200,{ok:true});
+      return send(res,200,archive.removeProduct(Number(url.pathname.split('/').pop()),actor));
     }
     if (req.method === 'POST' && ['/api/import/preview','/api/import/commit'].includes(url.pathname)) {
       const data = await body(req, 2000000);
       return send(res, 200, importCustomers(data, actor, url.pathname.endsWith('/commit')));
     }
     if(req.method==='POST'&&/^\/api\/archived-families\/\d+\/restore$/.test(url.pathname))return send(res,200,archive.restoreFamily(Number(url.pathname.split('/')[3]),actor));
+    if(req.method==='DELETE'&&/^\/api\/archives\/\d+$/.test(url.pathname))return send(res,200,archive.remove(Number(url.pathname.split('/')[3]),await body(req),actor));
     if (req.method === 'POST' && /^\/api\/archives\/\d+\/restore$/.test(url.pathname)) {
       const data = await body(req); return send(res,200,archive.restore(Number(url.pathname.split('/')[3]),data.family_id,actor));
     }

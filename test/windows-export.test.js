@@ -45,3 +45,11 @@ test('current database export retains exact archive snapshots and products and r
   const missing=path.join(dir,'missing.sqlite');assert.throws(()=>exportBackup(missing,path.join(dir,'missing.json')),/No data/);assert.equal(readdirSync(dir).includes('missing.sqlite'),false);
  }finally{rmSync(dir,{recursive:true,force:true});}
 });
+
+test('read-only exporter preserves archived product type and original purchase data for restoring without a Family',()=>{
+ const dir=mkdtempSync(path.join(tmpdir(),'fam-export-product-'));try{
+  const db=initDatabase(dir),file=path.join(dir,'family.sqlite'),out=path.join(dir,'backup.json'),snapshot={record_type:'other_product',id:1,product:'ChatGPT',customer_name:'Standalone',email:'',contact:'FB/Zalo',joined_at:'2026-10-13',expires_at:'',payment_status:'paid',amount:100000,note:'Keep note',created_at:'2026-10-13T00:00:00.000Z',plan_months:3};
+  db.prepare('INSERT INTO archived_customers(original_member_id,email,customer_name,family_name,manager_email,snapshot,archived_at,reason) VALUES(?,?,?,?,?,?,?,?)').run(1,'','Standalone','Sản phẩm khác','',JSON.stringify(snapshot),'2026-10-13T01:00:00.000Z','Product archive');db.close();const before=digest(file),result=exportBackup(file,out);assert.equal(result.version,5);assert.deepEqual(JSON.parse(result.tables.archived_customers[0].snapshot),snapshot);assert.equal(digest(file),before);
+  const dest=initDatabase(path.join(dir,'dest'));try{restoreCustomers(dest,result,fail);assert.deepEqual(JSON.parse(dest.prepare('SELECT snapshot FROM archived_customers').get().snapshot),snapshot);}finally{dest.close();}
+ }finally{rmSync(dir,{recursive:true,force:true});}
+});

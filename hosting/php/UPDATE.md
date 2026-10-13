@@ -1,4 +1,8 @@
-# Cập nhật Family lên bản 0.10
+# Cập nhật Family
+
+**Cập nhật mới nhất bằng mã nguồn:** xem [SOURCE-UPDATE.md](SOURCE-UPDATE.md). Người dùng yêu cầu không tạo ZIP; chỉ thay bốn file để có Xóa khỏi lưu trữ và chuyển sản phẩm khác vào lưu trữ. Các bước ZIP dưới đây dành cho bản 0.10 đã phát hành trước thay đổi này.
+
+## Gói ZIP bản 0.10
 
 1. Trong website Family đang chạy, chọn **Sao lưu / Chuyển dữ liệu → Tải file sao lưu**.
 2. Tải [family-hostinger-update.zip](https://github.com/haitiano1/family/raw/refs/heads/main/downloads/family-hostinger-update.zip) và **giải nén trên máy tính**.

@@ -1,7 +1,7 @@
 import {test,before,after,afterEach} from 'node:test';
 import assert from 'node:assert/strict';
 import {execFileSync,spawn} from 'node:child_process';
-import {mkdtempSync,chmodSync,writeFileSync,rmSync,mkdirSync,readFileSync} from 'node:fs';
+import {mkdtempSync,chmodSync,writeFileSync,rmSync,mkdirSync,readFileSync,cpSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {once} from 'node:events';
 import {randomBytes} from 'node:crypto';
@@ -12,7 +12,7 @@ const docker=(...args)=>execFileSync('docker',['--config',process.env.FAMILY_DOC
 const sql=text=>docker('exec','-e','MYSQL_PWD='+password,mysql,'mysql','-h127.0.0.1','-uroot','-N','-e',text);
 const port=name=>JSON.parse(docker('inspect',name))[0].NetworkSettings.Ports['80/tcp'][0].HostPort;
 before(async()=>{
- execFileSync('python3',['scripts/package-php.py'],{cwd:root});
+ if(process.env.FAMILY_PHP_SOURCE_ONLY!=='1')execFileSync('python3',['scripts/package-php.py'],{cwd:root});
  docker('build','-q','-t','family-php-test:8.3','-f','hosting/php/Test.Dockerfile','.');
  docker('run','--rm','-v',root+'/hosting/php:/source:ro','family-php-test:8.3','bash','-o','pipefail','-c',"find /source -type f -name '*.php' ! -name 'config.php' -print0 | xargs -0 -n1 php -l");
  docker('network','create',network);
@@ -31,7 +31,11 @@ afterEach(()=>{
 });
 async function fixture(database){
  const id=++count,name=prefix+'-web'+id,folder=dir+'/site'+id;mkdirSync(folder);chmodSync(dir,0o755);chmodSync(folder,0o755);
- execFileSync('python3',['-c',"import zipfile,sys;zipfile.ZipFile(sys.argv[1]).extractall(sys.argv[2])",root+'/downloads/family-hostinger.zip',folder]);
+ if(process.env.FAMILY_PHP_SOURCE_ONLY==='1'){
+  cpSync(root+'/hosting/php/public_html',folder+'/public_html',{recursive:true});
+  cpSync(root+'/hosting/php/family-private',folder+'/family-private',{recursive:true,filter:source=>path.basename(source)!=='config.php'});
+  cpSync(root+'/public',folder+'/public_html',{recursive:true});cpSync(root+'/domain.js',folder+'/public_html/domain.js');
+ }else execFileSync('python3',['-c',"import zipfile,sys;zipfile.ZipFile(sys.argv[1]).extractall(sys.argv[2])",root+'/downloads/family-hostinger.zip',folder]);
  execFileSync('python3',['-c',"import os,sys;[(os.chmod(b,0o755),[os.chmod(os.path.join(b,f),0o644) for f in fs]) for b,ds,fs in os.walk(sys.argv[1])]",folder]);
  const db=database || 'f_test_'+id;if(!database)sql('CREATE DATABASE '+db+' CHARACTER SET utf8mb4 COLLATE utf8mb4_bin');
  docker('run','-d','--name',name,'--network',network,'-p','127.0.0.1::80','-e','FAMILY_ALLOW_HTTP=1','-v',folder+'/public_html:/var/www/html:ro','-v',folder+'/family-private:/var/www/family-private:ro','family-php-test:8.3');containers.push(name);
@@ -190,7 +194,7 @@ test('PHP snapshots trial/report dates, counts five days and deletes only done c
  const issue=await a('issues','POST',{family_id:family.id,title:'Trial error',reported_on:'1990-01-01',trial_date:'1990-01-01'},201);let row=(await a('state')).issues[0];assert.equal(row.reported_on,current);assert.equal(row.trial_date,trial);assert.equal(row.days_used,5);
  await a('issues/'+issue.id,'DELETE',{revision:0,expected_created_at:row.created_at},400);await a('issues/'+issue.id,'PATCH',{status:'doing',revision:0});
  await a('families/'+family.id,'PATCH',{name:'Trial Family',manager_email:'trial@example.com',trial_date:current});assert.equal((await a('state')).issues[0].days_used,5);
- const backup=await a('backup');assert.equal(backup.version,4);for(const version of [1,2]){const old=structuredClone(backup);old.version=version;for(const r of old.tables.families)delete r.trial_date;for(const r of old.tables.issues){delete r.trial_date;delete r.reported_on;r.created_at='2026-08-14T23:30:00.000Z';}if(version===1){delete old.tables.issues;delete old.tables.audit_events;}const target=await fixture();await target.login();await target.req('restore','POST',old);const state=await target.req('state');assert.equal(state.members[0].contact,'Original Zalo');assert.equal(state.families[0].trial_date,'');if(version===2){assert.equal(state.issues[0].reported_on,'2026-08-15');assert.equal(state.issues[0].days_used,null);}}
+ const backup=await a('backup');assert.equal(backup.version,5);for(const version of [1,2]){const old=structuredClone(backup);old.version=version;for(const r of old.tables.families)delete r.trial_date;for(const r of old.tables.issues){delete r.trial_date;delete r.reported_on;r.created_at='2026-08-14T23:30:00.000Z';}if(version===1){delete old.tables.issues;delete old.tables.audit_events;}const target=await fixture();await target.login();await target.req('restore','POST',old);const state=await target.req('state');assert.equal(state.members[0].contact,'Original Zalo');assert.equal(state.families[0].trial_date,'');if(version===2){assert.equal(state.issues[0].reported_on,'2026-08-15');assert.equal(state.issues[0].days_used,null);}}
  await f.restart();assert.equal((await a('state')).issues[0].days_used,5);
  await a('issues/'+issue.id,'PATCH',{status:'done',revision:1,resolution:'keep'});await a('issues/'+issue.id,'DELETE',{revision:1,expected_created_at:row.created_at},409);await a('issues/'+issue.id,'DELETE',{revision:2,expected_created_at:row.created_at});const state=await a('state');assert.equal(state.issues.length,0);assert.equal(state.families[0].manager_email,'trial@example.com');assert.equal(state.members[0].contact,'Original Zalo');
  const deletion=(await a('journal?search=trial@example.com')).entries.find(e=>e.action==='Xóa lỗi'),detail=await a('journal/audit/'+deletion.id),change=detail.changes.find(c=>c.table==='issues');assert.equal(change.before.trial_date,trial);assert.equal(change.before.reported_on,current);assert.equal(change.after,null);
@@ -242,4 +246,24 @@ test('PHP recent renewals keep the latest successful confirmation for fourteen d
  sql(`UPDATE ${f.db}.renewal_history SET created_at='2026-09-29T12:00:00.000Z'`);
  const check=()=>JSON.parse(docker('exec',f.name,'php','-r',`require '/var/www/family-private/core.php';require '/var/www/family-private/business.php';$db=db(config());echo json_encode(recentRenewals($db,[],[],new DateTimeImmutable('2026-10-13T12:00:00.000Z')));`));assert.equal(check().length,0);
  sql(`UPDATE ${f.db}.renewal_history SET created_at='2026-09-29T12:00:00.001Z'`);assert.equal(check().length,1);
+});
+
+test('PHP archive deletion keeps complete audit/history, rejects stale/restored profiles and rolls back a failed delete',async()=>{
+ const f=await fixture();await f.login();const a=f.req;
+ const family=await a('families','POST',{name:'Archive delete',manager_email:'manager@example.com'},201),member=await a('members','POST',{family_id:family.id,email:'gone@example.com',contact:'Original contact',expires_at:'2026-01-05'},201);await a('members/'+member.id+'/renewal','PATCH',{revision:0,status:'paid',amount:100000,paid_at:'2026-01-15',plan_months:3,apply_now:true});await a('members/'+member.id,'DELETE');const row=(await a('state')).archives[0],guard={expected_archived_at:row.archived_at,expected_email:row.email};
+ const live=await a('members','POST',{family_id:family.id,email:'live@example.com',contact:'Active contact'},201),count=(await a('journal')).total;await a('archives/'+row.id,'DELETE',{},400);await a('archives/'+row.id,'DELETE',{...guard,expected_archived_at:'wrong'},409);assert.equal((await a('journal')).total,count);
+ sql(`CREATE TRIGGER ${f.db}.reject_archive_delete BEFORE DELETE ON ${f.db}.archived_customers FOR EACH ROW SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT='Injected failure'`);await a('archives/'+row.id,'DELETE',guard,500);assert.equal((await a('state')).archives.length,1);assert.equal((await a('backup')).tables.renewal_history[0].archive_id,row.id);assert.equal((await a('journal')).total,count);sql(`DROP TRIGGER ${f.db}.reject_archive_delete`);
+ await a('archives/'+row.id,'DELETE',guard);let state=await a('state');assert.equal(state.archives.length,0);assert.equal(state.members[0].id,live.id);assert.equal(state.members[0].contact,'Active contact');assert.equal(state.recent_renewals[0].archive_id,null);const history=(await a('backup')).tables.renewal_history;assert.equal(history.length,1);assert.equal(history[0].archive_id,null);assert.equal(history[0].paid_at,'2026-01-15');
+ const event=(await a('journal?search=gone@example.com')).entries.find(e=>e.action==='Xóa hồ sơ lưu trữ'),detail=await a('journal/audit/'+event.id),change=detail.changes.find(c=>c.table==='archived_customers');assert.equal(JSON.parse(change.before.snapshot).contact,'Original contact');assert.equal(change.after,null);await a('archives/'+row.id+'/restore','POST',{family_id:family.id},404);await a('archives/'+row.id,'DELETE',guard,404);
+ await a('members/'+live.id,'DELETE');state=await a('state');const restored=state.archives[0];await a('archives/'+restored.id+'/restore','POST',{family_id:family.id});await a('archives/'+restored.id,'DELETE',{expected_archived_at:restored.archived_at,expected_email:restored.email},409);assert.equal((await a('state')).members[0].email,'live@example.com');
+});
+
+test('PHP product deletion archives/restores complete standalone sales, preserves same-ID Family history and survives backup roundtrip',async()=>{
+ const f=await fixture();await f.login();const a=f.req;
+ const p=await a('other-products','POST',{product:'Netflix',customer_name:'Standalone',email:'',contact:'https://zalo.me/example\nContact note',joined_at:'2026-10-13',expires_at:'2027-11-13',plan_months:13,payment_status:'partial',amount:50000,note:'Purchase note'},201);let row=(await a('state')).other_products[0];await a('other-products/'+p.id,'PATCH',{...row,expires_at:''});row=(await a('state')).other_products[0];const {expiry_status,days_left,...saved}=row;
+ const count=(await a('journal')).total;sql(`CREATE TRIGGER ${f.db}.reject_product_archive BEFORE INSERT ON ${f.db}.archived_customers FOR EACH ROW SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT='Injected failure'`);await a('other-products/'+p.id,'DELETE',undefined,500);assert.equal((await a('state')).other_products.length,1);assert.equal((await a('journal')).total,count);sql(`DROP TRIGGER ${f.db}.reject_product_archive`);
+ await a('other-products/'+p.id,'DELETE');let state=await a('state');assert.equal(state.families.length,0);assert.equal(state.other_products.length,0);const archive=state.archives[0];assert.equal(archive.record_type,'other_product');assert.deepEqual(archive.member,{...saved,record_type:'other_product'});
+ const backup=await a('backup');assert.equal(backup.version,5);const target=await fixture();await target.login();await target.req('restore','POST',backup);const restored=await target.req('archives/'+archive.id+'/restore','POST',{});state=await target.req('state');assert.equal(state.families.length,0);const product=state.other_products[0];assert.deepEqual(Object.fromEntries(Object.keys(saved).map(k=>[k,product[k]])),{...saved,id:restored.product_id});assert.equal(state.archives.length,0);await target.req('archives/'+archive.id+'/restore','POST',{},409);
+ const family=await a('families','POST',{name:'Family',manager_email:'family@example.com'},201),member=await a('members','POST',{family_id:family.id,email:'member@example.com',expires_at:'2026-01-05'},201);await a('members/'+member.id+'/renewal','PATCH',{revision:0,status:'paid',amount:100000,paid_at:'2026-01-15',plan_months:3,apply_now:true});const collision=await a('other-products','POST',{product:'Spotify',customer_name:'Separate purchase'},201);sql(`UPDATE ${f.db}.other_purchases SET id=${member.id} WHERE id=${collision.id}`);await a('other-products/'+member.id,'DELETE');const latest=(await a('state')).archives.find(r=>r.member.product==='Spotify');const history=(await a('backup')).tables.renewal_history[0];assert.equal(history.member_id,member.id);assert.equal(history.archive_id,null);await a('archives/'+latest.id+'/restore','POST',{});assert.equal((await a('members/'+member.id+'/renewal-history')).history.length,1);
+ await a('archives/'+archive.id,'DELETE',{expected_archived_at:archive.archived_at,expected_email:archive.email});assert.equal((await a('state')).archives.length,0);
 });

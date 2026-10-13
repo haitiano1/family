@@ -64,7 +64,7 @@ Sau gia hạn, lần tiếp theo trở về Chưa nhắc; lịch sử không m�
 
 Bảng **Chờ fix → Đang fix → Đã fix** hỗ trợ kéo thả, chọn trạng thái và nút Đã fix trên iPhone. Khi hoàn tất, bắt buộc chọn **Giữ nguyên mail** hoặc **Đổi sang mail mới**. Đổi cập nhật đúng hồ sơ quản lý/khách đã báo lỗi trong cùng lần lưu; thẻ Done ghi rõ mail cũ→mới và giữ mail báo lỗi ban đầu. Không đổi ngày mua/hạn/Contact/thanh toán. Mail trùng hoặc hồ sơ đã thay đổi/xóa sẽ không gây cập nhật một phần; trạng thái và đổi mail cùng rollback. Lỗi vẫn được giữ khi Family bị xóa. Thay đổi đồng thời có revision guard, cần tải lại khi có xung đột.
 
-**Nhật ký** tìm kiếm/phân trang, lưu thời gian/người thao tác/nội dung và **Xem chi tiết trước-sau** cho các thay đổi từ bản này. Ghi thêm/sửa/xóa/import/gia hạn/lưu trữ/khôi phục/sửa lỗi/đổi mail; không ghi refresh/xem trang. Khi xóa Family, cả hồ sơ nhóm và khách được chuyển vào lưu trữ; nhật ký ghi thay đổi và hồ sơ khách đã lưu. Log cũ vẫn đọc được; dữ liệu trước-sau không thể tạo lại cho thao tác đã xảy ra trước bản cập nhật. Nhật ký hiện giúp đối chiếu, chưa có hoàn tác tự động. Bản sao lưu v4 giữ cả lỗi/nhật ký/ngày trial, Family lưu trữ và gói sản phẩm phụ; vẫn nhận v1/v2/v3.
+**Nhật ký** tìm kiếm/phân trang, lưu thời gian/người thao tác/nội dung và **Xem chi tiết trước-sau** cho các thay đổi từ bản này. Ghi thêm/sửa/xóa/import/gia hạn/lưu trữ/khôi phục/sửa lỗi/đổi mail; không ghi refresh/xem trang. Khi xóa Family, cả hồ sơ nhóm và khách được chuyển vào lưu trữ; nhật ký ghi thay đổi và hồ sơ khách đã lưu. Log cũ vẫn đọc được; dữ liệu trước-sau không thể tạo lại cho thao tác đã xảy ra trước bản cập nhật. Nhật ký hiện giúp đối chiếu, chưa có hoàn tác tự động. Bản sao lưu v5 giữ cả lỗi/nhật ký/ngày trial, Family lưu trữ, sản phẩm phụ đang bán và lưu trữ; vẫn nhận v1/v2/v3/v4.
 
 Cập nhật Hostinger bằng [gói cập nhật riêng](https://github.com/haitiano1/family/raw/refs/heads/main/downloads/family-hostinger-update.zip) và [hướng dẫn](hosting/php/UPDATE.md), giữ nguyên config.php/database. Không cần nhập lại khách. MySQL nâng cấp1/2→3 bằng thêm bảng/cột; Node schema11 sao lưu trước nâng cấp. Các bản app cũ không dùng được dữ liệu Node schema11; exporter độc lập hỗ trợ đến11.
 
@@ -93,7 +93,7 @@ Mục **Sản phẩm khác** dành cho Netflix, Spotify, Google One, ChatGPT và
 - Bấm **Thêm sản phẩm đã bán**, nhập tên/email khách, Contact, ngày mua, hạn, thanh toán, số tiền và ghi chú. Không cần Family; chỉ cần tên hoặc email khách.
 - Có thể chọn một khách Family để lấy sẵn tên/email/Contact; hồ sơ sản phẩm phụ là bản ghi riêng, không sửa hồ sơ YouTube của khách đó.
 - Để trống hạn nếu sản phẩm không có hạn. Sản phẩm còn 0–2 ngày hoặc đã quá hạn tự xuất hiện ở **Tổng quan** khi mở ứng dụng, với nút **Nhắc hạn** để sao chép tin.
-- Có tìm kiếm, lọc theo hạn, sửa và xóa hồ sơ sản phẩm. Nếu khách mua nhiều sản phẩm, thêm từng bản ghi riêng.
+- Có tìm kiếm, lọc theo hạn và sửa hồ sơ. Xóa hồ sơ sản phẩm sẽ chuyển vào Khách lưu trữ để khôi phục hoặc xóa khỏi lưu trữ. Nếu khách mua nhiều sản phẩm, thêm từng bản ghi riêng.
 - Mục này dùng để lưu thông tin/ghi chú và theo dõi hạn; chưa có luồng thanh toán gia hạn riêng như khách YouTube. Sửa ngày trong form khi gia hạn sản phẩm phụ.
 
 ## Khách lưu trữ
@@ -106,7 +106,7 @@ Thông tin và lịch sử nằm trong `data/family.sqlite`. Có **Xem dữ li�
 
 - Form thêm/sửa khách Family và sản phẩm khác có gói 1/2/3/6/12 tháng. Chọn gói hoặc đổi ngày mua sẽ cập nhật ô ngày hết hạn ngay. Cuối tháng được chốt vào ngày hợp lệ cuối cùng, ví dụ 31/01/2024 + 1 tháng = 29/02/2024. Vẫn có thể sửa hạn thủ công. Mở form sửa không tự đổi hạn cũ; CSV giữ quy tắc không đoán ô trống. Gia hạn YouTube vẫn nối từ hạn cũ, ngày nhận tiền lưu riêng.
 - Family có tìm kiếm và đúng 3 lựa chọn: **Tất cả**, **Fam dư slot**, **Theo tên**. Tất cả xếp ngày trial từ cũ đến mới, ngày chưa nhập ở cuối. Fam dư slot lấy số ở cột Khách đang ghi nhận dưới 5 (kể cả 0), gồm cả hồ sơ đã mời/chưa vào; cùng thứ tự trial. Theo tên xếp giảm dần tự nhiên: Family 48, Family 47, Family 46…
-- **Xóa hồ sơ khách** chuyển khách vào Khách lưu trữ; giữ đầy đủ ghi chú, Contact, ngày mua/hạn, tiền và lịch sử. **Xóa hồ sơ Family** lưu cả nhóm, email quản lý/ngày trial/ghi chú và tất cả khách. Family trống cũng được lưu. Không có thao tác xóa vĩnh viễn hồ sơ này.
+- **Xóa hồ sơ khách** chuyển khách vào Khách lưu trữ; giữ đầy đủ ghi chú, Contact, ngày mua/hạn, tiền và lịch sử. **Xóa hồ sơ Family** lưu cả nhóm, email quản lý/ngày trial/ghi chú và tất cả khách. Family trống cũng được lưu. Xóa từ danh sách hoạt động luôn chuyển vào lưu trữ; thao tác Xóa khỏi lưu trữ được mô tả bên dưới.
 - Trong **Khách lưu trữ → Family lưu trữ → Khôi phục Family**, khôi phục cả nhóm và khách còn lưu trữ cùng lần xóa. Khách đã chuyển sang Family khác không bị tạo trùng. Có thể khôi phục từng khách vào Family đang hoạt động. Email quản lý của Family lưu trữ vẫn thuộc hồ sơ đó; hãy khôi phục Family trước khi sử dụng lại email cho nhóm này. Case lỗi giữ liên kết sau khôi phục và mọi thao tác có nhật ký.
 - Sản phẩm khác hiện gói tháng, copy tên sản phẩm/tên khách/email/Contact/ngày mua/hạn/ghi chú. Contact là link bấm mở khi có URL, còn nội dung gốc vẫn được copy đầy đủ. Nhắc hạn ở Tổng quan vẫn áp dụng cho sản phẩm phụ.
 
@@ -117,6 +117,16 @@ Trong **Khách lưu trữ** có thêm mục **Khách vừa gia hạn · 14 ngày
 Thời gian 14 ngày tính từ **lúc xác nhận gia hạn thành công trên ứng dụng**, đủ 14 × 24 giờ, không lấy ngày mua, ngày hết hạn cũ hay ngày nhận tiền. Chỉ mở hộp thoại Gia hạn hoặc ghi nhận Chờ tiền/Trả một phần/Đã trả tiền nhưng chưa xác nhận hạn mới chưa đưa khách vào mục này. Khách trả tiền muộn vẫn được ghi nhận từ lúc thao tác; kỳ sử dụng mới vẫn nối từ hạn cũ theo quy tắc hiện có.
 
 Sau 14 ngày, bản ghi tự rời **Khách vừa gia hạn** khi trang cập nhật (tự làm mới mỗi 10 giây khi đang xem). **Hồ sơ khách hoạt động, Family, Contact, hạn, thanh toán, lịch sử gia hạn và nhật ký được giữ**, không tự chuyển khách sang lưu trữ theo mốc này. Danh sách được tính lại từ các lần gia hạn thành công nên không cần cron riêng hoặc thay database; lịch sử cũ trong 14 ngày gần nhất cũng xuất hiện sau cập nhật. Backup/khôi phục hiện có giữ mốc này qua lịch sử gia hạn.
+
+## Cập nhật trực tiếp: xóa lưu trữ và lưu trữ sản phẩm khác
+
+**Khách lưu trữ** có nút **Xóa khỏi lưu trữ** cạnh Xem dữ liệu/Khôi phục. Hộp xác nhận nêu rõ hồ sơ bị bỏ khỏi danh sách và không còn khôi phục bằng nút Khôi phục. Nhật ký giữ bản trước xóa; lịch sử gia hạn vẫn được giữ để đối chiếu. Xóa không tác động đến khách hoạt động. Hồ sơ đã được khôi phục hoặc danh sách cũ không bị xóa nhầm. Family lưu trữ chỉ khôi phục những khách còn lưu trữ, không tạo lại hồ sơ đã chọn Xóa khỏi lưu trữ.
+
+**Sản phẩm khác → Xóa** chuyển toàn bộ hồ sơ vào Khách lưu trữ, giữ tên sản phẩm, tên/email khách, Contact, gói, ngày mua/hạn, thanh toán, số tiền, ghi chú và thời điểm tạo. Xem dữ liệu hỗ trợ đúng hồ sơ sản phẩm; Khôi phục đưa lại vào Sản phẩm khác, không cần Family và không đổi hạn. Có thể Xóa khỏi lưu trữ như hồ sơ khách Family. Hồ sơ khách Family/lịch sử có trùng số ID nội bộ vẫn được giữ nguyên. Mục Khách vừa gia hạn tiếp tục là danh sách xem 14 ngày, không tự lưu trữ/xóa khách hoạt động.
+
+Người dùng yêu cầu cập nhật bằng mã nguồn, **không tạo lại ZIP** cho thay đổi này. Trong hPanel, thay đúng 4 file trên website đang chạy: `family-private/business.php`, `family-private/audit.php`, `public_html/api.php`, `public_html/app.js` (nguồn file cuối là `public/app.js`). Xem [SOURCE-UPDATE.md](hosting/php/SOURCE-UPDATE.md) để sao chép nội dung và cập nhật. Không thay config.php/database, không nhập lại khách. Các ZIP hiện có vẫn là bản trước cập nhật trực tiếp này. Backup v5 phân biệt hồ sơ sản phẩm lưu trữ với khách Family; mã mới nhận cả v1–v4, bản cũ không nhận v5. Exporter mã nguồn cũng xuất v5; gói helper ZIP chưa được tạo lại.
+
+Kiểm tra PHP trực tiếp từ mã nguồn, không tạo ZIP: `FAMILY_PHP_SOURCE_ONLY=1 npm run test:php`. Chế độ này chép nguồn PHP/frontend vào các fixture riêng, bỏ config.php thật; không đụng database/config đang dùng. Chạy `npm run test:php` không có biến này vẫn kiểm tra luồng đóng gói khi cần.
 
 ## Nhập Google Sheets CSV
 

@@ -1,10 +1,10 @@
 const baseTables=['accounts','families','members','archived_customers','renewal_history','other_purchases','logs'];
 const tables=[...baseTables,'issues','audit_events'];
 export function customerBackup(db) {
-  return {format:'family-customer-backup',version:4,created_at:new Date().toISOString(),tables:Object.fromEntries(tables.map(name=>[name,db.prepare(`SELECT * FROM ${name} ORDER BY id`).all()]))};
+  return {format:'family-customer-backup',version:5,created_at:new Date().toISOString(),tables:Object.fromEntries(tables.map(name=>[name,db.prepare(`SELECT * FROM ${name} ORDER BY id`).all()]))};
 }
 export function restoreCustomers(db,data,fail) {
-  if (data.format!=='family-customer-backup' || ![1,2,3,4].includes(data.version) || !data.tables || (data.version===1?baseTables:tables).some(name=>!Array.isArray(data.tables[name]))) fail('File sao lưu khách hàng không hợp lệ.');
+  if (data.format!=='family-customer-backup' || ![1,2,3,4,5].includes(data.version) || !data.tables || (data.version===1?baseTables:tables).some(name=>!Array.isArray(data.tables[name]))) fail('File sao lưu khách hàng không hợp lệ.');
   if(data.version===1)data={...data,tables:{...data.tables,issues:data.tables.issues||[],audit_events:data.tables.audit_events||[]}};
   if (tables.filter(t=>!['logs','audit_events'].includes(t)).some(t=>db.prepare(`SELECT COUNT(*) AS n FROM ${t}`).get().n)) fail('Chỉ khôi phục vào ứng dụng đang trống để không ghi đè dữ liệu hiện có.',409);
   db.exec('SAVEPOINT backup_restore');

@@ -12,6 +12,15 @@ export function initArchive(db, { fail, log }) {
     if(!m)fail('Không tìm thấy khách.',404);
     return {ok:true,archived:true,archive_id:move(m,'Chọn Xóa hồ sơ khách.')};
   }
+  function removeProduct(id,user) {
+    const p=db.prepare('SELECT * FROM other_purchases WHERE id=?').get(id);if(!p)fail('Không tìm thấy sản phẩm.',404);
+    db.exec('SAVEPOINT archive_product');try{
+      const record=db.prepare('INSERT INTO archived_customers(original_member_id,email,customer_name,family_name,manager_email,snapshot,archived_at,reason) VALUES (?,?,?,?,?,?,?,?)').run(p.id,p.email,p.customer_name,'Sản phẩm khác','',JSON.stringify({...p,record_type:'other_product'}),new Date().toISOString(),'Chọn Xóa hồ sơ sản phẩm khác.');
+      db.prepare('DELETE FROM other_purchases WHERE id=?').run(id);
+      log(`${user.username}: chuyển sản phẩm ${p.product} #${id} vào lưu trữ #${record.lastInsertRowid}; giữ hồ sơ khách và hạn`);
+      db.exec('RELEASE archive_product');return {ok:true,archived:true,archive_id:Number(record.lastInsertRowid)};
+    }catch(error){db.exec('ROLLBACK TO archive_product; RELEASE archive_product');throw error;}
+  }
   function removeFamily(id) {
     const f=db.prepare('SELECT * FROM families WHERE id=?').get(id);if(!f)fail('Không tìm thấy Family.',404);if(f.archived_at)fail('Family đã được lưu trữ.',409);
     db.exec('SAVEPOINT archive_family');try{
@@ -45,8 +54,21 @@ export function initArchive(db, { fail, log }) {
   function list() {
     return db.prepare('SELECT * FROM archived_customers WHERE restored_at IS NULL ORDER BY id DESC').all().map(r => {
       const m = JSON.parse(r.snapshot);
-      return { id:r.id,email:r.email,customer_name:r.customer_name,family_name:r.family_name,manager_email:r.manager_email,archived_at:r.archived_at,reason:r.reason,member:m };
+      return { id:r.id,email:r.email,customer_name:r.customer_name,family_name:r.family_name,manager_email:r.manager_email,archived_at:r.archived_at,reason:r.reason,record_type:m.record_type||'member',member:m };
     });
+  }
+  function remove(id,data,user) {
+    const row=db.prepare('SELECT * FROM archived_customers WHERE id=?').get(id);
+    if(!row)fail('Không tìm thấy khách lưu trữ.',404);
+    if(row.restored_at)fail('Khách đã được khôi phục. Tải lại danh sách trước khi xóa.',409);
+    if(typeof data.expected_archived_at!=='string'||typeof data.expected_email!=='string')fail('Thiếu thông tin xác nhận hồ sơ cần xóa. Tải lại danh sách.');
+    if(data.expected_archived_at!==row.archived_at||data.expected_email!==row.email)fail('Hồ sơ lưu trữ đã thay đổi. Tải lại danh sách trước khi xóa.',409);
+    db.exec('SAVEPOINT archive_delete');try{
+      db.prepare('UPDATE renewal_history SET archive_id=NULL WHERE archive_id=?').run(id);
+      db.prepare('DELETE FROM archived_customers WHERE id=?').run(id);
+      log(`${user.username}: xóa khách lưu trữ #${id} (${row.email}); giữ lịch sử gia hạn và nhật ký trước xóa`);
+      db.exec('RELEASE archive_delete');return {ok:true};
+    }catch(error){db.exec('ROLLBACK TO archive_delete; RELEASE archive_delete');throw error;}
   }
   function restore(id, familyId, user,wholeFamily=false) {
     db.exec('SAVEPOINT archive_save');
@@ -54,6 +76,12 @@ export function initArchive(db, { fail, log }) {
       const row = db.prepare('SELECT * FROM archived_customers WHERE id=?').get(id);
       if (!row) fail('Không tìm thấy khách lưu trữ.',404); if (row.restored_at) fail('Khách đã được khôi phục.',409);
       const m = JSON.parse(row.snapshot);
+      if(m.record_type==='other_product'){
+        const restoredId=Number(db.prepare('INSERT INTO other_purchases(product,customer_name,email,contact,joined_at,expires_at,payment_status,amount,note,created_at,plan_months) VALUES (?,?,?,?,?,?,?,?,?,?,?)').run(m.product,m.customer_name,m.email,m.contact,m.joined_at,m.expires_at,m.payment_status,m.amount,m.note,m.created_at,m.plan_months||0).lastInsertRowid);
+        db.prepare('UPDATE archived_customers SET restored_at=?,restored_by=?,restored_member_id=? WHERE id=?').run(new Date().toISOString(),user.username,restoredId,id);
+        log(`${user.username}: khôi phục sản phẩm lưu trữ #${id} vào Sản phẩm khác #${restoredId}`);
+        db.exec('RELEASE archive_save');return {ok:true,product_id:restoredId};
+      }
       const family = db.prepare("SELECT f.*,a.email FROM families f JOIN accounts a ON a.id=f.manager_id WHERE f.id=? AND f.archived_at=''").get(Number(familyId));
       if (!family) fail('Chọn Family đang tồn tại để khôi phục.');
       if (family.email === m.email) fail('Email khách trùng tài khoản quản lý.');
@@ -68,5 +96,5 @@ export function initArchive(db, { fail, log }) {
       db.exec('RELEASE archive_save'); return { ok:true,member_id:restoredId };
     } catch (error) { db.exec('ROLLBACK TO archive_save; RELEASE archive_save'); throw error; }
   }
-  return { sweep,list,restore,removeMember,removeFamily,familyList,restoreFamily,mode:'immediate' };
+  return { sweep,list,restore,remove,removeMember,removeProduct,removeFamily,familyList,restoreFamily,mode:'immediate' };
 }

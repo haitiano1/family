@@ -34,10 +34,10 @@ function exportBackup(databaseFile, outputFile) {
       if (!m || typeof m!=='object' || Array.isArray(m)) throw new Error('An archived customer snapshot is invalid. No export was written.');
       // Preserve all original snapshot fields; add only absent fields needed by older installations.
       let changed=false;
-      for (const [field,value] of Object.entries(defaults.members)) if (!Object.hasOwn(m,field)) {m[field]=value;changed=true;}
+      for (const [field,value] of Object.entries(m.record_type==='other_product'?defaults.other_purchases:defaults.members)) if (!Object.hasOwn(m,field)) {m[field]=value;changed=true;}
       if (changed) row.snapshot=JSON.stringify(m);
     }
-    const result={format:'family-customer-backup',version:4,created_at:new Date().toISOString(),tables};
+    const result={format:'family-customer-backup',version:5,created_at:new Date().toISOString(),tables};
     db.exec('COMMIT');
     writeFileSync(outputFile,JSON.stringify(result),{flag:'wx',mode:0o600});
     return result;

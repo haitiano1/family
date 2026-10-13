@@ -35,13 +35,14 @@ try {
     if(preg_match('~^/api/members/(\d+)/renewal(/apply)?$~D',$route,$p)&&$method===(isset($p[2])?'POST':'PATCH'))reply(renew($db,(int)$p[1],body(),isset($p[2])));
     if(preg_match('~^/api/members/(\d+)/renewal-history$~D',$route,$p)&&$method==='GET'){if(!one($db,'SELECT id FROM members WHERE id=?',[(int)$p[1]]))fail('Không tìm thấy khách.',404);reply(['history'=>all($db,'SELECT * FROM renewal_history WHERE member_id=? ORDER BY id DESC',[(int)$p[1]])]);}
     if(preg_match('~^/api/archived-families/(\d+)/restore$~D',$route,$p)&&$method==='POST')reply(restoreFamily($db,(int)$p[1]));
+    if(preg_match('~^/api/archives/(\d+)$~D',$route,$p)&&$method==='DELETE')reply(deleteArchive($db,(int)$p[1],body()));
     if(preg_match('~^/api/archives/(\d+)/restore$~D',$route,$p)&&$method==='POST')reply(restoreArchive($db,(int)$p[1],body()));
     if(preg_match('~^/api/archives/(\d+)/history$~D',$route,$p)&&$method==='GET')reply(['history'=>all($db,'SELECT * FROM renewal_history WHERE archive_id=? ORDER BY id DESC',[(int)$p[1]])]);
     if(preg_match('~^/api/other-products(?:/(\d+))?$~D',$route,$p)&&in_array($method,['POST','PATCH','DELETE'],true)){
         $id=isset($p[1])?(int)$p[1]:null;
         if($method==='POST'&&!$id)reply(saveProduct($db,null,body()),201);
         if($method==='PATCH'&&$id)reply(saveProduct($db,$id,body()));
-        if($method==='DELETE'&&$id){if(!one($db,'SELECT id FROM other_purchases WHERE id=?',[$id]))fail('Không tìm thấy sản phẩm.',404);q($db,'DELETE FROM other_purchases WHERE id=?',[$id]);logEntry($db,"Cá nhân: xóa sản phẩm khác #$id");reply(['ok'=>true]);}
+        if($method==='DELETE'&&$id)reply(archiveProduct($db,$id));
     }
     if(preg_match('~^/api/accounts(?:/(\d+))?$~D',$route,$p)&&in_array($method,['POST','PATCH'],true)){
         $d=body();$address=email($d['email']??'');$note=text($d['note']??'');$id=isset($p[1])?(int)$p[1]:null;
