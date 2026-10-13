@@ -1,19 +1,12 @@
-import { today } from './domain.js';
-export function archiveDue(m, current = today(), mode = 'expiry') {
-  if (m.renewal_status !== 'declined') return false;
-  const selected = m.declined_at;
-  const selectedDay = selected && Number.isFinite(Date.parse(selected)) ? (/^\d{4}-\d{2}-\d{2}$/.test(selected) ? selected : today(new Date(selected))) : '';
-  const base = mode === 'declined' ? selectedDay : m.expires_at;
-  return Boolean(base && (Date.parse(current)-Date.parse(base))/86400000 >= 7);
-}
-export function initArchive(db, { fail, log, mode = 'expiry' }) {
-  function sweep(current = today()) {
+export function archiveDue(m) {return m.renewal_status==='declined';}
+export function initArchive(db, { fail, log }) {
+  function sweep() {
     db.exec('SAVEPOINT archive_save');
     try {
-      const members = db.prepare('SELECT m.*,f.name AS family_name,f.service,a.email AS manager_email FROM members m JOIN families f ON f.id=m.family_id JOIN accounts a ON a.id=f.manager_id').all().filter(m => archiveDue(m,current,mode));
+      const members = db.prepare('SELECT m.*,f.name AS family_name,f.service,a.email AS manager_email FROM members m JOIN families f ON f.id=m.family_id JOIN accounts a ON a.id=f.manager_id').all().filter(archiveDue);
       for (const m of members) {
         const stamp = new Date().toISOString();
-        const result = db.prepare('INSERT INTO archived_customers(original_member_id,email,customer_name,family_name,manager_email,snapshot,archived_at,reason) VALUES (?,?,?,?,?,?,?,?)').run(m.id,m.email,m.customer_name,m.family_name,m.manager_email,JSON.stringify(m),stamp,mode === 'expiry' ? 'Không gia hạn, quá hạn đủ 7 ngày.' : 'Không gia hạn, đã chọn đủ 7 ngày.');
+        const result = db.prepare('INSERT INTO archived_customers(original_member_id,email,customer_name,family_name,manager_email,snapshot,archived_at,reason) VALUES (?,?,?,?,?,?,?,?)').run(m.id,m.email,m.customer_name,m.family_name,m.manager_email,JSON.stringify(m),stamp,'Khách chọn Không gia hạn.');
         const archiveId = Number(result.lastInsertRowid);
         db.prepare('UPDATE renewal_history SET archive_id=? WHERE member_id=?').run(archiveId,m.id);
         db.prepare('DELETE FROM members WHERE id=?').run(m.id);
@@ -46,5 +39,5 @@ export function initArchive(db, { fail, log, mode = 'expiry' }) {
       db.exec('RELEASE archive_save'); return { ok:true,member_id:restoredId };
     } catch (error) { db.exec('ROLLBACK TO archive_save; RELEASE archive_save'); throw error; }
   }
-  return { sweep,list,restore,mode };
+  return { sweep,list,restore,mode:'immediate' };
 }

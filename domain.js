@@ -9,6 +9,12 @@ export function expiry(value, current = today()) {
   return { expiry_status: days < 0 ? 'expired' : days <= 2 ? 'due_soon' : 'active', days_left: days };
 }
 export const services = ['google_one', 'google_ai', 'youtube', 'other'];
+export function isPendingPayment(member) {
+  return !['paid','declined'].includes(member.renewal_status) && (['awaiting_payment','partial'].includes(member.renewal_status) || member.expiry_status==='expired');
+}
+export function sortCustomers(members) {
+  return [...members].sort((a,b)=>(a.expires_at||'9999-99-99').localeCompare(b.expires_at||'9999-99-99') || a.id-b.id);
+}
 // Calendar days elapsed at the report date; the first day is day zero.
 export function trialUsageDays(trialDate, reportedOn) {
   if (![trialDate,reportedOn].every(value=>typeof value==='string'&&/^\d{4}-\d{2}-\d{2}$/.test(value)&&Number.isFinite(Date.parse(value))&&new Date(value).toISOString().slice(0,10)===value)) return null;

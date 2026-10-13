@@ -1,4 +1,4 @@
-# YouTube Family — Quản lý khách hàng 0.7
+# YouTube Family — Quản lý khách hàng 0.8
 
 Ứng dụng quản lý cho cá nhân: **mở web là vào Tổng quan**, không cần tài khoản đăng nhập. Tập trung quản lý khách YouTube, Family, gia hạn và sản phẩm bán thêm. Không còn các mục admin, bảo mật tài khoản, Jobs hoặc thao tác Google. Có bản **PHP + MySQL dành cho Hostinger Premium** và bản Node.js chạy Windows/VPS. Có thể thêm biểu tượng vào màn hình chính iPhone; xem [hướng dẫn Hostinger](HOSTINGER.md). Bản hosting dùng một mật khẩu truy cập chung, không có tài khoản/role admin.
 
@@ -68,6 +68,16 @@ Bảng **Chờ fix → Đang fix → Đã fix** hỗ trợ kéo thả, chọn tr
 
 Cập nhật Hostinger bằng [gói cập nhật riêng](https://github.com/haitiano1/family/raw/refs/heads/main/downloads/family-hostinger-update.zip) và [hướng dẫn](hosting/php/UPDATE.md), giữ nguyên config.php/database. Không cần nhập lại khách. MySQL nâng cấp1/2→3 bằng thêm bảng/cột; Node schema11 sao lưu trước nâng cấp. Các bản app cũ không dùng được dữ liệu Node schema11; exporter độc lập hỗ trợ đến11.
 
+## Bộ lọc và thao tác khách (bản0.8)
+
+Danh sách khách ở Tổng quan và Khách & Gia hạn chỉ còn **Tất cả khách**, **Sắp hết hạn**, **Chờ thanh toán (Confirmed)**. Sắp hết hạn giữ mốc0–2ngày. Confirmed gộp khách chờ tiền/trả một phần với khách quá hạn; không tính trùng và không đưa khách đã ghi nhận thanh toán đủ gia hạn vào nhóm chờ tiền. Đây là cách nhóm danh sách, không tự thay đổi trạng thái xác nhận/thanh toán đã lưu. Khách chưa đặt hạn vẫn có trong Tất cả khách.
+
+Danh sách xếp ngày hết hạn tăng dần: khách quá hạn/hạn gần lên trước, còn nhiều ngày xuống sau, chưa đặt hạn cuối danh sách. Thẻ tổng quan Đã quá hạn được thay bằng Chờ thanh toán (Confirmed); sản phẩm khác giữ nhắc hạn riêng.
+
+Tên, email và Contact có icon **Sao chép** riêng. Copy lấy đúng nội dung đã hiển thị, giữ cả xuống dòng/ghi chú; lỗi quyền clipboard có ô chọn để copy thủ công. Contact có URL HTTP/HTTPS/Facebook/Zalo hiện thẻ liên kết mở tab mới, giữ nguyên ghi chú và số điện thoại ở dạng văn bản. Không biến javascript/data hoặc ghi chú tùy ý thành liên kết. Các thao tác copy không sửa hồ sơ khách. Thông tin ở Khách lưu trữ cũng có copy/liên kết.
+
+Không gia hạn chuyển ngay vào lưu trữ, cùng transaction với lưu trạng thái và nhật ký. Lỗi lưu trữ rollback cả lần lưu; không xóa hồ sơ một phần. Case lỗi cũ của khách lưu trữ không được đổi nhầm mail của khách mới khi một ID nội bộ được sử dụng lại.
+
 ## Ngày trial và case đã fix (bản0.7)
 
 Trong **Family → Sửa → Ngày trial**, tự nhập ngày bắt đầu trial của mail quản lý; cột Ngày trial và trang chi tiết Family hiển thị ngày này. Không suy ra từ ngày mua/hạn của khách. Để trống nếu chưa biết; sửa hồ sơ mà không gửi trial_date qua API giữ nguyên ngày đã nhập, gửi chuỗi rỗng để bỏ ngày.
@@ -88,7 +98,7 @@ Mục **Sản phẩm khác** dành cho Netflix, Spotify, Google One, ChatGPT và
 
 ## Khách lưu trữ
 
-Khách chọn **Không gia hạn** được chuyển vào **Khách lưu trữ** sau 7 ngày lịch tính từ ngày chọn theo giờ Việt Nam. Đổi trạng thái trước đó sẽ hủy lịch chuyển. Ứng dụng kiểm tra khi mở, tải dữ liệu và mỗi phút khi chạy; nếu đóng, xử lý bù khi mở lại.
+Khách chọn **Không gia hạn** được chuyển vào **Khách lưu trữ ngay trong lần lưu trạng thái**, giữ hồ sơ, Contact và lịch sử gia hạn. Giao diện tự mở Khách lưu trữ sau khi lưu thành công. Bản0.8 thay chính sách chờ7ngày của bản cũ; các hồ sơ đã chọn Không gia hạn từ trước được chuyển khi mở lại/tải dữ liệu. Khách chỉ quá hạn mà chưa chọn Không gia hạn vẫn nằm trong danh sách hoạt động.
 
 Thông tin và lịch sử nằm trong `data/family.sqlite`. Có **Xem dữ liệu** và **Khôi phục** vào Family còn chỗ. Sau khôi phục, trạng thái gia hạn về Chưa nhắc; hạn, thanh toán, Contact và lịch sử được giữ. Sản phẩm phụ không tự lưu trữ theo quy tắc này.
 

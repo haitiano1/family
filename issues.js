@@ -1,7 +1,7 @@
 import {today,trialUsageDays} from './domain.js';
 export function initIssues(db,{fail,text,email,log}) {
   const one=(sql,...args)=>db.prepare(sql).get(...args),run=(sql,...args)=>db.prepare(sql).run(...args);
-  function target(issue){if(!issue.family_id)return null;const f=one('SELECT * FROM families WHERE id=?',issue.family_id);if(!f)return null;if(issue.target_type==='manager')return f.manager_id===issue.target_id ? one('SELECT * FROM accounts WHERE id=?',issue.target_id):null;const m=one('SELECT * FROM members WHERE id=?',issue.target_id);return m?.family_id===f.id ? m:null;}
+  function target(issue){if(!issue.family_id)return null;const f=one('SELECT * FROM families WHERE id=?',issue.family_id);if(!f)return null;if(issue.target_type==='manager'){const a=f.manager_id===issue.target_id?one('SELECT * FROM accounts WHERE id=?',issue.target_id):null;return a?.email===issue.subject_email?a:null;}const m=one('SELECT * FROM members WHERE id=?',issue.target_id);return m?.family_id===f.id&&m.email===issue.subject_email ? m:null;}
   function save(id,data){
     const old=id?one('SELECT * FROM issues WHERE id=?',id):null;if(id&&!old)fail('Không tìm thấy lỗi.',404);
     if(old&&(!Number.isInteger(data.revision)||data.revision!==old.revision))fail('Lỗi đã thay đổi. Tải lại rồi thử lại.',409);

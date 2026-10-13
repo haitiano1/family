@@ -69,11 +69,13 @@ Mở website bằng **Safari → Chia sẻ → Thêm vào Màn hình chính → 
 
 Cần Internet để dùng. Nhắc hạn0–2ngày theo giờ Việt Nam hiển thị trong Tổng quan khi mở app; có mẫu tin để tự gửi Zalo/Facebook, chưa có thông báo đẩy. Các sản phẩm phụ có hạn cũng được nhắc trên Tổng quan.
 
-Gia hạn YouTube luôn nối từ hạn cũ, kể cả trả muộn. Khách chọn Không gia hạn chuyển vào lưu trữ sau7ngày lịch từ ngày chọn. Bản PHP kiểm tra khi tải dữ liệu/mở ứng dụng (tự xử lý bù). Để kiểm tra lưu trữ cả khi không mở ứng dụng, có thể thiết lập **Advanced → Cron Jobs**, chọn PHP và đường dẫn đầy đủ tới `family-private/cron.php`; chạy mỗi ngày hoặc mỗi giờ theo tùy chọn hPanel. Cron cần PHP8.2+ và chỉ báo kết quả, không in dữ liệu khách/mật khẩu.
+Gia hạn YouTube luôn nối từ hạn cũ, kể cả trả muộn. Khách chọn Không gia hạn chuyển vào Khách lưu trữ ngay khi lưu trạng thái, giữ thông tin/lịch sử. Hồ sơ Không gia hạn đang chờ từ bản cũ được xử lý bù khi mở ứng dụng. Bản PHP kiểm tra khi tải dữ liệu/mở ứng dụng (tự xử lý bù). Để kiểm tra lưu trữ cả khi không mở ứng dụng, có thể thiết lập **Advanced → Cron Jobs**, chọn PHP và đường dẫn đầy đủ tới `family-private/cron.php`; chạy mỗi ngày hoặc mỗi giờ theo tùy chọn hPanel. Cron cần PHP8.2+ và chỉ báo kết quả, không in dữ liệu khách/mật khẩu.
 
 ## 6. Cập nhật và sao lưu
 
-Bản0.7 giữ tìm kiếm Family, Báo lỗi, bảng Chờ fix/Đang fix/Đã fix và Nhật ký trước/sau. Khi Đã fix, chọn Giữ nguyên hoặc Đổi mail; việc đổi đúng mail quản lý/khách và hoàn tất lỗi được lưu trong cùng transaction. Mail ban đầu và nội dung “Đã đổi từ A sang B” được giữ, các ngày/Contact/thanh toán của khách không bị thay đổi. Có chọn trạng thái trên thẻ để dùng iPhone, không bắt buộc kéo thả.
+Bản0.8 rút bộ lọc khách còn Tất cả khách/Sắp hết hạn/Chờ thanh toán (Confirmed), gộp quá hạn chưa nhận đủ tiền gia hạn vào Confirmed và xếp hạn gần trước/hạn trống cuối. Mỗi tên/email/Contact có icon copy; Contact có link bấm mở được, ghi chú/số điện thoại giữ nguyên. Không gia hạn chuyển ngay vào Khách lưu trữ sau khi lưu, không chờ7ngày. Khôi phục hồ sơ/lịch sử vẫn có trong Khách lưu trữ.
+
+Bản0.8 giữ tìm kiếm Family, Báo lỗi, bảng Chờ fix/Đang fix/Đã fix và Nhật ký trước/sau. Khi Đã fix, chọn Giữ nguyên hoặc Đổi mail; việc đổi đúng mail quản lý/khách và hoàn tất lỗi được lưu trong cùng transaction. Mail ban đầu và nội dung “Đã đổi từ A sang B” được giữ, các ngày/Contact/thanh toán của khách không bị thay đổi. Có chọn trạng thái trên thẻ để dùng iPhone, không bắt buộc kéo thả.
 
 Bản0.7 thêm Ngày trial trong Family → Sửa, tự lưu Ngày lỗi khi báo lỗi theo giờ Việt Nam và số ngày sử dụng (10/08→15/08 =5 ngày). Ngày trial lấy từ hồ sơ Family tại thời điểm báo, không đổi lại cho case cũ khi sửa Family. Case Đã fix có Xóa case và nhật ký giữ dữ liệu trước xóa. Chữ trên điện thoại được tăng cỡ.
 

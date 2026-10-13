@@ -14,6 +14,7 @@ const port=name=>JSON.parse(docker('inspect',name))[0].NetworkSettings.Ports['80
 before(async()=>{
  execFileSync('python3',['scripts/package-php.py'],{cwd:root});
  docker('build','-q','-t','family-php-test:8.3','-f','hosting/php/Test.Dockerfile','.');
+ docker('run','--rm','-v',root+'/hosting/php:/source:ro','family-php-test:8.3','bash','-o','pipefail','-c',"find /source -type f -name '*.php' ! -name 'config.php' -print0 | xargs -0 -n1 php -l");
  docker('network','create',network);
  docker('run','-d','--name',mysql,'--network',network,'-e','MYSQL_ROOT_PASSWORD='+password,'-e','MYSQL_ROOT_HOST=%','mysql:8.4');
  let ready=false;for(let i=0;i<150;i++){try{sql('SELECT 1');ready=true;break;}catch{await new Promise(r=>setTimeout(r,200));}}
@@ -81,16 +82,19 @@ test('PHP enforces occupied capacity while retaining invitation records and prot
  assert.equal((await a('state')).families.find(x=>x.id===second.id).manager_email,'second@example.com');
 });
 
-test('PHP archives declined customers after selection plus seven days and restores history/contact',async()=>{
+test('PHP immediately archives declined customers in the renewal transaction and restores history/contact',async()=>{
  const f=await fixture();await f.login();const a=f.req;
  const family=await a('families','POST',{name:'Family',manager_email:'manager@example.com'},201);
  const member=await a('members','POST',{family_id:family.id,email:'guest@example.com',contact:'Zalo archive',expires_at:'2026-01-05'},201);
+ const issue=await a('issues','POST',{family_id:family.id,target_type:'member',target_id:member.id,title:'Before cancellation'},201);
  await a('members/'+member.id+'/renewal','PATCH',{revision:0,status:'paid',amount:100000,paid_at:'2026-01-15',plan_months:3,apply_now:true});
- await a('members/'+member.id+'/renewal','PATCH',{revision:1,status:'declined'});assert.equal((await a('state')).archives.length,0);
- sql(`UPDATE ${f.db}.members SET declined_at='2020-01-01T00:00:00.000Z' WHERE id=${member.id}`);assert.match(docker('exec',f.name,'php','/var/www/family-private/cron.php'),/archive check complete/);assert.equal(sql(`SELECT COUNT(*) FROM ${f.db}.archived_customers`),'1');const state=await a('state');assert.equal(state.members.length,0);assert.equal(state.archives[0].member.contact,'Zalo archive');
+ const count=(await a('journal')).total;sql(`CREATE TRIGGER ${f.db}.reject_archive BEFORE INSERT ON ${f.db}.archived_customers FOR EACH ROW SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT='Injected archive write failure'`);await a('members/'+member.id+'/renewal','PATCH',{revision:1,status:'declined'},500);assert.equal((await a('state')).members[0].renewal_status,'not_contacted');assert.equal((await a('state')).archives.length,0);assert.equal((await a('journal')).total,count);sql(`DROP TRIGGER ${f.db}.reject_archive`);
+ const result=await a('members/'+member.id+'/renewal','PATCH',{revision:1,status:'declined'});assert.equal(result.archived,true);assert.equal(sql(`SELECT COUNT(*) FROM ${f.db}.members`),'0');assert.equal(sql(`SELECT COUNT(*) FROM ${f.db}.archived_customers`),'1');const state=await a('state');assert.equal(state.members.length,0);assert.equal(state.archives[0].id,result.archive_id);assert.equal(state.archives[0].member.contact,'Zalo archive');
  const archived=state.archives[0];assert.equal((await a('archives/'+archived.id+'/history')).history.length,1);
+ sql(`ALTER TABLE ${f.db}.members AUTO_INCREMENT=${member.id}`);const replacement=await a('members','POST',{family_id:family.id,email:'different@example.com',expires_at:'2027-01-01'},201);assert.equal(replacement.id,member.id);assert.equal((await a('state')).issues[0].target_available,false);await a('issues/'+issue.id,'PATCH',{status:'done',revision:0,resolution:'replace',replacement_email:'wrong@example.com'},409);assert.equal((await a('state')).members[0].email,'different@example.com');
  const restored=await a('archives/'+archived.id+'/restore','POST',{family_id:family.id});assert.equal((await a('members/'+restored.member_id+'/renewal-history')).history.length,1);assert.equal((await a('state')).members[0].renewal_status,'not_contacted');
  await a('archives/'+archived.id+'/restore','POST',{family_id:family.id},409);
+ sql(`UPDATE ${f.db}.members SET renewal_status='declined',declined_at='' WHERE id=${restored.member_id}`);assert.match(docker('exec',f.name,'php','/var/www/family-private/cron.php'),/archive check complete/);assert.equal(sql(`SELECT COUNT(*) FROM ${f.db}.members`),'1');assert.equal(sql(`SELECT COUNT(*) FROM ${f.db}.archived_customers WHERE restored_at IS NULL`),'1');
 });
 
 test('PHP products use two-day Vietnam reminders and backup restores exactly into another empty app',async()=>{
@@ -188,4 +192,12 @@ test('PHP snapshots trial/report dates, counts five days and deletes only done c
  const deletion=(await a('journal?search=trial@example.com')).entries.find(e=>e.action==='Xóa lỗi'),detail=await a('journal/audit/'+deletion.id),change=detail.changes.find(c=>c.table==='issues');assert.equal(change.before.trial_date,trial);assert.equal(change.before.reported_on,current);assert.equal(change.after,null);
  const oldIssue=await a('issues','POST',{family_id:family.id,title:'Existing v2 case'},201);sql(`ALTER TABLE ${f.db}.families DROP COLUMN trial_date;ALTER TABLE ${f.db}.issues DROP COLUMN trial_date;ALTER TABLE ${f.db}.issues DROP COLUMN reported_on;UPDATE ${f.db}.issues SET created_at='2026-08-14T23:30:00.000Z';UPDATE ${f.db}.app_meta SET value='2' WHERE name='schema_version'`);
  const migrated=await a('state');assert.equal(sql(`SELECT value FROM ${f.db}.app_meta WHERE name='schema_version'`),'3');assert.equal(migrated.members[0].contact,'Original Zalo');assert.equal(migrated.issues[0].id,oldIssue.id);assert.equal(migrated.issues[0].reported_on,'2026-08-15');assert.equal(migrated.issues[0].days_used,null);
+});
+
+test('PHP customer queue sorts deadlines and combines overdue/confirmed/partial without including paid renewals',async()=>{
+ const f=await fixture();await f.login();const a=f.req,current=(await a('state')).today,date=n=>new Date(Date.parse(current)+n*86400000).toISOString().slice(0,10),family=await a('families','POST',{name:'Queue',manager_email:'queue@example.com'},201),second=await a('families','POST',{name:'Queue2',manager_email:'queue2@example.com'},201);
+ async function member(email,expires_at,family_id=family.id){return a('members','POST',{family_id,email,expires_at},201);}
+ const unknown=await member('unknown@example.com',''),future=await member('confirmed@example.com',date(20)),due=await member('due@example.com',date(1)),overdue=await member('overdue@example.com',date(-1)),paid=await member('received@example.com',date(-2)),partial=await member('partial@example.com',date(10),second.id);
+ await a('members/'+future.id+'/renewal','PATCH',{revision:0,status:'awaiting_payment'});await a('members/'+paid.id+'/renewal','PATCH',{revision:0,status:'paid',amount:100000,paid_at:current,apply_now:false});await a('members/'+partial.id+'/renewal','PATCH',{revision:0,status:'partial',amount:10000,paid_at:current});
+ const state=await a('state');assert.deepEqual(state.members.map(m=>m.id),[paid.id,overdue.id,due.id,partial.id,future.id,unknown.id]);assert.equal(state.reminders.confirmed_pending,3);assert.equal(state.reminders.due_soon,1);assert.equal(state.reminders.renewal_paid_pending,1);
 });

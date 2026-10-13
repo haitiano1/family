@@ -1,5 +1,6 @@
 <?php
 declare(strict_types=1);
+function pendingPayment(array $m): bool {return !in_array($m['renewal_status'],['paid','declined'],true)&&(in_array($m['renewal_status'],['awaiting_payment','partial'],true)||$m['expiry_status']==='expired');}
 function renew(PDO $db,int $id,array $d,bool $apply): array {
     return transaction($db,function()use($db,$id,$d,$apply){
         $m=one($db,'SELECT m.*,f.name AS family_name FROM members m JOIN families f ON f.id=m.family_id WHERE m.id=?',[$id]);if (!$m) fail('Không tìm thấy khách.',404);
@@ -26,17 +27,13 @@ function renew(PDO $db,int $id,array $d,bool $apply): array {
             logEntry($db,"Cá nhân: gia hạn khách #$id, kỳ $base → $end");return ['ok'=>true,'applied'=>true,'history_id'=>$history,'purchase_date'=>$base,'base_date'=>$base,'expires_at'=>$end];
         }
         q($db,'UPDATE members SET renewal_status=?,renewal_amount=?,renewal_paid_at=?,renewal_note=?,declined_at=?,renewal_revision=renewal_revision+1 WHERE id=?',[$p['status'],$p['amount'],$p['paid_at'],$p['note'],$p['status']==='declined'?($m['declined_at']?:stamp()):'',$id]);
-        logEntry($db,"Cá nhân: cập nhật gia hạn khách #$id: {$p['status']}");return ['ok'=>true,'applied'=>false];
+        logEntry($db,"Cá nhân: cập nhật gia hạn khách #$id: {$p['status']}");if($p['status']==='declined'){sweep($db);$record=one($db,'SELECT id FROM archived_customers WHERE original_member_id=? AND restored_at IS NULL ORDER BY id DESC LIMIT 1',[$id]);return ['ok'=>true,'applied'=>false,'archived'=>true,'archive_id'=>$record['id']];}return ['ok'=>true,'applied'=>false];
     });
 }
 function sweep(PDO $db): void {
     transaction($db,function()use($db){
-        foreach(all($db,"SELECT m.*,f.name AS family_name,f.service,a.email AS manager_email FROM members m JOIN families f ON f.id=m.family_id JOIN accounts a ON a.id=f.manager_id WHERE m.renewal_status='declined' AND m.declined_at!=''") as $m) {
-            try {$selected=(new DateTimeImmutable($m['declined_at'],new DateTimeZone('UTC')))->setTimezone(new DateTimeZone('Asia/Ho_Chi_Minh'))->format('Y-m-d');}catch(Exception $e){continue;}
-            // A date without time is already a Vietnam calendar day.
-            if (preg_match('/^\d{4}-\d{2}-\d{2}$/D',$m['declined_at'])) $selected=$m['declined_at'];
-            if ((strtotime(today().' UTC')-strtotime($selected.' UTC'))/86400<7) continue;
-            q($db,'INSERT INTO archived_customers(original_member_id,email,customer_name,family_name,manager_email,snapshot,archived_at,reason) VALUES (?,?,?,?,?,?,?,?)',[$m['id'],$m['email'],$m['customer_name'],$m['family_name'],$m['manager_email'],json_encode($m,JSON_UNESCAPED_UNICODE|JSON_THROW_ON_ERROR),stamp(),'Không gia hạn, đã chọn đủ 7 ngày.']);$archive=(int)$db->lastInsertId();
+        foreach(all($db,"SELECT m.*,f.name AS family_name,f.service,a.email AS manager_email FROM members m JOIN families f ON f.id=m.family_id JOIN accounts a ON a.id=f.manager_id WHERE m.renewal_status='declined'") as $m) {
+            q($db,'INSERT INTO archived_customers(original_member_id,email,customer_name,family_name,manager_email,snapshot,archived_at,reason) VALUES (?,?,?,?,?,?,?,?)',[$m['id'],$m['email'],$m['customer_name'],$m['family_name'],$m['manager_email'],json_encode($m,JSON_UNESCAPED_UNICODE|JSON_THROW_ON_ERROR),stamp(),'Khách chọn Không gia hạn.']);$archive=(int)$db->lastInsertId();
             q($db,'UPDATE renewal_history SET archive_id=? WHERE member_id=?',[$archive,$m['id']]);q($db,'DELETE FROM members WHERE id=?',[$m['id']]);logEntry($db,"Hệ thống: chuyển khách #{$m['id']} vào lưu trữ #$archive");
         }
     });

@@ -1,6 +1,8 @@
 import { today, renewalDates } from './domain.js';
+import { initArchive } from './archive.js';
 export const renewalStatuses = ['not_contacted','reminded','awaiting_payment','partial','paid','declined'];
 export function initRenewals(db, { fail, text, calendarDate, log }) {
+  const archive=initArchive(db,{fail,log});
   return function renew(id, data, user, apply = false) {
     db.exec('SAVEPOINT renewal_save');
     try {
@@ -30,6 +32,7 @@ export function initRenewals(db, { fail, text, calendarDate, log }) {
       }
       db.prepare('UPDATE members SET renewal_status=?,renewal_amount=?,renewal_paid_at=?,renewal_note=?,declined_at=?,renewal_revision=renewal_revision+1 WHERE id=?').run(payment.status,payment.amount,payment.paid_at,payment.note,payment.status === 'declined' ? (m.declined_at || new Date().toISOString()) : '',m.id);
       log(`${user.username}: cập nhật gia hạn khách #${m.id}: ${payment.status}, đã nhận ${payment.amount} VND`);
+      if(payment.status==='declined'){archive.sweep();const record=db.prepare('SELECT id FROM archived_customers WHERE original_member_id=? AND restored_at IS NULL ORDER BY id DESC LIMIT 1').get(m.id);db.exec('RELEASE renewal_save');return {ok:true,applied:false,archived:true,archive_id:record.id};}
       db.exec('RELEASE renewal_save'); return { ok:true,applied:false };
     } catch (error) { db.exec('ROLLBACK TO renewal_save; RELEASE renewal_save'); throw error; }
   };

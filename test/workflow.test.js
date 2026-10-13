@@ -69,7 +69,7 @@ test('Customer CRUD, dates/payments, persistence and Family capacity', async () 
     await request('accounts/' + account.id, 'DELETE', undefined, 400);
     await request('members/' + member.id, 'DELETE'); await request('families/' + family.id, 'DELETE'); assert.equal((await request('state')).members.length, 0);
     await request('accounts/' + account.id, 'DELETE'); assert.equal((await request('state')).accounts.length, 0);
-    for (const asset of ['/', '/app.js', '/style.css']) assert.equal((await fetch(f.base + asset)).status, 200);
+    for (const asset of ['/', '/app.js', '/style.css', '/contacts.js', '/domain.js']) assert.equal((await fetch(f.base + asset)).status, 200);
     assert.equal((await fetch(f.base + '/../../server.js')).status, 404);
   } finally { await f.close(); }
 });
@@ -194,19 +194,21 @@ test('one renewal save updates cycle dates automatically and preserves the separ
   } finally { await f.close(); }
 });
 
-test('declined customers archive after seven days from selection, keep their history, and can be restored', async () => {
+test('declined customers archive in the same renewal request, keep their history, and can be restored', async () => {
   const f=await fixture();
   try {
     await f.setup(); const a=f.admin; const account=await a('accounts','POST',{email:'manager@example.com'},201); const family=await a('families','POST',{name:'Family',manager_id:account.id},201);
     const member=await a('members','POST',{family_id:family.id,email:'guest@example.com',customer_name:'Customer',contact:'Zalo note',joined_at:'2025-01-01',expires_at:'2025-02-01',plan_months:1},201);
+    const issue=await a('issues','POST',{family_id:family.id,target_type:'member',target_id:member.id,title:'Before cancellation'},201);
     await a('members/'+member.id+'/renewal','PATCH',{revision:0,status:'paid',amount:100000,paid_at:'2026-01-01',plan_months:1,apply_now:true});
-    let m=(await a('state')).members[0]; await a('members/'+member.id+'/renewal','PATCH',{revision:m.renewal_revision,status:'declined',amount:0,paid_at:'',note:'Khách dừng'});
-    let state=await a('state'); assert.equal(state.members.length,1); assert.equal(state.archives.length,0); assert.equal(state.archive_mode,'declined');
-    const db=new DatabaseSync(path.join(f.dir,'family.sqlite')); db.prepare('UPDATE members SET declined_at=? WHERE id=?').run('2026-01-01T00:00:00Z',member.id); db.close();
-    state=await a('state'); assert.equal(state.members.length,0); assert.equal(state.archives.length,1); const record=state.archives[0]; assert.equal(record.member.contact,'Zalo note'); assert.equal(record.member.renewal_note,'Khách dừng');
+    let m=(await a('state')).members[0]; const result=await a('members/'+member.id+'/renewal','PATCH',{revision:m.renewal_revision,status:'declined',amount:0,paid_at:'',note:'Khách dừng'});assert.equal(result.archived,true);
+    const db=new DatabaseSync(path.join(f.dir,'family.sqlite'),{readOnly:true});assert.equal(db.prepare('SELECT COUNT(*) AS n FROM members').get().n,0);assert.equal(db.prepare('SELECT COUNT(*) AS n FROM archived_customers').get().n,1);db.close();
+    let state=await a('state'); assert.equal(state.members.length,0); assert.equal(state.archives.length,1);assert.equal(state.archive_mode,'immediate');const record=state.archives[0];assert.equal(record.id,result.archive_id);assert.equal(record.member.contact,'Zalo note'); assert.equal(record.member.renewal_note,'Khách dừng');
     assert.equal((await a('archives/'+record.id+'/history')).history.length,1);
+    const replacement=await a('members','POST',{family_id:family.id,email:'different@example.com',expires_at:'2027-01-01'},201);assert.equal(replacement.id,member.id);assert.equal((await a('state')).issues[0].target_available,false);
+    await a('issues/'+issue.id,'PATCH',{status:'done',revision:0,resolution:'replace',replacement_email:'wrong@example.com'},409);assert.equal((await a('state')).members[0].email,'different@example.com');
     await f.stop(); await f.start(); assert.equal((await a('state')).archives.length,1);
-    const restored=await a('archives/'+record.id+'/restore','POST',{family_id:family.id}); state=await a('state'); assert.equal(state.archives.length,0); assert.equal(state.members.length,1); assert.equal(state.members[0].renewal_status,'not_contacted'); assert.equal(state.members[0].declined_at,''); assert.equal(state.members[0].contact,'Zalo note');
+    const restored=await a('archives/'+record.id+'/restore','POST',{family_id:family.id}); state=await a('state'); assert.equal(state.archives.length,0); assert.equal(state.members.length,2); assert.equal(state.members[0].renewal_status,'not_contacted'); assert.equal(state.members[0].declined_at,''); assert.equal(state.members[0].contact,'Zalo note');
     assert.equal((await a('members/'+restored.member_id+'/renewal-history')).history.length,1);
     await a('archives/'+record.id+'/restore','POST',{family_id:family.id},409);
   } finally { await f.close(); }
@@ -324,7 +326,6 @@ test('portable backup restores all customer data transactionally without overwri
   await a('members/'+member.id+'/renewal','PATCH',{revision:0,status:'paid',amount:150000,paid_at:'2026-01-15',plan_months:3,apply_now:true});
   const archived=await a('members','POST',{family_id:family.id,email:'archived@example.com',contact:'Zalo archive'},201);
   await a('members/'+archived.id+'/renewal','PATCH',{revision:0,status:'declined'});
-  const db=new DatabaseSync(path.join(source.dir,'family.sqlite'));db.prepare('UPDATE members SET declined_at=? WHERE id=?').run('2020-01-01T00:00:00.000Z',archived.id);db.close();await a('state');
   await a('other-products','POST',{product:'ChatGPT',customer_name:'Buyer',contact:'Other contact',note:'Side product'},201);
   const issue=await a('issues','POST',{family_id:family.id,target_type:'member',target_id:member.id,title:'Backup the fixed mail'},201);
   await a('issues/'+issue.id,'PATCH',{status:'done',revision:0,resolution:'keep'});
@@ -404,5 +405,25 @@ test('v10 SQLite migration and legacy v1/v2 backups preserve customers and old i
    const destination=await fixture();try{await destination.admin('restore','POST',legacy);const state=await destination.admin('state');assert.equal(state.members[0].contact,'Original Zalo');assert.equal(state.families[0].trial_date,'');if(version===2){assert.equal(state.issues[0].reported_on,'2026-08-15');assert.equal(state.issues[0].days_used,null);}}finally{await destination.close();}
   }
   await f.stop();const db=new DatabaseSync(path.join(f.dir,'family.sqlite'));db.exec("ALTER TABLE families DROP COLUMN trial_date;ALTER TABLE issues DROP COLUMN trial_date;ALTER TABLE issues DROP COLUMN reported_on;UPDATE issues SET created_at='2026-08-14T23:30:00.000Z';PRAGMA user_version=10");db.close();await f.start();const state=await a('state');assert.equal(state.members[0].contact,'Original Zalo');assert.equal(state.issues[0].reported_on,'2026-08-15');assert.equal(state.issues[0].days_used,null);assert.equal(state.families[0].trial_date,'');assert.equal(readdirSync(f.dir).filter(n=>n.startsWith('before-v11-')).length,1);
+ }finally{await f.close();}
+});
+
+test('customer API sorts deadlines and counts overdue/confirmed/partial renewals once, excluding paid renewal money',async()=>{
+ const f=await fixture();try{
+  const a=f.admin,current=(await a('state')).today,date=n=>new Date(Date.parse(current)+n*86400000).toISOString().slice(0,10),family=await a('families','POST',{name:'Queue',manager_email:'queue@example.com'},201),second=await a('families','POST',{name:'Queue2',manager_email:'queue2@example.com'},201);
+  async function member(email,expires_at,family_id=family.id){return a('members','POST',{family_id,email,expires_at},201);}
+  const unknown=await member('unknown@example.com',''),future=await member('confirmed@example.com',date(20)),due=await member('due@example.com',date(1)),overdue=await member('overdue@example.com',date(-1)),paid=await member('received@example.com',date(-2)),partial=await member('partial@example.com',date(10),second.id);
+  await a('members/'+future.id+'/renewal','PATCH',{revision:0,status:'awaiting_payment'});await a('members/'+paid.id+'/renewal','PATCH',{revision:0,status:'paid',amount:100000,paid_at:current,apply_now:false});await a('members/'+partial.id+'/renewal','PATCH',{revision:0,status:'partial',amount:10000,paid_at:current});
+  const state=await a('state');assert.deepEqual(state.members.map(m=>m.id),[paid.id,overdue.id,due.id,partial.id,future.id,unknown.id]);assert.equal(state.reminders.confirmed_pending,3);assert.equal(state.reminders.due_soon,1);assert.equal(state.reminders.renewal_paid_pending,1);
+ }finally{await f.close();}
+});
+
+test('immediate archival rolls back the renewal and audit when saving the archive fails; legacy cancellations archive without affecting overdue customers',async()=>{
+ const f=await fixture();try{
+  const a=f.admin,family=await a('families','POST',{name:'Safe archive',manager_email:'safe@example.com'},201),member=await a('members','POST',{family_id:family.id,email:'archive@example.com',contact:'FB preserved',expires_at:'2027-01-01'},201),overdue=await a('members','POST',{family_id:family.id,email:'overdue@example.com',expires_at:'2020-01-01'},201);
+  await a('members/'+member.id+'/renewal','PATCH',{revision:0,status:'awaiting_payment'});const count=(await a('journal')).total;
+  const db=new DatabaseSync(path.join(f.dir,'family.sqlite'));const before=db.prepare('SELECT * FROM members WHERE id=?').get(member.id);db.exec("CREATE TRIGGER reject_archive BEFORE INSERT ON archived_customers BEGIN SELECT RAISE(ABORT,'Injected archive write failure'); END");
+  await a('members/'+member.id+'/renewal','PATCH',{revision:1,status:'declined',note:'Customer cancelled'},500);assert.deepEqual(db.prepare('SELECT * FROM members WHERE id=?').get(member.id),before);assert.equal(db.prepare('SELECT COUNT(*) AS n FROM archived_customers').get().n,0);assert.equal((await a('journal')).total,count);
+  db.exec('DROP TRIGGER reject_archive');db.prepare("UPDATE members SET renewal_status='declined',declined_at='' WHERE id=?").run(member.id);db.close();await f.stop();await f.start();const state=await a('state');assert.equal(state.archives[0].member.contact,'FB preserved');assert.equal(state.members.length,1);assert.equal(state.members[0].id,overdue.id);assert.equal(state.reminders.confirmed_pending,1);
  }finally{await f.close();}
 });

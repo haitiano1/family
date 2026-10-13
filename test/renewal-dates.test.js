@@ -11,10 +11,7 @@ test('renewals start at the old expiry and clamp calendar months, including leap
   assert.throws(()=>renewalDates('','2026-01-15',3),/chưa có ngày hết hạn/);
   assert.throws(()=>renewalDates('2026-02-30','2026-10-12',1));
 });
-test('archive eligibility is seven calendar days after selection in Vietnam, and only declined customers qualify', () => {
-  const m={renewal_status:'declined',declined_at:'2026-10-12T18:00:00Z',expires_at:'2026-01-01'}; // Selected October 13 in Vietnam.
-  assert.equal(archiveDue(m,'2026-10-19','declined'),false);
-  assert.equal(archiveDue(m,'2026-10-20','declined'),true);
-  assert.equal(archiveDue({...m,renewal_status:'paid'},'2026-10-20','declined'),false);
-  assert.equal(archiveDue({...m,declined_at:''},'2026-10-20','declined'),false);
+test('only an explicit declined renewal archives immediately, irrespective of expiry or missing legacy selection date', () => {
+  assert.equal(archiveDue({renewal_status:'declined',declined_at:'',expires_at:'2027-01-01'}),true);
+  for(const status of ['paid','partial','awaiting_payment','not_contacted','reminded'])assert.equal(archiveDue({renewal_status:status,expires_at:'2020-01-01'}),false);
 });

@@ -2,8 +2,8 @@
 declare(strict_types=1);
 function issueTarget(PDO $db,array $i): array|false {
     if(!$i['family_id'])return false;$f=one($db,'SELECT * FROM families WHERE id=?',[$i['family_id']]);if(!$f)return false;
-    if($i['target_type']==='manager')return $f['manager_id']===$i['target_id']?one($db,'SELECT * FROM accounts WHERE id=?',[$i['target_id']]):false;
-    return one($db,'SELECT * FROM members WHERE id=? AND family_id=?',[$i['target_id'],$f['id']]);
+    if($i['target_type']==='manager'){$row=$f['manager_id']===$i['target_id']?one($db,'SELECT * FROM accounts WHERE id=?',[$i['target_id']]):false;return $row&&$row['email']===$i['subject_email']?$row:false;}
+    return one($db,'SELECT * FROM members WHERE id=? AND family_id=? AND email=?',[$i['target_id'],$f['id'],$i['subject_email']]);
 }
 function issueReportDay(array $i): string {if($i['reported_on'])return $i['reported_on'];if(!$i['created_at'])return '';try{return (new DateTimeImmutable($i['created_at'],new DateTimeZone('UTC')))->setTimezone(new DateTimeZone('Asia/Ho_Chi_Minh'))->format('Y-m-d');}catch(Exception $e){return '';}}
 function issueList(PDO $db): array {return array_map(function($i)use($db){$target=issueTarget($db,$i);$reported=issueReportDay($i);$days=$i['trial_date']&&$reported?(int)round((strtotime($reported.' UTC')-strtotime($i['trial_date'].' UTC'))/86400):null;return [...$i,'reported_on'=>$reported,'days_used'=>$days!==null&&$days>=0?$days:null,'target_current_email'=>$target['email']??'','target_available'=>(bool)$target];},all($db,'SELECT * FROM issues ORDER BY id DESC'));}
