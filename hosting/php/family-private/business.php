@@ -1,6 +1,17 @@
 <?php
 declare(strict_types=1);
 function pendingPayment(array $m): bool {return !in_array($m['renewal_status'],['paid','declined'],true)&&(in_array($m['renewal_status'],['awaiting_payment','partial'],true)||$m['expiry_status']==='expired');}
+function recentRenewals(PDO $db,array $members,array $archives,?DateTimeImmutable $now=null,int $days=14): array {
+    $now=$now??new DateTimeImmutable('now',new DateTimeZone('UTC'));$now=$now->setTimezone(new DateTimeZone('UTC'));
+    $end=$now->format('Y-m-d\TH:i:s.v\Z');$start=$now->modify("-$days days")->format('Y-m-d\TH:i:s.v\Z');
+    $live=[];$stored=[];foreach($members as $m)$live[$m['id']]=$m;foreach($archives as $a)$stored[$a['id']]=$a['member'];$seen=[];$rows=[];
+    foreach(all($db,'SELECT * FROM renewal_history WHERE created_at>? AND created_at<=? ORDER BY created_at DESC,id DESC',[$start,$end]) as $h){
+        $key=$h['member_id']!==null?'member:'.$h['member_id']:($h['archive_id']!==null?'archive:'.$h['archive_id']:'history:'.$h['id']);if(isset($seen[$key]))continue;$seen[$key]=true;
+        $customer=$live[$h['member_id']]??$stored[$h['archive_id']]??['email'=>$h['email'],'customer_name'=>$h['customer_name'],'contact'=>'','family_name'=>$h['family_name']];
+        $rows[]=[...$h,'customer'=>$customer,'renewed_at'=>$h['created_at']];
+    }
+    return $rows;
+}
 function renew(PDO $db,int $id,array $d,bool $apply): array {
     return transaction($db,function()use($db,$id,$d,$apply){
         $m=one($db,'SELECT m.*,f.name AS family_name FROM members m JOIN families f ON f.id=m.family_id WHERE m.id=?',[$id]);if (!$m) fail('Không tìm thấy khách.',404);

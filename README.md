@@ -1,4 +1,4 @@
-# YouTube Family — Quản lý khách hàng 0.9
+# YouTube Family — Quản lý khách hàng 0.10
 
 Ứng dụng quản lý cho cá nhân: **mở web là vào Tổng quan**, không cần tài khoản đăng nhập. Tập trung quản lý khách YouTube, Family, gia hạn và sản phẩm bán thêm. Không còn các mục admin, bảo mật tài khoản, Jobs hoặc thao tác Google. Có bản **PHP + MySQL dành cho Hostinger Premium** và bản Node.js chạy Windows/VPS. Có thể thêm biểu tượng vào màn hình chính iPhone; xem [hướng dẫn Hostinger](HOSTINGER.md). Bản hosting dùng một mật khẩu truy cập chung, không có tài khoản/role admin.
 
@@ -109,6 +109,14 @@ Thông tin và lịch sử nằm trong `data/family.sqlite`. Có **Xem dữ li�
 - **Xóa hồ sơ khách** chuyển khách vào Khách lưu trữ; giữ đầy đủ ghi chú, Contact, ngày mua/hạn, tiền và lịch sử. **Xóa hồ sơ Family** lưu cả nhóm, email quản lý/ngày trial/ghi chú và tất cả khách. Family trống cũng được lưu. Không có thao tác xóa vĩnh viễn hồ sơ này.
 - Trong **Khách lưu trữ → Family lưu trữ → Khôi phục Family**, khôi phục cả nhóm và khách còn lưu trữ cùng lần xóa. Khách đã chuyển sang Family khác không bị tạo trùng. Có thể khôi phục từng khách vào Family đang hoạt động. Email quản lý của Family lưu trữ vẫn thuộc hồ sơ đó; hãy khôi phục Family trước khi sử dụng lại email cho nhóm này. Case lỗi giữ liên kết sau khôi phục và mọi thao tác có nhật ký.
 - Sản phẩm khác hiện gói tháng, copy tên sản phẩm/tên khách/email/Contact/ngày mua/hạn/ghi chú. Contact là link bấm mở khi có URL, còn nội dung gốc vẫn được copy đầy đủ. Nhắc hạn ở Tổng quan vẫn áp dụng cho sản phẩm phụ.
+
+## Khách vừa gia hạn (bản 0.10)
+
+Trong **Khách lưu trữ** có thêm mục **Khách vừa gia hạn · 14 ngày gần nhất**. Sau khi xác nhận gia hạn thành công, khách xuất hiện ở đây với tên/email/Contact có copy, Family, gói, thời điểm gia hạn, kỳ mới, tiền và ngày nhận tiền. Mỗi khách hiện lần xác nhận mới nhất; các lần cũ vẫn có trong Lịch sử.
+
+Thời gian 14 ngày tính từ **lúc xác nhận gia hạn thành công trên ứng dụng**, đủ 14 × 24 giờ, không lấy ngày mua, ngày hết hạn cũ hay ngày nhận tiền. Chỉ mở hộp thoại Gia hạn hoặc ghi nhận Chờ tiền/Trả một phần/Đã trả tiền nhưng chưa xác nhận hạn mới chưa đưa khách vào mục này. Khách trả tiền muộn vẫn được ghi nhận từ lúc thao tác; kỳ sử dụng mới vẫn nối từ hạn cũ theo quy tắc hiện có.
+
+Sau 14 ngày, bản ghi tự rời **Khách vừa gia hạn** khi trang cập nhật (tự làm mới mỗi 10 giây khi đang xem). **Hồ sơ khách hoạt động, Family, Contact, hạn, thanh toán, lịch sử gia hạn và nhật ký được giữ**, không tự chuyển khách sang lưu trữ theo mốc này. Danh sách được tính lại từ các lần gia hạn thành công nên không cần cron riêng hoặc thay database; lịch sử cũ trong 14 ngày gần nhất cũng xuất hiện sau cập nhật. Backup/khôi phục hiện có giữ mốc này qua lịch sử gia hạn.
 
 ## Nhập Google Sheets CSV
 

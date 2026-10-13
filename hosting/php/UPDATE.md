@@ -1,4 +1,4 @@
-# Cập nhật Family lên bản 0.9
+# Cập nhật Family lên bản 0.10
 
 1. Trong website Family đang chạy, chọn **Sao lưu / Chuyển dữ liệu → Tải file sao lưu**.
 2. Tải [family-hostinger-update.zip](https://github.com/haitiano1/family/raw/refs/heads/main/downloads/family-hostinger-update.zip) và **giải nén trên máy tính**.
@@ -7,6 +7,12 @@
 5. Mở lại website, nhấn **Ctrl+F5**. Trên iPhone, đóng rồi mở lại Family hoặc tải lại trang trong Safari.
 
 Không cần tạo database hoặc nhập lại khách. Gói không chứa dữ liệu hay config.php. MySQL tự thêm cột lưu trữ/gói tháng khi mở app; dữ liệu cũ và các hạn đã nhập được giữ. Backup v4 nhận cả JSON v1/v2/v3; không dùng bản ứng dụng cũ để nhập backup v4.
+
+## Khách vừa gia hạn mới ở bản 0.10
+
+Trong **Khách lưu trữ** có thêm **Khách vừa gia hạn · 14 ngày gần nhất**. Sau khi xác nhận gia hạn thành công, khách hiện ở đây cùng thời điểm thao tác, gói/kỳ mới, tiền nhận và tên/email/Contact có nút copy. Mỗi khách hiện lần xác nhận mới nhất. Mốc 14 ngày tính từ thao tác thành công, không lấy ngày mua/hạn cũ/nhận tiền; khách trả muộn vẫn xuất hiện ngay.
+
+Sau đủ 14 ngày, chỉ bản ghi trong mục này rời danh sách. **Hồ sơ khách hoạt động và lịch sử vẫn được giữ**, không tự chuyển sang lưu trữ hay xóa khách. Trang mở tự cập nhật mỗi 10 giây. Chỉ mở hộp thoại Gia hạn hoặc chưa xác nhận hạn mới không tính là đã gia hạn. Lịch sử cũ gần đây cũng được hiển thị; không cần sửa database, tạo cron hay nhập lại data. Luồng lưu trữ/khôi phục và gói mua/bộ lọc của bản 0.9 vẫn được giữ.
 
 ## Kiểm tra sau cập nhật
 

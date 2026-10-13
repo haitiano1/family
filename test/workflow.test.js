@@ -457,3 +457,14 @@ test('Family archival is atomic when one customer cannot be archived; v11 migrat
   await f.stop();const oldDb=new DatabaseSync(path.join(f.dir,'family.sqlite'));oldDb.exec('ALTER TABLE families DROP COLUMN archived_at;ALTER TABLE archived_customers DROP COLUMN family_archive_id;ALTER TABLE other_purchases DROP COLUMN plan_months;PRAGMA user_version=11');oldDb.close();await f.start();const state=await a('state');assert.equal(state.members.length,2);assert.equal(state.members.find(m=>m.email==='one@example.com').expires_at,'2027-02-01');assert.equal(state.families[0].archived_at,'');assert.equal(readdirSync(f.dir).filter(n=>n.startsWith('before-v12-')).length,1);
  }finally{await f.close();await target.close();}
 });
+
+test('recent customers appear only after successful renewal confirmation using actual action time, regardless of late receipt or period dates',async()=>{
+ const f=await fixture();try{
+  const a=f.admin,family=await a('families','POST',{name:'Renewal review',manager_email:'recent@example.com'},201),member=await a('members','POST',{family_id:family.id,email:'late@example.com',contact:'Zalo recent',joined_at:'2025-10-05',expires_at:'2026-01-05',plan_months:3},201);
+  assert.equal((await a('state')).recent_renewals.length,0);await a('members/'+member.id+'/renewal','PATCH',{revision:0,status:'paid',amount:100000,paid_at:'2026-01-15',apply_now:false});assert.equal((await a('state')).recent_renewals.length,0);
+  await a('members/'+member.id+'/renewal/apply','POST',{revision:1,plan_months:3});let state=await a('state');assert.equal(state.recent_renewals.length,1);const review=state.recent_renewals[0];assert.equal(review.customer.contact,'Zalo recent');assert.equal(review.new_purchase_at,'2026-01-05');assert.equal(review.new_expires_at,'2026-04-05');assert.equal(review.paid_at,'2026-01-15');assert.ok(Math.abs(Date.now()-Date.parse(review.renewed_at))<5000);
+  const journal=(await a('journal')).total;await a('members/'+member.id+'/renewal/apply','POST',{revision:1,plan_months:3},409);assert.equal((await a('state')).recent_renewals.length,1);assert.equal((await a('journal')).total,journal);
+  await f.stop();await f.start();assert.equal((await a('state')).recent_renewals[0].renewed_at,review.renewed_at);
+  const db=new DatabaseSync(path.join(f.dir,'family.sqlite'));db.prepare('UPDATE renewal_history SET created_at=?').run(new Date(Date.now()-15*86400000).toISOString());db.close();state=await a('state');assert.equal(state.recent_renewals.length,0);assert.equal(state.members.length,1);assert.equal(state.archives.length,0);assert.equal(state.members[0].contact,'Zalo recent');assert.equal((await a('members/'+member.id+'/renewal-history')).history.length,1);
+ }finally{await f.close();}
+});

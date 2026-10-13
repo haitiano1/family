@@ -7,6 +7,7 @@ import { initOtherProducts } from './other-products.js';
 import { validators } from './validation.js';
 import { initArchive } from './archive.js';
 import { initRenewals } from './renewal.js';
+import { recentRenewals } from './recent-renewals.js';
 import { initImporter } from './importer.js';
 import { today, expiry, isPendingPayment, sortCustomers, sortFamilies, purchaseExpiry } from './domain.js';
 import { beginAudit,finishAudit,cancelAudit,auditLog,auditAction,journal,journalEntry,withAudit } from './audit.js';
@@ -107,12 +108,13 @@ async function handle(req, res) {
       archive.sweep();
       const members = sortCustomers(all('SELECT m.*,f.name AS family_name,f.service,a.email AS manager_email FROM members m JOIN families f ON f.id=m.family_id JOIN accounts a ON a.id=f.manager_id').map(m => ({ ...m, ...expiry(m.expires_at) })));
       const other_products=all('SELECT * FROM other_purchases ORDER BY id DESC').map(p=>({...p,...expiry(p.expires_at)}));
+      const archives=archive.list();
       return send(res, 200, {
         hosted:access.enabled,issues:issues.list(),
         other_products,other_reminders:{due_soon:other_products.filter(p=>p.expiry_status==='due_soon').length,expired:other_products.filter(p=>p.expiry_status==='expired').length},
         accounts: all("SELECT a.*, f.id AS family_id, f.name AS family_name, f.service FROM accounts a LEFT JOIN families f ON f.manager_id=a.id AND f.archived_at='' ORDER BY a.id DESC"),
         families: sortFamilies(all("SELECT f.*, a.email AS manager_email FROM families f JOIN accounts a ON a.id=f.manager_id WHERE f.archived_at=''"),members), archived_families:archive.familyList(),
-        members, archives:archive.list(), archive_mode:archive.mode,
+        members, archives, recent_renewals:recentRenewals(db,members,archives), archive_mode:archive.mode,
         logs: all('SELECT id,message,created_at FROM logs UNION ALL SELECT id,message,created_at FROM audit_events ORDER BY created_at DESC,id DESC LIMIT 100'), today: today(),
         reminders: { expired: members.filter(m => m.expiry_status === 'expired').length, due_soon: members.filter(m => m.expiry_status === 'due_soon').length, confirmed_pending:members.filter(isPendingPayment).length, unpaid: members.filter(m => ['unpaid','partial'].includes(m.payment_status)).length, renewal_waiting: members.filter(m => ['awaiting_payment','partial'].includes(m.renewal_status)).length, renewal_paid_pending: members.filter(m => m.renewal_status === 'paid').length }
       });
