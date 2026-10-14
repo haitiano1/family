@@ -1,4 +1,4 @@
-# Cập nhật YouTube Family 0.11
+# Cập nhật YouTube Family 0.11.1
 
 Bản này gộp đầy đủ các thay đổi trước đây chưa đóng gói và các yêu cầu mới. Dùng **gói cập nhật** cho website Family đang chạy; giữ cấu hình và dữ liệu hiện có.
 
@@ -11,6 +11,12 @@ Bản này gộp đầy đủ các thay đổi trước đây chưa đóng gói 
 5. Mở lại website và nhấn **Ctrl+F5**. Trên iPhone, tải lại trang trong Safari hoặc đóng rồi mở lại Family trên màn hình chính.
 
 Không cần tạo database, sửa SQL hay nhập lại khách. Gói không chứa config.php, mật khẩu, dữ liệu khách hoặc backup. Website giữ database hiện tại; nếu còn dùng schema cũ, ứng dụng tự thêm các cột cần thiết. Cài mới dùng [family-hostinger.zip](https://github.com/haitiano1/family/raw/refs/heads/main/downloads/family-hostinger.zip) và [INSTALL.md](INSTALL.md).
+
+## Bổ sung trong bản 0.11.1
+
+Bấm email trên thẻ Chờ fix/Đang fix/Đã fix sẽ mở trang chi tiết đúng Family cùng toàn bộ thành viên đang ghi nhận, áp dụng cho cả mail chủ Family và mail khách. Mail liên kết bằng ID Family nên sau đổi mail khi Done vẫn mở đúng nhóm. Icon copy bên cạnh chỉ sao chép, không chuyển trang. Family đã lưu trữ đưa về Khách lưu trữ; case không còn Family vẫn giữ email/copy.
+
+Gói 0.11.1 đã chứa mọi thay đổi của 0.11. Dùng cùng các bước cập nhật ở trên kể cả bạn chưa cài 0.11. Nếu đã cập nhật đầy đủ 0.11 trước đó, thay `public_html/app.js` và `public_html/style.css` từ gói mới rồi tải lại trang là đủ cho bổ sung này.
 
 ## Thay đổi trong bản 0.11
 

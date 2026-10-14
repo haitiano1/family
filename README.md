@@ -1,4 +1,4 @@
-# YouTube Family — Quản lý khách hàng 0.11
+# YouTube Family — Quản lý khách hàng 0.11.1
 
 Ứng dụng quản lý cho cá nhân: **mở web là vào Tổng quan**, không cần tài khoản đăng nhập. Tập trung quản lý khách YouTube, Family, gia hạn và sản phẩm bán thêm. Không còn các mục admin, bảo mật tài khoản, Jobs hoặc thao tác Google. Có bản **PHP + MySQL dành cho Hostinger Premium** và bản Node.js chạy Windows/VPS. Có thể thêm biểu tượng vào màn hình chính iPhone; xem [hướng dẫn Hostinger](HOSTINGER.md). Bản hosting dùng một mật khẩu truy cập chung, không có tài khoản/role admin.
 
@@ -60,7 +60,7 @@ Sau gia hạn, lần tiếp theo trở về Chưa nhắc; lịch sử không m�
 
 ## Family, Fix lỗi và Nhật ký
 
-**Family** có tìm kiếm theo tên/email quản lý/email khách/ghi chú và nút **Báo lỗi** cạnh Sửa/Xóa hồ sơ. Mỗi Family chỉ có một case Chờ fix/Đang fix; dòng Family và khách hiện mail đã báo lỗi cùng trạng thái, nút đổi thành **Xem lỗi**. Chọn mail quản lý hoặc mail khách, nhập nội dung và ghi chú; thẻ xuất hiện ở **Fix lỗi**. Case Done cho phép báo một sự cố mới; case trùng đã có trước cập nhật vẫn được giữ để xử lý. Backend chặn cả gửi đồng thời và mở lại Done khi Family đã có case khác đang mở. Email trên thẻ lỗi có icon copy; sau đổi mail có thể copy cả mail ban đầu. Nội dung tìm kiếm được reset khi chuyển mục, vẫn giữ khi làm mới/đổi bộ lọc trong cùng mục. Logo đầu thanh điều hướng là YouTube đỏ/trắng.
+**Family** có tìm kiếm theo tên/email quản lý/email khách/ghi chú và nút **Báo lỗi** cạnh Sửa/Xóa hồ sơ. Mỗi Family chỉ có một case Chờ fix/Đang fix; dòng Family và khách hiện mail đã báo lỗi cùng trạng thái, nút đổi thành **Xem lỗi**. Chọn mail quản lý hoặc mail khách, nhập nội dung và ghi chú; thẻ xuất hiện ở **Fix lỗi**. Case Done cho phép báo một sự cố mới; case trùng đã có trước cập nhật vẫn được giữ để xử lý. Backend chặn cả gửi đồng thời và mở lại Done khi Family đã có case khác đang mở. Bấm email trên thẻ Chờ fix/Đang fix/Đã fix mở đúng trang Family với toàn bộ khách trong nhóm. Dùng ID Family của case nên vẫn mở đúng nhóm khi mail đổi. Family đã lưu trữ đưa về Khách lưu trữ; hồ sơ Family không còn tồn tại vẫn giữ email và nút copy. Email trên thẻ lỗi có icon copy; sau đổi mail có thể copy cả mail ban đầu. Nội dung tìm kiếm được reset khi chuyển mục, vẫn giữ khi làm mới/đổi bộ lọc trong cùng mục. Logo đầu thanh điều hướng là YouTube đỏ/trắng.
 
 Bảng **Chờ fix → Đang fix → Đã fix** hỗ trợ kéo thả, chọn trạng thái và nút Đã fix trên iPhone. Khi hoàn tất, bắt buộc chọn **Giữ nguyên mail** hoặc **Đổi sang mail mới**. Đổi cập nhật đúng hồ sơ quản lý/khách đã báo lỗi trong cùng lần lưu; thẻ Done ghi rõ mail cũ→mới và giữ mail báo lỗi ban đầu. Không đổi ngày mua/hạn/Contact/thanh toán. Mail trùng hoặc hồ sơ đã thay đổi/xóa sẽ không gây cập nhật một phần; trạng thái và đổi mail cùng rollback. Lỗi vẫn được giữ khi Family bị xóa. Thay đổi đồng thời có revision guard, cần tải lại khi có xung đột.
 
