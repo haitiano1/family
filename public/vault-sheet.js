@@ -3,7 +3,7 @@ export const vaultSheetFields={email:'Tài khoản *',password:'Mật khẩu',to
 export function readVaultSheet(source,delimiter='auto'){
   const parsed=parseCSV(source,delimiter);
   if(parsed.records.length>500)throw Error('Mỗi lần nhập tối đa 500 tài khoản.');
-  const aliases={email:['taikhoan','account','email','mail','gmail','mailchufam','mailchu','manageremail'],password:['matkhau','password','pass'],totp:['2fa','key2fa','khoabimat2fa','totp','secret','key'],recovery_email:['mailkhoiphuc','emailkhoiphuc','recoveryemail','recovery','recoverymail'],label:['tenfamily','family','fam','tennhom','label'],note:['note','notes','ghichu']};
+  const aliases={email:['taikhoan','account','email','mail','gmail','mailchufam','mailchufamily','mailchu','manageremail'],password:['matkhau','password','pass'],totp:['2fa','auth','authenticator','key2fa','khoabimat2fa','totp','secret','key'],recovery_email:['mailkhoiphuc','emailkhoiphuc','recoveryemail','recovery','recoverymail'],label:['tenfamily','family','fam','tennhom','label'],note:['note','notes','ghichu']};
   return {...parsed,mapping:Object.fromEntries(Object.keys(vaultSheetFields).map(k=>[k,parsed.headers.findIndex(h=>aliases[k].includes(normalizeHeader(h)))]))};
 }
 export function mapVaultSheet(parsed,mapping){

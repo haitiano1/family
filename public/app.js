@@ -66,7 +66,7 @@ function draw() {
   document.querySelectorAll('nav a').forEach(a=>a.classList.toggle('active',a.dataset.page===parent));
   $('#breadcrumb').textContent=`YouTube Family › ${names[parent]} ${id ? '› #'+id : ''}`;
   $('#header-actions').innerHTML=btn('backup','Sao lưu / Chuyển dữ liệu','secondary tiny')+(state.hosted ? ' '+btn('close-access','Khóa ứng dụng','secondary tiny') : '');
-  if(page==='vault'){mountVault($('#main'),{families:state.families,members:state.members,getFamilyContext:()=>({families:state.families,members:state.members}),refreshFamilyContext:()=>refresh(false),toast});return;}
+  if(page==='vault'){mountVault($('#main'),{families:state.families,members:state.members,issues:state.issues,getFamilyContext:()=>({families:state.families,members:state.members,issues:state.issues}),refreshFamilyContext:()=>refresh(false),toast});return;}
   unmountVault();
   let content = '';
   if (page==='overview') {

@@ -1,6 +1,9 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {readVaultSheet,mapVaultSheet} from '../public/vault-sheet.js';
+test('mail/Pass/Auth Sheet columns map automatically to account/password/secret while preserving password whitespace',()=>{
+ const parsed=readVaultSheet('Mail chủ Family\tPass\tAuth\nowner@example.com\t  Fixture-only pass  \tgezd gnbv gy3t qojq gezd gnbv gy3t qojq');assert.equal(parsed.mapping.email,0);assert.equal(parsed.mapping.password,1);assert.equal(parsed.mapping.totp,2);assert.equal(parsed.mapping.note,-1);const row=mapVaultSheet(parsed,parsed.mapping)[0];assert.equal(row.password,'  Fixture-only pass  ');assert.equal(row.email,'owner@example.com');assert.match(row.totp,/gezd gnbv/);
+});
 test('vault Sheet maps Vietnamese/English headers, preserves password spaces and multiline notes without using code column as a secret',()=>{
   const parsed=readVaultSheet('\uFEFFTài khoản\tMật khẩu\t2FA\tMã 2FA\tMail khôi phục\tNote\nowner@example.com\t  Keep spaces ! \tGEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ\t123456\t\t"Line one\nLine two"\nother@example.com\t\t\t\t\t');
   const rows=mapVaultSheet(parsed,parsed.mapping);assert.equal(rows.length,2);assert.equal(rows[0].password,'  Keep spaces ! ');assert.equal(rows[0].note,'Line one\nLine two');assert.notEqual(rows[0].totp,'123456');assert.equal(rows[1].recovery_email,'');assert.deepEqual(rows.map(r=>r.line),[2,4]);

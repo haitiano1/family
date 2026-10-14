@@ -1,4 +1,4 @@
-# Cập nhật YouTube Family 0.13.1
+# Cập nhật YouTube Family 0.13.2
 
 Bản này gộp đầy đủ các thay đổi trước đây chưa đóng gói và các yêu cầu mới. Dùng **gói cập nhật** cho website Family đang chạy; giữ cấu hình và dữ liệu hiện có.
 
@@ -11,6 +11,15 @@ Bản này gộp đầy đủ các thay đổi trước đây chưa đóng gói 
 5. Mở lại website và nhấn **Ctrl+F5**. Trên iPhone, tải lại trang trong Safari hoặc đóng rồi mở lại Family trên màn hình chính.
 
 Không cần tạo database, sửa SQL hay nhập lại khách. Gói không chứa config.php, mật khẩu, dữ liệu khách hoặc backup. Website giữ database hiện tại; nếu còn dùng schema cũ, ứng dụng tự thêm các cột cần thiết. Cài mới dùng [family-hostinger.zip](https://github.com/haitiano1/family/raw/refs/heads/main/downloads/family-hostinger.zip) và [INSTALL.md](INSTALL.md).
+
+## Bổ sung trong bản 0.13.2
+
+- Khóa 2FA mặc định hiển thị `********`, có Hiện/Ẩn/copy như mật khẩu; mã 2FA 6 số vẫn hiện và tự đổi. Rời mục/ẩn ứng dụng che lại giá trị đã bấm Hiện.
+- **Tag Fam đang lỗi** cho case Chờ fix/Đang fix; bộ lọc Kho là **Tất cả / Fam đang lỗi / Theo tên**. Done bỏ tag và khỏi bộ lọc. Mục Family vẫn có Fam dư slot như trước.
+- **Phiên Kho30phút kể từ lúc mở**: chuyển mục/tải lại trang không yêu cầu pass lại trong phiên. Khóa kho/Khóa ứng dụng vẫn khóa ngay; hết30phút mở lại bằng pass.
+- **Nhập từ Sheet** nhận tự động **Mail, Pass, Auth**. Copy cả tiêu đề/dữ liệu, dán hoặc chọn CSV, xem trước số dòng thêm/cập nhật rồi xác nhận. Có cập nhật tài khoản đã có; cột không chọn giữ nguyên. Mặc định giữ ô trống khi cập nhật; bỏ chọn để xóa trường bằng ô trống. Mail trùng trong sheet/khóa sai/hồ sơ thay đổi sau preview sẽ dừng cả lượt. Ghi Nhật ký số lượng, không ghi thông tin bí mật.
+
+Cập nhật cả **public_html và family-private** để có cập nhật hàng loạt và phiên30phút. Giữ config.php/database; không nhập lại Family/khách. Schema14/6 và backupv7 không đổi. Gói0.13.2 đã có đầy đủ0.13.1 và trước đó.
 
 ## Bổ sung trong bản 0.13.1
 
@@ -28,7 +37,7 @@ Có tìm mail/Family/Note và bộ lọc **Tất cả, Fam dư slot, Theo tên**
 
 Chọn **Nhập từ Sheet** để dán bảng có dòng tiêu đề (Tài khoản, Mật khẩu, 2FA, Mail khôi phục, Note; có thể thêm Tên Family) hoặc chọn CSV/TSV. Đối chiếu cột, nhấn **Xem trước** rồi **Nhập … tài khoản**. Chỉ Tài khoản bắt buộc; tối đa 500 dòng/lần, file1MB. Mail trùng hoặc khóa sai được báo theo dòng; dừng cả lượt, không ghi đè hay nhập thiếu. Nhập vào kho không tạo Family/khách.
 
-Khóa dạng nhóm4ký tự có khoảng trắng được chuẩn hóa. Khóa Base32 chỉ nhận A–Z và 2–7; không dùng mã dự phòng hay mã6số. Mã lấy theo giờ máy chủ, mặc định đổi30giây. Chỉ người đã mở kho mới thấy thông tin; kho tự khóa khi rời mục hoặc sau15phút. Thông tin lưu mã hóa AES-GCM, không hiện trong nhật ký. Nhật ký chỉ ghi thao tác/ID. Giữ mật khẩu kho riêng vì ứng dụng không khôi phục được mật khẩu đã quên.
+Khóa dạng nhóm4ký tự có khoảng trắng được chuẩn hóa. Khóa Base32 chỉ nhận A–Z và 2–7; không dùng mã dự phòng hay mã6số. Mã lấy theo giờ máy chủ, mặc định đổi30giây. Chỉ người đã mở kho mới thấy thông tin; kho tự khóa sau30phút hoặc khi chủ động bấm Khóa kho. Thông tin lưu mã hóa AES-GCM, không hiện trong nhật ký. Nhật ký chỉ ghi thao tác/ID. Giữ mật khẩu kho riêng vì ứng dụng không khôi phục được mật khẩu đã quên.
 
 Sao lưu hiện tại **v7** giữ cả kho đã mã hóa; nhận v1–v6 cũ và mở lại bằng cùng mật khẩu trên Node/PHP. Helper Windows đã cập nhật. Không dùng app cũ để nhập backup v7. PHP schema6 thêm các bảng kho khi mở app, giữ toàn bộ khách/Family/Contact/hạn/thanh toán/lịch sử/Fix lỗi. Không cần tạo database/import lại hay thêm mật khẩu kho trong config.php.
 

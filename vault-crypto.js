@@ -1,6 +1,6 @@
 import {randomBytes,pbkdf2Sync,createCipheriv,createDecipheriv,createHash,createHmac} from 'node:crypto';
 export const VAULT_ITERATIONS=600000;
-export const VAULT_SESSION_MS=15*60*1000;
+export const VAULT_SESSION_MS=30*60*1000;
 const bad=message=>{throw Object.assign(new Error(message),{status:400});};
 export const fingerprint=value=>createHash('sha256').update(value).digest('hex');
 export function validVaultPassword(value,common=''){
