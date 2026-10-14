@@ -4,7 +4,7 @@ export const VAULT_SESSION_MS=15*60*1000;
 const bad=message=>{throw Object.assign(new Error(message),{status:400});};
 export const fingerprint=value=>createHash('sha256').update(value).digest('hex');
 export function validVaultPassword(value,common=''){
-  if(typeof value!=='string'||[...value].length<7||[...value].length>128||Buffer.byteLength(value)>512)bad('Mật khẩu kho cần từ 7 đến 128 ký tự.');
+  if(typeof value!=='string'||[...value].length<5||[...value].length>128||Buffer.byteLength(value)>512)bad('Mật khẩu kho cần từ 5 đến 128 ký tự.');
   if(common&&value===common)bad('Chọn mật khẩu kho khác mật khẩu truy cập website.');
   return value;
 }
@@ -55,5 +55,5 @@ export function validateVaultBackup(meta,items){
   if(!Array.isArray(meta)||!Array.isArray(items)||meta.length>1)throw Error('Invalid encrypted vault backup');
   if(!meta.length){if(items.length)throw Error('Missing encrypted vault configuration');return;}
   if(meta[0].name!=='config'||typeof meta[0].value!=='string')throw Error('Invalid encrypted vault configuration');validVaultConfig(JSON.parse(meta[0].value));
-  const ids=new Set();for(const row of items){if(!Number.isSafeInteger(row.id)||row.id<1||ids.has(row.id)||!Number.isSafeInteger(row.revision)||row.revision<0||typeof row.payload!=='string'||row.payload.length>50000||!Number.isFinite(Date.parse(row.created_at))||!Number.isFinite(Date.parse(row.updated_at)))throw Error('Invalid encrypted vault entry');ids.add(row.id);const envelope=JSON.parse(row.payload);if(envelope.version!==1)throw Error('Invalid encrypted vault entry');bytes(envelope.iv,12);bytes(envelope.tag,16);bytes(envelope.data,1,32768);}
+  const ids=new Set(),families=new Set();for(const row of items){if(!Number.isSafeInteger(row.id)||row.id<1||ids.has(row.id)||!Number.isSafeInteger(row.revision)||row.revision<0||(row.family_id!==null&&(!Number.isSafeInteger(row.family_id)||row.family_id<1||families.has(row.family_id)))||typeof row.payload!=='string'||row.payload.length>50000||!Number.isFinite(Date.parse(row.created_at))||!Number.isFinite(Date.parse(row.updated_at)))throw Error('Invalid encrypted vault entry');ids.add(row.id);if(row.family_id!==null)families.add(row.family_id);const envelope=JSON.parse(row.payload);if(envelope.version!==1)throw Error('Invalid encrypted vault entry');bytes(envelope.iv,12);bytes(envelope.tag,16);bytes(envelope.data,1,32768);}
 }

@@ -1,4 +1,4 @@
-# YouTube Family — Quản lý khách hàng 0.13
+# YouTube Family — Quản lý khách hàng 0.13.1
 
 Ứng dụng quản lý cho cá nhân: **mở web là vào Tổng quan**, không cần tài khoản đăng nhập. Tập trung quản lý khách YouTube, Family, gia hạn và sản phẩm bán thêm. Không còn các mục admin, bảo mật tài khoản, Jobs hoặc thao tác Google. Có bản **PHP + MySQL dành cho Hostinger Premium** và bản Node.js chạy Windows/VPS. Có thể thêm biểu tượng vào màn hình chính iPhone; xem [hướng dẫn Hostinger](HOSTINGER.md). Bản hosting dùng một mật khẩu truy cập chung, không có tài khoản/role admin.
 
@@ -23,7 +23,7 @@ Lần sau chạy lại START-WINDOWS.cmd và mở cùng địa chỉ. Nếu `EAD
 3. Tải ZIP mới, giải nén riêng và sao chép toàn bộ nội dung bên trong thư mục mới sang thư mục ứng dụng cũ. Thay thế tệp trùng tên, **giữ nguyên thư mục data**.
 4. Chạy START-WINDOWS.cmd và nhấn **Ctrl+F5** trên trình duyệt.
 
-Dữ liệu khách, Family, Contact, thanh toán, gia hạn, lưu trữ và bản sao cũ được giữ. Startup nâng cấp SQLite bằng thay đổi cộng thêm, sao lưu trước nâng cấp vào `data/before-v13-*.sqlite`. Dữ liệu admin/Jobs cũ, nếu có, vẫn nằm trong bản dữ liệu cũ nhưng không được ứng dụng mới sử dụng hoặc trả qua API. Không cần tạo admin hoặc đăng nhập sau cập nhật. Bookmark cũ đến các trang đã bỏ được đưa về Tổng quan.
+Dữ liệu khách, Family, Contact, thanh toán, gia hạn, lưu trữ và bản sao cũ được giữ. Startup nâng cấp SQLite bằng thay đổi cộng thêm, sao lưu trước nâng cấp vào `data/before-v14-*.sqlite`. Dữ liệu admin/Jobs cũ, nếu có, vẫn nằm trong bản dữ liệu cũ nhưng không được ứng dụng mới sử dụng hoặc trả qua API. Không cần tạo admin hoặc đăng nhập sau cập nhật. Bookmark cũ đến các trang đã bỏ được đưa về Tổng quan.
 
 ## Chuyển dữ liệu từ bản Windows cũ mà không cập nhật ứng dụng
 
@@ -34,7 +34,7 @@ Bạn vẫn dùng **IMPORT-CSV-WINDOWS.cmd** trong thư mục cũ để nhập C
 3. Đóng server, nhấp đúp **EXPORT-BACKUP-WINDOWS.cmd**. Khi có **Export complete**, một file `family-backup-…json` xuất hiện ngay trong thư mục đó; cửa sổ báo số khách/Family/lịch sử/lưu trữ/sản phẩm.
 4. Mở website Family trên Hostinger → **Sao lưu / Chuyển dữ liệu**, chọn JSON vừa tạo → **Khôi phục dữ liệu** vào ứng dụng trống.
 
-Exporter tự chạy bằng Node24+, không dùng source app khác, mở SQLite **read-only**, không upgrade/thay đổi database gốc, không ghi đè file backup có sẵn. Hỗ trợ schema0–13; bảng/field không tồn tại được bổ sung vào JSON bằng ô trống/default cần thiết, không đoán ngày mua/hạn. Admin/jobs/mật khẩu ứng dụng cũ không được chuyển. Original Contact/notes/history/archive snapshots được giữ. Không tải file SQLite/JSON chứa khách vào File Manager hoặc GitHub; nhập JSON qua ứng dụng đã mở bằng mật khẩu. Hai bản Windows/hosting không tự đồng bộ; dùng địa chỉ hosting sau chuyển.
+Exporter tự chạy bằng Node24+, không dùng source app khác, mở SQLite **read-only**, không upgrade/thay đổi database gốc, không ghi đè file backup có sẵn. Hỗ trợ schema0–14; bảng/field không tồn tại được bổ sung vào JSON bằng ô trống/default cần thiết, không đoán ngày mua/hạn. Admin/jobs/mật khẩu ứng dụng cũ không được chuyển. Original Contact/notes/history/archive snapshots được giữ. Không tải file SQLite/JSON chứa khách vào File Manager hoặc GitHub; nhập JSON qua ứng dụng đã mở bằng mật khẩu. Hai bản Windows/hosting không tự đồng bộ; dùng địa chỉ hosting sau chuyển.
 
 ## Khách hàng và Family
 
@@ -58,23 +58,27 @@ Thanh toán kỳ hiện tại tách với gia hạn tiếp theo: Chưa nhắc / 
 
 Sau gia hạn, lần tiếp theo trở về Chưa nhắc; lịch sử không mất. Việc tính sai ở những bản cũ không tự sửa hồi tố. Chỉnh ngày trực tiếp bằng form sửa hồ sơ không tạo lịch sử gia hạn hoàn tất.
 
-## Kho tài khoản Family (bản 0.13)
+## Kho tài khoản Family (bản 0.13.1)
 
-Chọn **Kho tài khoản**, đặt mật khẩu riêng lần đầu (từ 7 ký tự, khác mật khẩu vào website). Những lần vào sau cần mở kho bằng mật khẩu này. Kho tự khóa khi chuyển mục, rời trang, bấm Khóa kho hoặc sau 15 phút. Trang khách/Family/Tổng quan vẫn hoạt động như trước.
+Chọn **Kho tài khoản**, đặt mật khẩu riêng lần đầu (từ 5 ký tự, khác mật khẩu vào website). Những lần vào sau cần mở kho bằng mật khẩu này. Kho tự khóa khi chuyển mục, rời trang, bấm Khóa kho hoặc sau 15 phút. Trang khách/Family/Tổng quan vẫn hoạt động như trước.
 
-Chọn **Thêm tài khoản**, có thể chọn Family sẵn có để điền mail chủ nhóm và tên, rồi nhập mật khẩu tài khoản, khóa bí mật 2FA và mail khôi phục (nếu có). Các cột riêng gồm **Tài khoản**, **Mật khẩu**, **2FA**, **Mã 2FA**, **Mail khôi phục**, **Note**. Khóa 2FA hiển thị trong kho; mã 6 số tự đổi, có đếm ngược và copy. Có copy tài khoản/mật khẩu/khóa/mã/mail khôi phục/Note; mật khẩu mặc định che và có Hiện/Ẩn. Có tìm, sửa, xóa và đổi mật khẩu kho. Không tự đăng nhập hay sửa tài khoản Google; thông tin kho độc lập với thao tác quản lý Family và được giữ khi lưu trữ nhóm.
+Kho **tự hiển thị toàn bộ Family đang quản lý**, kể cả nhóm chưa nhập thông tin kho. Chỉ lấy **Mail Family** và **Ngày trial** từ Family; không hiển thị số khách/ghi chú nhóm. Các cột Mật khẩu, 2FA, Mã2FA, Mail khôi phục, Note để bạn tự nhập. Nhấn mail để mở Family và các thành viên; có copy mail/ngày trial và các thông tin đã lưu.
 
-Tìm theo mail, tên Family, mail khôi phục hoặc Note. Bộ lọc như mục Family: **Tất cả** xếp trial cũ đến mới; **Fam dư slot** chỉ hiện mail trùng chủ Family hiện tại có dưới 5 khách đang ghi nhận (tính cả đã mời); **Theo tên** xếp Family 48,47,46… Tài khoản chưa ghép với Family vẫn ở Tất cả/Theo tên, không nằm trong Fam dư slot. Kho không tự thay mail/chuyển khách hay tạo Family.
+Nhấn **Nhập thông tin** hoặc **Sửa** trên hàng Family, nhập mật khẩu tài khoản, khóa bí mật2FA, mail khôi phục (nếu có) và **Note**. Mail chủ được sửa tại Family hoặc Kho: **hai bên cập nhật theo cùng hồ sơ Family**, kể cả đổi mail khi kho đang khóa. Mật khẩu/2FA/recovery/Note đã lưu vẫn giữ với hồ sơ đó; không tạo hồ sơ trùng. Mỗi lần đổi mail có Nhật ký mail cũ → mail mới; mật khẩu/khóa/Note không ghi vào nhật ký. Mail trùng chủ Family khác hoặc khách cùng nhóm bị từ chối; lỗi lưu sẽ hoàn tác cả hai bên. Form đã mở với mail cũ bị chặn để tránh ghi đè thay đổi mới.
 
-**Nhập từ Sheet:** copy bảng gồm dòng tiêu đề và dữ liệu từ Google Sheet/Excel rồi dán, hoặc chọn CSV/TSV tối đa 1 MB. Các cột **Tài khoản, Mật khẩu, 2FA, Mail khôi phục, Note**; Tên Family không bắt buộc. Mỗi dòng là một tài khoản; chỉ Tài khoản bắt buộc, các ô trống giữ trống. Chọn lại cột nếu tiêu đề khác; không dùng cột Mã 2FA 6 số làm khóa. Nhấn **Xem trước**, đối chiếu email/số dòng rồi **Nhập … tài khoản**. Mật khẩu/khóa được ẩn trong preview. Mỗi lần tối đa 500 tài khoản; mail trùng trong sheet/kho hoặc khóa sai sẽ báo số dòng và dừng cả lượt nhập, không ghi đè hay nhập một phần. Thay dữ liệu/cột sau xem trước phải xem trước lại. Nhật ký chỉ ghi số lượng, không ghi thông tin kho.
+Mật khẩu kho từ **5 ký tự**, không yêu cầu chữ hoa/ký tự đặc biệt; mật khẩu cũ vẫn dùng. Tìm mail/Note và lọc Tất cả (trial cũ đến mới), Fam dư slot, Theo tên như Family. Có copy/HiệnẨn mật khẩu; khóa2FA và mã6số riêng, mã tự đổi/đếm ngược/copy.
+
+Thông tin0.13 cũ được tự ghép với Family đúng mail khi bạn mở kho lần đầu sau cập nhật. Thông tin chưa ghép vẫn được giữ riêng trong mục thu gọn. Khi lưu trữ Family, thông tin kho giữ liên kết; khôi phục nhóm sẽ hiện lại đúng dữ liệu. **Xóa thông tin kho** chỉ bỏ thông tin đăng nhập/Note đã lưu; Family và khách vẫn giữ, hàng trở về trống.
+
+**Nhập từ Sheet:** copy cả dòng tiêu đề và dữ liệu (Tài khoản, Mật khẩu, 2FA, Mail khôi phục, Note), dán hoặc chọn CSV/TSV tối đa1MB. Tài khoản phải là mail chủ của Family đang quản lý. Chọn cột → **Xem trước** → **Nhập … tài khoản**. Trial lấy từ Family. Mỗi lượt tối đa500 dòng; mail chưa có Family/mail trùng/khóa sai báo theo số dòng và dừng cả lượt, không nhập thiếu hay ghi đè. Thay dữ liệu/cột phải xem trước lại. Nhật ký chỉ ghi số lượng/thao tác.
 
 Khóa Base32 nhận A–Z và 2–7, không phân biệt hoa/thường; tự bỏ khoảng trắng giữa nhóm ký tự. Nhập khóa bí mật, không nhập mã 6 số hoặc mã dự phòng. Không đoán sửa ký tự 0/1/8/9 thành chữ khác. Hỗ trợ liên kết otpauth://totp, 6 số, SHA1/SHA256/SHA512, chu kỳ15–120giây; khóa chữ mặc định SHA1/30giây như Google Authenticator. Mã lấy từ giờ máy chủ và đồng hồ đếm ngược được đồng bộ, không phụ thuộc giờ điện thoại.
 
 Tài khoản/mật khẩu/khóa/mail khôi phục/tên nhận biết/Note được mã hóa AES-256-GCM; khóa dữ liệu ngẫu nhiên được bảo vệ bằng mật khẩu kho qua PBKDF2-SHA256600000 vòng. Private session15phút có cookie HttpOnly/SameSite và Secure khi hosting; cookie chỉ mang khóa đã bọc, database phiên chỉ giữ hash/expiry, khóa phiên không nằm trong bản sao lưu. Mỗi API kho kiểm tra phiên; khóa/đổi mật khẩu thu hồi phiên, mở sai nhiều lần bị giới hạn. Thông tin kho không có trong state/journal hoặc danh sách khách; nhật ký chỉ ghi thao tác/ID, không lưu mật khẩu hoặc khóa. Kho là nơi cần mở bằng mật khẩu riêng để xem thông tin đó.
 
-**Sao lưu / Chuyển dữ liệu** và helper Windows xuất **v6**, gồm toàn bộ kho ở dạng mã hóa, nhận cả v1–v5 cũ. Khôi phục trên Node hoặc PHP vẫn mở kho bằng mật khẩu đã đặt; không dùng app cũ để nhập v6. Phải giữ mật khẩu kho riêng: ứng dụng không khôi phục mật khẩu đã quên. Đổi mật khẩu kho bọc lại khóa dữ liệu, không làm mất hồ sơ. File sao lưu chứa dữ liệu khách cũ như trước; phần kho chỉ có ciphertext. Khôi phục chỉ vào app trống để tránh ghi đè cả dữ liệu khách và kho.
+**Sao lưu / Chuyển dữ liệu** và helper Windows xuất **v7**, gồm toàn bộ kho ở dạng mã hóa, nhận cả v1–v6 cũ. Khôi phục trên Node hoặc PHP vẫn mở kho bằng mật khẩu đã đặt; không dùng app cũ để nhập v7. Phải giữ mật khẩu kho riêng: ứng dụng không khôi phục mật khẩu đã quên. Đổi mật khẩu kho bọc lại khóa dữ liệu, không làm mất hồ sơ. File sao lưu chứa dữ liệu khách cũ như trước; phần kho chỉ có ciphertext. Khôi phục chỉ vào app trống để tránh ghi đè cả dữ liệu khách và kho.
 
-SQLite nâng cấp12→13 có before-v13 backup; PHP schema4→5 thêm ba bảng kho, không thay dữ liệu khách. Hostinger cần PDO MySQL và OpenSSL (PHP8.3 có thể dùng); không cần thêm mật khẩu kho vào config.php hay cài npm. Gói cập nhật phải có public_html/vault.js, vault-sheet.js, family-private/vault.php và vault.sql cùng các file đã đổi. Giữ config.php/database, tải lại trang và tạo mật khẩu kho trong ứng dụng.
+SQLite nâng cấp13→14 có before-v14 backup; PHP schema5→6 bổ sung liên kết kho-Family, không thay dữ liệu khách. Hostinger cần PDO MySQL và OpenSSL (PHP8.3 có thể dùng); không cần thêm mật khẩu kho vào config.php hay cài npm. Gói cập nhật phải có public_html/vault.js, vault-sheet.js, vault-families.js, family-private/vault.php và vault.sql cùng các file đã đổi. Giữ config.php/database, tải lại trang và tạo mật khẩu kho trong ứng dụng.
 
 ## Chuyển khách sang Family khác (bản 0.12)
 
@@ -94,9 +98,9 @@ Backend kiểm tra Family đang hoạt động, mail không trùng chủ nhóm/k
 
 Bảng **Chờ fix → Đang fix → Đã fix** hỗ trợ kéo thả, chọn trạng thái và nút Đã fix trên iPhone. Khi hoàn tất, bắt buộc chọn **Giữ nguyên mail** hoặc **Đổi sang mail mới**. Đổi cập nhật đúng hồ sơ quản lý/khách đã báo lỗi trong cùng lần lưu; thẻ Done ghi rõ mail cũ→mới và giữ mail báo lỗi ban đầu. Không đổi ngày mua/hạn/Contact/thanh toán. Mail trùng hoặc hồ sơ đã thay đổi/xóa sẽ không gây cập nhật một phần; trạng thái và đổi mail cùng rollback. Lỗi vẫn được giữ khi Family bị xóa. Thay đổi đồng thời có revision guard, cần tải lại khi có xung đột.
 
-**Nhật ký** tìm kiếm/phân trang, lưu thời gian/người thao tác/nội dung và **Xem chi tiết trước-sau** cho các thay đổi từ bản này. Ghi thêm/sửa/xóa/import/gia hạn/lưu trữ/khôi phục/sửa lỗi/đổi mail; không ghi refresh/xem trang. Khi xóa Family, cả hồ sơ nhóm và khách được chuyển vào lưu trữ; nhật ký ghi thay đổi và hồ sơ khách đã lưu. Log cũ vẫn đọc được; dữ liệu trước-sau không thể tạo lại cho thao tác đã xảy ra trước bản cập nhật. Nhật ký hiện giúp đối chiếu, chưa có hoàn tác tự động. Bản sao lưu hiện tại v6 giữ lỗi/nhật ký/ngày trial, Family lưu trữ, sản phẩm phụ và kho đã mã hóa; vẫn nhận v1–v5.
+**Nhật ký** tìm kiếm/phân trang, lưu thời gian/người thao tác/nội dung và **Xem chi tiết trước-sau** cho các thay đổi từ bản này. Ghi thêm/sửa/xóa/import/gia hạn/lưu trữ/khôi phục/sửa lỗi/đổi mail; không ghi refresh/xem trang. Khi xóa Family, cả hồ sơ nhóm và khách được chuyển vào lưu trữ; nhật ký ghi thay đổi và hồ sơ khách đã lưu. Log cũ vẫn đọc được; dữ liệu trước-sau không thể tạo lại cho thao tác đã xảy ra trước bản cập nhật. Nhật ký hiện giúp đối chiếu, chưa có hoàn tác tự động. Bản sao lưu hiện tại v6 giữ lỗi/nhật ký/ngày trial, Family lưu trữ, sản phẩm phụ và kho đã mã hóa; vẫn nhận v1–v6.
 
-Cập nhật Hostinger bằng [gói cập nhật riêng](https://github.com/haitiano1/family/raw/refs/heads/main/downloads/family-hostinger-update.zip) và [hướng dẫn](hosting/php/UPDATE.md), giữ nguyên config.php/database. Không cần nhập lại khách. MySQL schema1–4 nâng cấp cộng thêm lên5; Node schema13 sao lưu before-v13 trước nâng cấp. Exporter độc lập hỗ trợ schema0–13.
+Cập nhật Hostinger bằng [gói cập nhật riêng](https://github.com/haitiano1/family/raw/refs/heads/main/downloads/family-hostinger-update.zip) và [hướng dẫn](hosting/php/UPDATE.md), giữ nguyên config.php/database. Không cần nhập lại khách. MySQL schema1–5 nâng cấp cộng thêm lên6; Node schema14 sao lưu before-v14 trước nâng cấp. Exporter độc lập hỗ trợ schema0–14.
 
 ## Bộ lọc và thao tác khách (bản0.8)
 
@@ -154,7 +158,7 @@ Sau 14 ngày, bản ghi tự rời **Khách vừa gia hạn** khi trang cập nh
 
 **Sản phẩm khác → Xóa** chuyển toàn bộ hồ sơ vào Khách lưu trữ, giữ tên sản phẩm, tên/email khách, Contact, gói, ngày mua/hạn, thanh toán, số tiền, ghi chú và thời điểm tạo. Xem dữ liệu hỗ trợ đúng hồ sơ sản phẩm; Khôi phục đưa lại vào Sản phẩm khác, không cần Family và không đổi hạn. Có thể Xóa khỏi lưu trữ như hồ sơ khách Family. Hồ sơ khách Family/lịch sử có trùng số ID nội bộ vẫn được giữ nguyên. Mục Khách vừa gia hạn tiếp tục là danh sách xem 14 ngày, không tự lưu trữ/xóa khách hoạt động.
 
-Bản **0.11 đã đóng gói lại toàn bộ** thay đổi này cùng chặn báo lỗi trùng/reset tìm kiếm/copy mail lỗi/logo YouTube. Dùng [family-hostinger-update.zip](https://github.com/haitiano1/family/raw/refs/heads/main/downloads/family-hostinger-update.zip) cho website đang chạy và làm theo [UPDATE.md](hosting/php/UPDATE.md); giữ config.php/database, không nhập lại khách. ZIP cài mới cũng có đầy đủ các thay đổi. Từ bản0.11, backupv5 phân biệt sản phẩm lưu trữ với khách Family. Bản0.13/helper Windows hiện xuấtv6 có kho mã hóa và nhậnv1–v5; app cũ không nhập đượcv6.
+Bản **0.11 đã đóng gói lại toàn bộ** thay đổi này cùng chặn báo lỗi trùng/reset tìm kiếm/copy mail lỗi/logo YouTube. Dùng [family-hostinger-update.zip](https://github.com/haitiano1/family/raw/refs/heads/main/downloads/family-hostinger-update.zip) cho website đang chạy và làm theo [UPDATE.md](hosting/php/UPDATE.md); giữ config.php/database, không nhập lại khách. ZIP cài mới cũng có đầy đủ các thay đổi. Từ bản0.11, backupv5 phân biệt sản phẩm lưu trữ với khách Family. Bản0.13/helper Windows hiện xuấtv6 có kho mã hóa và nhậnv1–v6; app cũ không nhập đượcv6.
 
 Kiểm tra PHP trực tiếp từ mã nguồn, không tạo ZIP: `FAMILY_PHP_SOURCE_ONLY=1 npm run test:php`. Chế độ này chép nguồn PHP/frontend vào các fixture riêng, bỏ config.php thật; không đụng database/config đang dùng. Chạy `npm run test:php` không có biến này vẫn kiểm tra luồng đóng gói khi cần.
 

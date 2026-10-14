@@ -124,12 +124,13 @@ function restoreArchive(PDO $db,int $id,array $d,bool $wholeFamily=false): array
 }
 const BASE_BACKUP_TABLES=['accounts','families','members','archived_customers','renewal_history','other_purchases','logs'];
 const BACKUP_TABLES=[...BASE_BACKUP_TABLES,'issues','audit_events','vault_meta','vault_items'];
-function backup(PDO $db): array {return ['format'=>'family-customer-backup','version'=>6,'created_at'=>stamp(),'tables'=>array_combine(BACKUP_TABLES,array_map(fn($t)=>all($db,"SELECT * FROM `$t` ORDER BY ".($t==='vault_meta'?'name':'id')),BACKUP_TABLES))];}
+function backup(PDO $db): array {return ['format'=>'family-customer-backup','version'=>7,'created_at'=>stamp(),'tables'=>array_combine(BACKUP_TABLES,array_map(fn($t)=>all($db,"SELECT * FROM `$t` ORDER BY ".($t==='vault_meta'?'name':'id')),BACKUP_TABLES))];}
 function restoreBackup(PDO $db,array $d): array {
-    if (($d['format']??'')!=='family-customer-backup' || !in_array($d['version']??null,[1,2,3,4,5,6],true) || !is_array($d['tables']??null)) fail('File sao lưu khách hàng không hợp lệ.');
+    if (($d['format']??'')!=='family-customer-backup' || !in_array($d['version']??null,[1,2,3,4,5,6,7],true) || !is_array($d['tables']??null)) fail('File sao lưu khách hàng không hợp lệ.');
     if($d['version']===1){$d['tables']['issues']=$d['tables']['issues']??[];$d['tables']['audit_events']=$d['tables']['audit_events']??[];}
     if($d['version']<6&&(!empty($d['tables']['vault_meta'])||!empty($d['tables']['vault_items'])))fail('Sao lưu chứa kho mã hóa cần định dạng phiên bản 6.');
     if($d['version']<6){$d['tables']['vault_meta']=[];$d['tables']['vault_items']=[];}
+    if($d['version']<7)$d['tables']['vault_items']=array_map(fn($row)=>[...$row,'family_id'=>null],$d['tables']['vault_items']);
     try{vaultValidateBackup($d['tables']['vault_meta']??[], $d['tables']['vault_items']??[]);}catch(Throwable $e){fail('Phần kho mã hóa trong sao lưu không hợp lệ.');}
     foreach(BACKUP_TABLES as $t) {if (!is_array($d['tables'][$t]??null) || !array_is_list($d['tables'][$t])) fail('File sao lưu thiếu bảng dữ liệu.');if (!in_array($t,['logs','audit_events'],true) && one($db,"SELECT COUNT(*) AS n FROM `$t`")['n']) fail('Chỉ khôi phục vào ứng dụng đang trống để không ghi đè dữ liệu hiện có.',409);}
     try {return transaction($db,function()use($db,$d){

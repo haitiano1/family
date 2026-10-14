@@ -16,5 +16,5 @@ test('AES-GCM rejects tampering, wrong key and record substitution, and password
  const key=Buffer.alloc(32,1),entry=seal('Public test value',key,'family-vault-item-v1:1');assert.equal(open(entry,key,'family-vault-item-v1:1'),'Public test value');assert.throws(()=>open(entry,Buffer.alloc(32,2),'family-vault-item-v1:1'));assert.throws(()=>open(entry,key,'family-vault-item-v1:2'));
  const altered={...entry,tag:Buffer.alloc(16).toString('base64')};assert.throws(()=>open(altered,key,'family-vault-item-v1:1'));
  const config=wrapMaster('Test vault password',key);assert.deepEqual(unwrapMaster('Test vault password',config),key);assert.throws(()=>unwrapMaster('Wrong password',config));assert.throws(()=>unwrapMaster('Test vault password',{...config,iterations:1}));
- assert.throws(()=>validVaultPassword('123456'));assert.throws(()=>validVaultPassword('common-password','common-password'));assert.equal(validVaultPassword('1234567'),'1234567');
+ assert.throws(()=>validVaultPassword('1234'));assert.throws(()=>validVaultPassword('common-password','common-password'));assert.equal(validVaultPassword('12345'),'12345');
 });

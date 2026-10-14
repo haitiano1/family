@@ -1,4 +1,4 @@
-# Cập nhật YouTube Family 0.13
+# Cập nhật YouTube Family 0.13.1
 
 Bản này gộp đầy đủ các thay đổi trước đây chưa đóng gói và các yêu cầu mới. Dùng **gói cập nhật** cho website Family đang chạy; giữ cấu hình và dữ liệu hiện có.
 
@@ -12,9 +12,17 @@ Bản này gộp đầy đủ các thay đổi trước đây chưa đóng gói 
 
 Không cần tạo database, sửa SQL hay nhập lại khách. Gói không chứa config.php, mật khẩu, dữ liệu khách hoặc backup. Website giữ database hiện tại; nếu còn dùng schema cũ, ứng dụng tự thêm các cột cần thiết. Cài mới dùng [family-hostinger.zip](https://github.com/haitiano1/family/raw/refs/heads/main/downloads/family-hostinger.zip) và [INSTALL.md](INSTALL.md).
 
+## Bổ sung trong bản 0.13.1
+
+Kho tự hiện toàn bộ Family. Chỉ lấy **Mail Family** và **Ngày trial**; Mật khẩu/2FA/mã2FA/Mail khôi phục/Note bạn tự nhập. Không có cột số khách. Có Nhập thông tin/Sửa/copy; tìm mail và bộ lọc như Family.
+
+**Đổi mail tại Family hoặc Kho đều cập nhật hai bên**, giữ mật khẩu/2FA/Note theo hồ sơ nhóm. Đổi mail khi kho đang khóa vẫn cập nhật đúng khi mở lại. Nhật ký ghi rõ mail cũ → mail mới, không ghi mật khẩu/khóa. Trùng mail/stale form/lỗi lưu sẽ không ghi một phần. Thông tin0.13 cũ tự liên kết khi mở kho lần đầu; không cần nhập lại48 Family. Lưu trữ/khôi phục Family vẫn giữ thông tin kho; Xóa thông tin kho giữ nguyên Family/khách.
+
+Mật khẩu kho từ **5 ký tự**, mật khẩu cũ vẫn dùng; có Đổi mật khẩu kho. Cập nhật đầy đủ public_html/family-private, gồm **vault-families.js** mới; giữ **config.php/database**. MySQL schema6/SQLite14 thêm liên kết; tự nâng cấp. Sao lưu/helper Windows hiện **v7**, nhậnv1–v6; giữ mật khẩu kho để giải mã khi chuyển dữ liệu. Không nhậpv7 vào app cũ.
+
 ## Bổ sung trong bản 0.13
 
-Có mục **Kho tài khoản** với mật khẩu riêng. Sau cập nhật, mở mục này, đặt mật khẩu kho từ 7 ký tự khác mật khẩu website. Chọn Thêm tài khoản, nhập tài khoản/mật khẩu/khóa bí mật 2FA/mail khôi phục/Note. Có thể chọn một Family đang quản lý để điền mail chủ nhóm. Kho có cột **2FA** hiển thị khóa và **Mã 2FA** tự tạo 6 số, đếm ngược/copy như Google Authenticator. Có copy các trường khác, Hiện/Ẩn mật khẩu, sửa/xóa, tìm kiếm và Đổi mật khẩu kho.
+Có mục **Kho tài khoản** với mật khẩu riêng. Sau cập nhật, mở mục này, đặt mật khẩu kho từ 5 ký tự khác mật khẩu website. Chọn Thêm tài khoản, nhập tài khoản/mật khẩu/khóa bí mật 2FA/mail khôi phục/Note. Có thể chọn một Family đang quản lý để điền mail chủ nhóm. Kho có cột **2FA** hiển thị khóa và **Mã 2FA** tự tạo 6 số, đếm ngược/copy như Google Authenticator. Có copy các trường khác, Hiện/Ẩn mật khẩu, sửa/xóa, tìm kiếm và Đổi mật khẩu kho.
 
 Có tìm mail/Family/Note và bộ lọc **Tất cả, Fam dư slot, Theo tên** như mục Family. Note được mã hóa và copy được.
 
@@ -22,9 +30,9 @@ Chọn **Nhập từ Sheet** để dán bảng có dòng tiêu đề (Tài kho�
 
 Khóa dạng nhóm4ký tự có khoảng trắng được chuẩn hóa. Khóa Base32 chỉ nhận A–Z và 2–7; không dùng mã dự phòng hay mã6số. Mã lấy theo giờ máy chủ, mặc định đổi30giây. Chỉ người đã mở kho mới thấy thông tin; kho tự khóa khi rời mục hoặc sau15phút. Thông tin lưu mã hóa AES-GCM, không hiện trong nhật ký. Nhật ký chỉ ghi thao tác/ID. Giữ mật khẩu kho riêng vì ứng dụng không khôi phục được mật khẩu đã quên.
 
-Sao lưu hiện tại **v6** giữ cả kho đã mã hóa; nhận v1–v5 cũ và mở lại bằng cùng mật khẩu trên Node/PHP. Helper Windows đã cập nhật. Không dùng app cũ để nhập backup v6. PHP schema5 thêm các bảng kho khi mở app, giữ toàn bộ khách/Family/Contact/hạn/thanh toán/lịch sử/Fix lỗi. Không cần tạo database/import lại hay thêm mật khẩu kho trong config.php.
+Sao lưu hiện tại **v7** giữ cả kho đã mã hóa; nhận v1–v6 cũ và mở lại bằng cùng mật khẩu trên Node/PHP. Helper Windows đã cập nhật. Không dùng app cũ để nhập backup v7. PHP schema6 thêm các bảng kho khi mở app, giữ toàn bộ khách/Family/Contact/hạn/thanh toán/lịch sử/Fix lỗi. Không cần tạo database/import lại hay thêm mật khẩu kho trong config.php.
 
-**Cần upload đầy đủ các file trong cả family-private và public_html**, gồm các file mới **vault.php, vault.sql, vault.js và vault-sheet.js**. Bật OpenSSL trong PHP Configuration nếu kho báo thiếu extension; giữ config.php và database hiện có. Gói đầy đủ/cập nhật đã bao gồm các chức năng0.12 và trước đó.
+**Cần upload đầy đủ các file trong cả family-private và public_html**, gồm các file mới **vault.php, vault.sql, vault.js, vault-sheet.js và vault-families.js**. Bật OpenSSL trong PHP Configuration nếu kho báo thiếu extension; giữ config.php và database hiện có. Gói đầy đủ/cập nhật đã bao gồm các chức năng0.12 và trước đó.
 
 ## Bổ sung trong bản 0.12
 
@@ -60,4 +68,4 @@ Gói 0.11.1 đã chứa mọi thay đổi của 0.11. Dùng cùng các bước c
 - Ba bộ lọc khách; Family xếp trial cũ đến mới, Fam dư slot dưới 5 hồ sơ, Theo tên giảm dần; copy thông tin và Contact bấm mở được.
 - Xóa hồ sơ khách/Family và chọn Không gia hạn chuyển vào lưu trữ. Family trống vẫn lưu trữ và khôi phục được. Nhật ký, CSV và bản sao lưu tiếp tục hoạt động.
 
-Backup hiện tại là **v6**, nhận bản v1–v5 cũ; không dùng ứng dụng cũ để nhập backup v6. Cả ZIP cài mới, ZIP cập nhật và helper xuất Windows đã được tạo lại cho bản này. Không thể tự phục hồi sản phẩm đã bị xóa hẳn từ bản cũ trước khi tính năng lưu trữ được bổ sung.
+Backup hiện tại là **v7**, nhận bản v1–v6 cũ; không dùng ứng dụng cũ để nhập backup v7. Cả ZIP cài mới, ZIP cập nhật và helper xuất Windows đã được tạo lại cho bản này. Không thể tự phục hồi sản phẩm đã bị xóa hẳn từ bản cũ trước khi tính năng lưu trữ được bổ sung.

@@ -160,7 +160,7 @@ async function handle(req, res) {
           if (!manager) fail('Nhập email quản lý Family hợp lệ.');
           if (one('SELECT id FROM members WHERE family_id=? AND email=?',id,manager.email)) fail('Email quản lý trùng một khách trong nhóm.');
           run('UPDATE families SET name=?,manager_id=?,service=?,note=?,trial_date=? WHERE id=?',name,manager.id,product,note,calendarDate(data.trial_date??old.trial_date),id);
-          log(`${actor.username}: sửa Family #${id}`);db.exec('RELEASE family_save');return send(res,200,{ok:true});
+          const oldMail=one('SELECT email FROM accounts WHERE id=?',old.manager_id)?.email;if(oldMail&&oldMail!==manager.email)log(`${actor.username}: đổi mail Family #${id} từ ${oldMail} sang ${manager.email}`);log(`${actor.username}: sửa Family #${id}`);db.exec('RELEASE family_save');return send(res,200,{ok:true});
         } catch(error) {db.exec('ROLLBACK TO family_save; RELEASE family_save');throw error;}
       }
     }
@@ -190,7 +190,7 @@ async function handle(req, res) {
       run(`DELETE FROM ${table} WHERE id=?`, id); log(`${actor.username}: xóa hồ sơ nội bộ ${table} #${id}`); return send(res, 200, { ok: true });
     }
     if (req.method === 'GET') {
-      const assets = { '/': ['index.html','text/html'], '/access':['access.html','text/html'], '/access.js':['access.js','text/javascript'], '/app.js': ['app.js','text/javascript'], '/vault.js': ['vault.js','text/javascript'], '/vault-sheet.js':['vault-sheet.js','text/javascript'], '/style.css': ['style.css','text/css'], '/csv.js': ['csv.js','text/javascript'], '/contacts.js':['contacts.js','text/javascript'], '/domain.js': ['../domain.js','text/javascript'], '/manifest.webmanifest':['manifest.webmanifest','application/manifest+json'], '/icon-180.png':['icon-180.png','image/png'], '/icon-192.png':['icon-192.png','image/png'], '/icon-512.png':['icon-512.png','image/png'] };
+      const assets = { '/': ['index.html','text/html'], '/access':['access.html','text/html'], '/access.js':['access.js','text/javascript'], '/app.js': ['app.js','text/javascript'], '/vault.js': ['vault.js','text/javascript'], '/vault-sheet.js':['vault-sheet.js','text/javascript'], '/vault-families.js':['../vault-families.js','text/javascript'], '/style.css': ['style.css','text/css'], '/csv.js': ['csv.js','text/javascript'], '/contacts.js':['contacts.js','text/javascript'], '/domain.js': ['../domain.js','text/javascript'], '/manifest.webmanifest':['manifest.webmanifest','application/manifest+json'], '/icon-180.png':['icon-180.png','image/png'], '/icon-192.png':['icon-192.png','image/png'], '/icon-512.png':['icon-512.png','image/png'] };
       const asset = assets[url.pathname]; if (!asset) return send(res, 404, { error: 'Không tìm thấy.' });
       res.writeHead(200, { 'Content-Type': asset[1] + '; charset=utf-8', 'Cache-Control': 'no-store', 'Content-Security-Policy': "default-src 'self'; style-src 'self'; script-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'" });
       return res.end(readFileSync(path.join(root, 'public', asset[0])));

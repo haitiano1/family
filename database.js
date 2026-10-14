@@ -7,9 +7,9 @@ const file = path.join(dir, 'family.sqlite');
 const existing = existsSync(file);
 const db = new DatabaseSync(file);
 const currentVersion = db.prepare('PRAGMA user_version').get().user_version;
-if (currentVersion > 13) throw new Error('Database is newer than this application. Use the latest application version.');
-if (existing && currentVersion < 13) {
-  const backup = path.join(dir, `before-v13-${Date.now()}.sqlite`);
+if (currentVersion > 14) throw new Error('Database is newer than this application. Use the latest application version.');
+if (existing && currentVersion < 14) {
+  const backup = path.join(dir, `before-v14-${Date.now()}.sqlite`);
   db.exec(`VACUUM INTO '${backup.replaceAll("'", "''")}'`);
   console.log('Saved pre-upgrade database backup in the data directory.');
 }
@@ -46,7 +46,9 @@ try {
   db.exec(`CREATE TABLE IF NOT EXISTS vault_meta(name TEXT PRIMARY KEY,value TEXT NOT NULL);
   CREATE TABLE IF NOT EXISTS vault_items(id INTEGER PRIMARY KEY AUTOINCREMENT,payload TEXT NOT NULL,revision INTEGER NOT NULL DEFAULT 0,created_at TEXT NOT NULL,updated_at TEXT NOT NULL);
   CREATE TABLE IF NOT EXISTS vault_sessions(token_hash TEXT PRIMARY KEY,expires_at INTEGER NOT NULL);`);
-  db.exec('PRAGMA user_version=13; COMMIT');
+  if(!db.prepare('PRAGMA table_info(vault_items)').all().some(c=>c.name==='family_id'))db.exec('ALTER TABLE vault_items ADD COLUMN family_id INTEGER REFERENCES families(id)');
+  db.exec('CREATE UNIQUE INDEX IF NOT EXISTS vault_family_link ON vault_items(family_id)');
+  db.exec('PRAGMA user_version=14; COMMIT');
 } catch (error) { db.exec('ROLLBACK'); throw error; }
 return db;
 }
