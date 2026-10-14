@@ -10,7 +10,7 @@ function exportBackup(databaseFile, outputFile) {
   try {
     db.exec('PRAGMA busy_timeout=5000; BEGIN');
     const version=db.prepare('PRAGMA user_version').get().user_version;
-    if (version>12) throw new Error('This database is newer than this export tool. Download the latest exporter.');
+    if (version>13) throw new Error('This database is newer than this export tool. Download the latest exporter.');
     const known=new Set(db.prepare("SELECT name FROM sqlite_master WHERE type='table'").all().map(r=>r.name));
     for (const name of ['accounts','families','members']) if (!known.has(name)) throw new Error('Not a Fam Manager customer database.');
     const defaults={
@@ -22,12 +22,14 @@ function exportBackup(databaseFile, outputFile) {
       other_purchases:{plan_months:0,id:null,product:'',customer_name:'',email:'',contact:'',joined_at:'',expires_at:'',payment_status:'unknown',amount:0,note:'',created_at:''},
       logs:{id:null,message:'',created_at:''},
       issues:{id:null,family_id:null,family_name:'',target_type:'manager',target_id:null,subject_email:'',original_email:'',title:'',note:'',status:'todo',revision:0,created_at:'',updated_at:'',done_at:'',resolution:'',resolution_email:'',resolution_note:'',trial_date:'',reported_on:''},
-      audit_events:{id:null,action:'',actor:'',message:'',details:'',created_at:''}
+      audit_events:{id:null,action:'',actor:'',message:'',details:'',created_at:''},
+      vault_meta:{name:'',value:''},
+      vault_items:{id:null,payload:'',revision:0,created_at:'',updated_at:''}
     };
     const tables={};
     for (const [table,base] of Object.entries(defaults)) {
       const fields=Object.keys(base);
-      tables[table]=known.has(table) ? db.prepare(`SELECT * FROM ${table} ORDER BY id`).all().map(row=>Object.fromEntries(fields.map(field=>[field,Object.hasOwn(row,field) ? row[field] : base[field]]))) : [];
+      tables[table]=known.has(table) ? db.prepare(`SELECT * FROM ${table} ORDER BY ${table==='vault_meta'?'name':'id'}`).all().map(row=>Object.fromEntries(fields.map(field=>[field,Object.hasOwn(row,field) ? row[field] : base[field]]))) : [];
     }
     for (const row of tables.archived_customers) {
       const m=JSON.parse(row.snapshot);
@@ -37,7 +39,7 @@ function exportBackup(databaseFile, outputFile) {
       for (const [field,value] of Object.entries(m.record_type==='other_product'?defaults.other_purchases:defaults.members)) if (!Object.hasOwn(m,field)) {m[field]=value;changed=true;}
       if (changed) row.snapshot=JSON.stringify(m);
     }
-    const result={format:'family-customer-backup',version:5,created_at:new Date().toISOString(),tables};
+    const result={format:'family-customer-backup',version:6,created_at:new Date().toISOString(),tables};
     db.exec('COMMIT');
     writeFileSync(outputFile,JSON.stringify(result),{flag:'wx',mode:0o600});
     return result;

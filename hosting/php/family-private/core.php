@@ -99,14 +99,15 @@ function initializeSchema(PDO $db): void {
     if ($tables && !in_array('app_meta',$tables,true)) fail('Database đang chứa dữ liệu khác. Tạo database trống riêng cho Family.',503);
     if (in_array('app_meta',$tables,true)) {
         $version=one($db,"SELECT value FROM app_meta WHERE name='schema_version'");
-        if (($version['value']??'')==='4') return;
-        if ($version && !in_array($version['value'],['1','2','3'],true)) fail('Database dùng phiên bản khác. Hãy dùng mã nguồn tương ứng.',503);
+        if (($version['value']??'')==='5') return;
+        if ($version && !in_array($version['value'],['1','2','3','4'],true)) fail('Database dùng phiên bản khác. Hãy dùng mã nguồn tương ứng.',503);
     }
     foreach(explode(';',file_get_contents(__DIR__.'/schema.sql')) as $sql) if (trim($sql)) $db->exec($sql);
     foreach(explode(';',file_get_contents(__DIR__.'/features.sql')) as $sql)if(trim($sql))$db->exec($sql);
     foreach(['families'=>['trial_date'],'issues'=>['trial_date','reported_on']]as $table=>$fields){$known=array_column(all($db,"SHOW COLUMNS FROM `$table`"),'Field');foreach($fields as $field)if(!in_array($field,$known,true))$db->exec("ALTER TABLE `$table` ADD COLUMN `$field` VARCHAR(10) NOT NULL DEFAULT ''");}
     foreach(['families'=>['archived_at'=>"VARCHAR(32) NOT NULL DEFAULT ''"],'archived_customers'=>['family_archive_id'=>'BIGINT NULL'],'other_purchases'=>['plan_months'=>'INT NOT NULL DEFAULT 0']] as $table=>$fields){$known=array_column(all($db,"SHOW COLUMNS FROM `$table`"),'Field');foreach($fields as $field=>$type)if(!in_array($field,$known,true))$db->exec("ALTER TABLE `$table` ADD COLUMN `$field` $type");}
-    q($db,"INSERT INTO app_meta(name,value) VALUES ('schema_version','4') ON DUPLICATE KEY UPDATE value='4'");
+    foreach(explode(';',file_get_contents(__DIR__.'/vault.sql')) as $sql)if(trim($sql))$db->exec($sql);
+    q($db,"INSERT INTO app_meta(name,value) VALUES ('schema_version','5') ON DUPLICATE KEY UPDATE value='5'");
 }
 function errorReply(Throwable $e): never {
     if ($e instanceof FamilyError) reply(['error'=>$e->getMessage()],$e->status);

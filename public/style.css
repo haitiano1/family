@@ -12,3 +12,10 @@
 .logo.youtube-logo{background:transparent;border:0;box-shadow:none;flex-shrink:0}.family-issue-notice{display:grid;justify-items:start;gap:4px;margin-top:8px;white-space:normal;max-width:320px}.family-issue-notice .badge{white-space:normal;line-height:1.5}.family-issue-notice .subtext{overflow-wrap:anywhere}.issue-card.focused{outline:2px solid #2860e8;outline-offset:2px}.issue-email{font-size:14px}@media(max-width:600px){.issue-email{font-size:17px}}
 
 .issue-family-link{color:#1c2838}.issue-family-link:hover{color:#2860e8;text-decoration:underline}
+
+.vault-access{max-width:540px}.vault-access form>button{margin-top:14px}.vault-error{color:#bd3030;white-space:normal;overflow-wrap:anywhere}.vault-table td{white-space:normal;max-width:340px;overflow-wrap:anywhere}.vault-code{font-size:24px;letter-spacing:2px;font-variant-numeric:tabular-nums}.vault-password-value{white-space:pre-wrap;overflow-wrap:anywhere}.vault-table .row-actions{margin-top:6px}#vault-dialog-fields>button{margin-top:6px}#vault-dialog{width:min(550px,calc(100vw - 24px))}@media(max-width:600px){.vault-code{font-size:26px}.vault-table td{max-width:none}}
+
+.vault-code{color:#7158e8;background:#f3f0ff;padding:6px 8px;border-radius:6px}.vault-key{font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:13px;line-height:1.7}@media(max-width:600px){.vault-key{font-size:14px}}
+
+.vault-note{white-space:pre-wrap;line-height:1.6}
+#vault-dialog.vault-import-dialog{width:min(860px,calc(100vw - 24px))}#vault-sheet-source{font-family:ui-monospace,SFMono-Regular,Consolas,monospace;min-height:160px}#vault-sheet-mapping{display:grid;grid-template-columns:minmax(110px,1fr) minmax(140px,2fr);align-items:center;gap:8px 16px;margin-top:16px}#vault-sheet-mapping label{margin:0}#vault-sheet-preview{margin-top:18px}@media(max-width:600px){#vault-sheet-mapping{grid-template-columns:1fr}}

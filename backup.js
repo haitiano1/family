@@ -1,11 +1,16 @@
+import {validateVaultBackup} from './vault-crypto.js';
 const baseTables=['accounts','families','members','archived_customers','renewal_history','other_purchases','logs'];
-const tables=[...baseTables,'issues','audit_events'];
+const customerTables=[...baseTables,'issues','audit_events'];
+const tables=[...customerTables,'vault_meta','vault_items'];
 export function customerBackup(db) {
-  return {format:'family-customer-backup',version:5,created_at:new Date().toISOString(),tables:Object.fromEntries(tables.map(name=>[name,db.prepare(`SELECT * FROM ${name} ORDER BY id`).all()]))};
+  return {format:'family-customer-backup',version:6,created_at:new Date().toISOString(),tables:Object.fromEntries(tables.map(name=>[name,db.prepare(`SELECT * FROM ${name} ORDER BY ${name==='vault_meta'?'name':'id'}`).all()]))};
 }
 export function restoreCustomers(db,data,fail) {
-  if (data.format!=='family-customer-backup' || ![1,2,3,4,5].includes(data.version) || !data.tables || (data.version===1?baseTables:tables).some(name=>!Array.isArray(data.tables[name]))) fail('File sao lưu khách hàng không hợp lệ.');
+  if (data.format!=='family-customer-backup' || ![1,2,3,4,5,6].includes(data.version) || !data.tables || (data.version===1?baseTables:data.version<6?customerTables:tables).some(name=>!Array.isArray(data.tables[name]))) fail('File sao lưu khách hàng không hợp lệ.');
   if(data.version===1)data={...data,tables:{...data.tables,issues:data.tables.issues||[],audit_events:data.tables.audit_events||[]}};
+  if(data.version<6&&(data.tables.vault_meta?.length||data.tables.vault_items?.length))fail('Sao lưu chứa kho mã hóa cần định dạng phiên bản 6.');
+  if(data.version<6)data={...data,tables:{...data.tables,vault_meta:[],vault_items:[]}};
+  try{validateVaultBackup(data.tables.vault_meta,data.tables.vault_items);}catch{fail('Phần kho mã hóa trong sao lưu không hợp lệ.');}
   if (tables.filter(t=>!['logs','audit_events'].includes(t)).some(t=>db.prepare(`SELECT COUNT(*) AS n FROM ${t}`).get().n)) fail('Chỉ khôi phục vào ứng dụng đang trống để không ghi đè dữ liệu hiện có.',409);
   db.exec('SAVEPOINT backup_restore');
   try {
@@ -21,6 +26,7 @@ export function restoreCustomers(db,data,fail) {
         insert.run(...columns.map(c=>row[c]));
       }
     }
+    db.prepare('DELETE FROM vault_sessions').run();
     if (db.prepare('PRAGMA foreign_key_check').all().length) fail('Dữ liệu sao lưu có liên kết không hợp lệ.');
     db.exec('RELEASE backup_restore');
     return {ok:true,customers:data.tables.members.length,families:data.tables.families.length,other_products:data.tables.other_purchases.length};

@@ -1,11 +1,12 @@
 import { renewalDates, trialUsageDays, isPendingPayment, sortCustomers, sortFamilies, purchaseExpiry } from './domain.js';
 import { prepareSheet, suggestMapping, importFields } from './csv.js';
 import { contactParts } from './contacts.js';
+import {mountVault,unmountVault} from './vault.js';
 const $ = selector => document.querySelector(selector);
 const escape = value => String(value ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const date = value => value ? new Date(value).toLocaleString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh' }) : '—';
 const day = value => value ? value.split('-').reverse().join('/') : 'Chưa đặt';
-const names = {overview:'Tổng quan',customers:'Khách & Gia hạn',families:'Family',archives:'Khách lưu trữ',import:'Nhập khách CSV',products:'Sản phẩm khác',issues:'Fix lỗi',journal:'Nhật ký'};
+const names = {overview:'Tổng quan',customers:'Khách & Gia hạn',families:'Family',archives:'Khách lưu trữ',import:'Nhập khách CSV',products:'Sản phẩm khác',issues:'Fix lỗi',journal:'Nhật ký',vault:'Kho tài khoản'};
 const products = { youtube:'YouTube Premium',google_one:'Google One',google_ai:'Google AI',other:'Khác' };
 const planOptions = (value=0, unknown=false) => Object.fromEntries([...(unknown ? [[0,'Chưa đặt']] : []), ...[...new Set([1,2,3,6,12,...(Number(value)>0 ? [Number(value)] : [])])].sort((a,b)=>a-b).map(n=>[n,n+' tháng'])]);
 const renewalLabels = { not_contacted: 'Chưa nhắc gia hạn', reminded: 'Đã nhắc khách', awaiting_payment: 'Chờ thanh toán (Confirmed)', partial: 'Đã trả một phần', paid: 'Đã thanh toán gia hạn', declined: 'Không gia hạn' };
@@ -55,7 +56,7 @@ function customerTable(members) {
 function draw() {
   if (!state) return;
   let [page,id]=route();
-  if (!['overview','customers','families','family','archives','import','products','issues','journal'].includes(page)) {location.hash='overview';return;}
+  if (!['overview','customers','families','family','archives','import','products','issues','journal','vault'].includes(page)) {location.hash='overview';return;}
   const parent={import:'customers',family:'families'}[page]||page;
   if(navigationSection!==null&&navigationSection!==parent){
     customerSearch=productSearch=familySearch=issueSearch=journalSearch='';journalPage=1;clearTimeout(journalTimer);journalToken++;
@@ -65,6 +66,8 @@ function draw() {
   document.querySelectorAll('nav a').forEach(a=>a.classList.toggle('active',a.dataset.page===parent));
   $('#breadcrumb').textContent=`YouTube Family › ${names[parent]} ${id ? '› #'+id : ''}`;
   $('#header-actions').innerHTML=btn('backup','Sao lưu / Chuyển dữ liệu','secondary tiny')+(state.hosted ? ' '+btn('close-access','Khóa ứng dụng','secondary tiny') : '');
+  if(page==='vault'){mountVault($('#main'),{families:state.families,members:state.members,getFamilyContext:()=>({families:state.families,members:state.members}),toast});return;}
+  unmountVault();
   let content = '';
   if (page==='overview') {
     content=hero('KHÁCH HÀNG YOUTUBE','Tổng quan','Theo dõi khách, Family, thanh toán và gia hạn.',btn('add-member','+ Thêm khách','primary')+' '+btn('add-family','+ Thêm Family','secondary')) + stats([['Khách đang ghi nhận',state.members.length],['Family',state.families.length],['Sắp hết hạn (2 ngày)',state.reminders.due_soon+state.other_reminders.due_soon],['Chờ thanh toán (Confirmed)',state.members.filter(isPendingPayment).length]]) + `<section class="card"><h2>Gia hạn & Thanh toán</h2><p>${state.members.filter(isPendingPayment).length} khách chờ thanh toán gia hạn.${state.reminders.renewal_paid_pending ? ` ${state.reminders.renewal_paid_pending} khách đã trả tiền, cần xác nhận hạn mới.` : ''}</p></section>` + (state.other_products.some(p=>['due_soon','expired'].includes(p.expiry_status)) ? `<section class="card"><div class="section-heading"><h2>Sản phẩm khác cần nhắc hạn</h2><a class="email-link" href="#products">Xem sản phẩm khác →</a></div>${otherProductTable(state.other_products.filter(p=>['due_soon','expired'].includes(p.expiry_status)))}</section>` : '') + customerList();
@@ -151,9 +154,9 @@ document.addEventListener('click', async event => {
     }else if(action==='journal-page'){
       journalPage=Number(button.dataset.page);loadJournal();
     }else if (action==='backup') {
-      modal('Sao lưu / Chuyển dữ liệu','<p>File sao lưu giữ khách, Family, Contact, sản phẩm khác, lịch sử gia hạn, khách lưu trữ, ngày trial, case lỗi và nhật ký.</p><p><a class="primary link-button" href="/api/backup" download>Tải file sao lưu</a></p><label for="backup-file">Khôi phục vào ứng dụng đang trống</label><input id="backup-file" type="file" accept=".json,application/json"><p>Để chuyển lên hosting: tải file từ máy tính, mở địa chỉ hosting rồi chọn file tại đây. Bản khôi phục chỉ nhận vào ứng dụng đang trống.</p>',async()=>{const file=$('#backup-file').files[0];if (!file) throw new Error('Chọn file sao lưu .json để khôi phục, hoặc nhấn Hủy sau khi tải sao lưu.');if (file.size>32000000) throw new Error('File quá lớn (tối đa 32 MB).');let data;try {data=JSON.parse(await file.text());} catch {throw new Error('File JSON không hợp lệ.');}const result=await post('restore',data);toast(`Đã khôi phục ${result.customers} khách, ${result.families} Family và ${result.other_products} sản phẩm khác.`);},'Khôi phục dữ liệu');
+      modal('Sao lưu / Chuyển dữ liệu','<p>File sao lưu giữ khách, Family, Contact, sản phẩm khác, lịch sử gia hạn, khách lưu trữ, ngày trial, case lỗi, nhật ký và Kho tài khoản ở dạng mã hóa.</p><p>Để mở kho sau khôi phục, dùng lại mật khẩu kho đã đặt.</p><p><a class="primary link-button" href="/api/backup" download>Tải file sao lưu</a></p><label for="backup-file">Khôi phục vào ứng dụng đang trống</label><input id="backup-file" type="file" accept=".json,application/json"><p>Để chuyển lên hosting: tải file từ máy tính, mở địa chỉ hosting rồi chọn file tại đây. Bản khôi phục chỉ nhận vào ứng dụng đang trống.</p>',async()=>{const file=$('#backup-file').files[0];if (!file) throw new Error('Chọn file sao lưu .json để khôi phục, hoặc nhấn Hủy sau khi tải sao lưu.');if (file.size>32000000) throw new Error('File quá lớn (tối đa 32 MB).');let data;try {data=JSON.parse(await file.text());} catch {throw new Error('File JSON không hợp lệ.');}const result=await post('restore',data);toast(`Đã khôi phục ${result.customers} khách, ${result.families} Family và ${result.other_products} sản phẩm khác.`);},'Khôi phục dữ liệu');
     } else if (action==='close-access') {
-      await post('access/close',{});location.replace('/access');
+      await unmountVault(true);await post('access/close',{});location.replace('/access');
     } else if(action==='transfer-member'){
       const m=state.members.find(m=>m.id===Number(id));if(!m)return toast('Hồ sơ khách đã thay đổi. Tải lại trang.');
       if(!state.families.some(f=>f.id!==m.family_id))return toast('Thêm một Family khác trước khi chuyển khách.');
@@ -214,6 +217,7 @@ document.addEventListener('click', async event => {
   } catch (error) { toast(error.message); }
 });
 window.addEventListener('hashchange', draw);
+window.addEventListener('pageshow',event=>{if(event.persisted)draw();});
 async function sync() {
   if ($('#modal').open||draggedIssue!==null) return;
   try {await refresh(false);if (!['INPUT','SELECT','TEXTAREA'].includes(document.activeElement.tagName))draw();}

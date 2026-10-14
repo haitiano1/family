@@ -13,6 +13,7 @@ import { today, expiry, isPendingPayment, sortCustomers, sortFamilies, purchaseE
 import { beginAudit,finishAudit,cancelAudit,auditLog,auditAction,journal,journalEntry,withAudit } from './audit.js';
 import { initIssues } from './issues.js';
 import { initTransfers } from './transfer.js';
+import { initVault } from './vault.js';
 import { hosting } from './hosting.js';
 import { customerBackup, restoreCustomers } from './backup.js';
 
@@ -31,6 +32,7 @@ const { email,text,label,service,calendarDate,memberData } = validators(fail);
 const saveOtherProduct=initOtherProducts(db,{fail,text,email,calendarDate,log});
 const issues=initIssues(db,{fail,text,email,log});
 const transferMember=initTransfers(db,{fail,email,log});
+const vaultRoute=initVault(db,{fail,email,text,commonPassword:process.env.ACCESS_PASSWORD||'',secure:access.enabled});
 const archive = initArchive(db, { fail,log });
 await withAudit(db,'Tự động lưu trữ',()=>archive.sweep(),'Hệ thống');
 let requestQueue=Promise.resolve();
@@ -69,6 +71,7 @@ async function handle(req, res) {
     if (access.enabled && req.method==='POST' && url.pathname==='/api/access/close') {
       res.setHeader('Set-Cookie','fam_access=; HttpOnly; Secure; SameSite=Strict; Path=/; Max-Age=0');return send(res,200,{ok:true});
     }
+    if(url.pathname.startsWith('/api/vault/'))return send(res,200,await vaultRoute(req,res,url.pathname,['GET','HEAD'].includes(req.method)?{}:await body(req)));
     if(req.method==='GET'&&url.pathname==='/api/journal')return send(res,200,journal(db,url.searchParams));
     if(req.method==='GET'&&/^\/api\/journal\/(audit|log)\/\d+$/.test(url.pathname)){const [,,,kind,id]=url.pathname.split('/');const entry=journalEntry(db,kind,Number(id));if(!entry)fail('Không tìm thấy nhật ký.',404);return send(res,200,entry);}
     if(['POST','PATCH'].includes(req.method)&&/^\/api\/issues(?:\/\d+)?$/.test(url.pathname)){const id=req.method==='PATCH'?Number(url.pathname.split('/').pop()):null;if((req.method==='POST'&&url.pathname!=='/api/issues')||(req.method==='PATCH'&&!id))fail('Không tìm thấy.',404);return send(res,id?200:201,issues.save(id,await body(req)));}
@@ -187,7 +190,7 @@ async function handle(req, res) {
       run(`DELETE FROM ${table} WHERE id=?`, id); log(`${actor.username}: xóa hồ sơ nội bộ ${table} #${id}`); return send(res, 200, { ok: true });
     }
     if (req.method === 'GET') {
-      const assets = { '/': ['index.html','text/html'], '/access':['access.html','text/html'], '/access.js':['access.js','text/javascript'], '/app.js': ['app.js','text/javascript'], '/style.css': ['style.css','text/css'], '/csv.js': ['csv.js','text/javascript'], '/contacts.js':['contacts.js','text/javascript'], '/domain.js': ['../domain.js','text/javascript'], '/manifest.webmanifest':['manifest.webmanifest','application/manifest+json'], '/icon-180.png':['icon-180.png','image/png'], '/icon-192.png':['icon-192.png','image/png'], '/icon-512.png':['icon-512.png','image/png'] };
+      const assets = { '/': ['index.html','text/html'], '/access':['access.html','text/html'], '/access.js':['access.js','text/javascript'], '/app.js': ['app.js','text/javascript'], '/vault.js': ['vault.js','text/javascript'], '/vault-sheet.js':['vault-sheet.js','text/javascript'], '/style.css': ['style.css','text/css'], '/csv.js': ['csv.js','text/javascript'], '/contacts.js':['contacts.js','text/javascript'], '/domain.js': ['../domain.js','text/javascript'], '/manifest.webmanifest':['manifest.webmanifest','application/manifest+json'], '/icon-180.png':['icon-180.png','image/png'], '/icon-192.png':['icon-192.png','image/png'], '/icon-512.png':['icon-512.png','image/png'] };
       const asset = assets[url.pathname]; if (!asset) return send(res, 404, { error: 'Không tìm thấy.' });
       res.writeHead(200, { 'Content-Type': asset[1] + '; charset=utf-8', 'Cache-Control': 'no-store', 'Content-Security-Policy': "default-src 'self'; style-src 'self'; script-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'" });
       return res.end(readFileSync(path.join(root, 'public', asset[0])));
@@ -200,10 +203,10 @@ async function handle(req, res) {
 }
 const server=http.createServer(async(req,res)=>{
   let path;
-  try{path=new URL(req.url,'http://localhost').pathname;if(!['GET','HEAD'].includes(req.method)&&path.startsWith('/api/'))req.famBody=await body(req,path==='/api/restore'?32000000:path.startsWith('/api/import/')?2000000:16384);}
+  try{path=new URL(req.url,'http://localhost').pathname;if(!['GET','HEAD'].includes(req.method)&&path.startsWith('/api/'))req.famBody=await body(req,path==='/api/restore'?32000000:path.startsWith('/api/import/')||path.startsWith('/api/vault/import')?2000000:path.startsWith('/api/vault/')?32768:16384);}
   catch(error){return send(res,error.status||400,{error:error.message});}
   requestQueue=requestQueue.then(async()=>{
-    const audited=path==='/api/state'||(!['GET','HEAD'].includes(req.method)&&path.startsWith('/api/')&&!path.startsWith('/api/access'));
+    const audited=path==='/api/state'||(!['GET','HEAD'].includes(req.method)&&path.startsWith('/api/')&&!path.startsWith('/api/access')&&!path.startsWith('/api/vault/'));
     if(!audited)return handle(req,res);
     beginAudit(db,auditAction(req.method,path),path==='/api/state'?'Hệ thống':'Cá nhân');res.famCapture=true;
     try{await handle(req,res);const pending=res.famPending;if(!pending)throw Error('Missing response');if(pending.status>=400)cancelAudit(db);else finishAudit(db);res.famCapture=false;send(res,pending.status,pending.value);}

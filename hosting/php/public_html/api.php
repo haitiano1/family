@@ -5,6 +5,7 @@ require dirname(__DIR__).'/family-private/business.php';
 require dirname(__DIR__).'/family-private/import.php';
 require dirname(__DIR__).'/family-private/audit.php';
 require dirname(__DIR__).'/family-private/issues.php';
+require dirname(__DIR__).'/family-private/vault.php';
 try {
     $c=config();checkRequest($c);$route=parse_url($_SERVER['REQUEST_URI'],PHP_URL_PATH);$method=$_SERVER['REQUEST_METHOD'];
     if ($route==='/api/access' && $method==='POST') {
@@ -16,6 +17,7 @@ try {
     if(!authorized($c))fail('Nhập mật khẩu truy cập để mở dữ liệu.',401);
     if($route==='/api/access/close'&&$method==='POST'){accessCookie($c,true);reply(['ok'=>true]);}
     $db=db($c);
+    if(str_starts_with($route,'/api/vault/'))vaultRequest($db,$c,$route,$method);
     if($route==='/api/state'||(!in_array($method,['GET','HEAD'],true)))beginAudit($db,auditAction($method,$route),$route==='/api/state'?'Hệ thống':'Cá nhân');
     if($route==='/api/journal'&&$method==='GET')reply(journal($db));
     if(preg_match('~^/api/journal/(audit|log)/(\d+)$~D',$route,$p)&&$method==='GET')reply(journalEntry($db,$p[1],(int)$p[2]));
