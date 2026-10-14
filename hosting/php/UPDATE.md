@@ -1,4 +1,4 @@
-# Cập nhật YouTube Family 0.11.1
+# Cập nhật YouTube Family 0.12
 
 Bản này gộp đầy đủ các thay đổi trước đây chưa đóng gói và các yêu cầu mới. Dùng **gói cập nhật** cho website Family đang chạy; giữ cấu hình và dữ liệu hiện có.
 
@@ -12,11 +12,22 @@ Bản này gộp đầy đủ các thay đổi trước đây chưa đóng gói 
 
 Không cần tạo database, sửa SQL hay nhập lại khách. Gói không chứa config.php, mật khẩu, dữ liệu khách hoặc backup. Website giữ database hiện tại; nếu còn dùng schema cũ, ứng dụng tự thêm các cột cần thiết. Cài mới dùng [family-hostinger.zip](https://github.com/haitiano1/family/raw/refs/heads/main/downloads/family-hostinger.zip) và [INSTALL.md](INSTALL.md).
 
+## Bổ sung trong bản 0.12
+
+- Nút **Chuyển Family** thay Nhắc hạn tại thao tác khách trong Tổng quan, Khách & Gia hạn và chi tiết Family; khách chưa có hạn cũng chuyển được.
+- Nhập mail chủ nhóm để tìm hoặc mở menu tất cả Family đang hoạt động. Gõ đúng mail chủ nhóm sẽ tự chọn; xem tên nhóm/mail/số khách rồi bấm Chuyển Family. Mở ngay nhóm nhận khách cùng toàn bộ thành viên.
+- Giữ nguyên hồ sơ/gói/ngày mua/hạn/Contact/tiền/trạng thái/lịch sử; chỉ đổi nhóm. Nhật ký ghi rõ Family cũ và mới.
+- Tag lỗi trên dòng member theo mail chủ nhóm hiện tại: sang B thì bỏ tag lỗi của chủ A. Chủ A và các member còn ở A vẫn giữ trạng thái của nhóm A; nếu chủ B đang lỗi thì hiện tag của chủ B.
+- Case Fix lỗi của mail khách được xóa khỏi bảng khi chuyển, kể cả case đang chờ/đang fix/đã fix. Nhật ký giữ toàn bộ thông tin case trước xóa. Case mail chủ nhóm và khách khác vẫn giữ. Chuyển hồ sơ và xóa case cùng giao dịch; lưu lỗi không mất dữ liệu.
+- Chặn chuyển trùng email, sang nhóm lưu trữ/đủ 5 thành viên đang ghi nhận, cửa sổ cũ và gửi lặp; giữ quy tắc hồ sơ đã mời/chưa vào chưa chiếm chỗ. Nhắc hạn 2 ngày ở Tổng quan, copy Contact, gia hạn từ hạn cũ, Khách vừa gia hạn14ngày và các chức năng 0.11/0.11.1 vẫn hoạt động.
+
+**Lần này cần upload cả file PHP trong family-private và file trong public_html theo các bước trên. Chỉ thay app.js/style.css như bản 0.11.1 chưa đủ.** Giữ config.php/database; không tạo SQL hoặc nhập lại khách. Đây là chuyển hồ sơ quản lý trong app. Gói 0.12 đã gồm tất cả thay đổi cũ, dùng được dù chưa cài 0.11/0.11.1.
+
 ## Bổ sung trong bản 0.11.1
 
 Bấm email trên thẻ Chờ fix/Đang fix/Đã fix sẽ mở trang chi tiết đúng Family cùng toàn bộ thành viên đang ghi nhận, áp dụng cho cả mail chủ Family và mail khách. Mail liên kết bằng ID Family nên sau đổi mail khi Done vẫn mở đúng nhóm. Icon copy bên cạnh chỉ sao chép, không chuyển trang. Family đã lưu trữ đưa về Khách lưu trữ; case không còn Family vẫn giữ email/copy.
 
-Gói 0.11.1 đã chứa mọi thay đổi của 0.11. Dùng cùng các bước cập nhật ở trên kể cả bạn chưa cài 0.11. Nếu đã cập nhật đầy đủ 0.11 trước đó, thay `public_html/app.js` và `public_html/style.css` từ gói mới rồi tải lại trang là đủ cho bổ sung này.
+Gói 0.11.1 đã chứa mọi thay đổi của 0.11. Dùng cùng các bước cập nhật ở trên kể cả bạn chưa cài 0.11. Bổ sung 0.11.1 trước đây chỉ cần app.js/style.css; để có Chuyển Family của 0.12, hãy cập nhật cả PHP như hướng dẫn ở đầu file.
 
 ## Thay đổi trong bản 0.11
 

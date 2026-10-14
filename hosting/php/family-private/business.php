@@ -1,5 +1,23 @@
 <?php
 declare(strict_types=1);
+function transferMember(PDO $db,int $id,array $d): array {
+    return transaction($db,function()use($db,$id,$d){
+        $m=one($db,'SELECT m.*,f.name AS family_name,f.archived_at,a.email AS manager_email FROM members m JOIN families f ON f.id=m.family_id JOIN accounts a ON a.id=f.manager_id WHERE m.id=?',[$id]);if(!$m)fail('Không tìm thấy khách.',404);
+        if(!is_int($d['revision']??null)||!is_int($d['expected_family_id']??null)||!is_string($d['expected_email']??null))fail('Thiếu thông tin khách để chuyển Family.');
+        if($m['archived_at']||$d['revision']!==$m['renewal_revision']||$d['expected_family_id']!==$m['family_id']||$d['expected_email']!==$m['email'])fail('Hồ sơ khách đã thay đổi. Đóng hộp thoại, tải lại rồi thử lại.',409);
+        if(!is_int($d['family_id']??null)||$d['family_id']<=0)fail('Chọn Family nhận khách.');
+        $f=one($db,'SELECT f.*,a.email FROM families f JOIN accounts a ON a.id=f.manager_id WHERE f.id=?',[$d['family_id']]);if(!$f||$f['archived_at'])fail('Chọn Family đang hoạt động để nhận khách.');
+        if($f['email']!==email($d['expected_manager_email']??''))fail('Mail chủ Family nhận khách đã thay đổi. Tải lại rồi chọn lại Family.',409);
+        if($f['id']===$m['family_id'])fail('Khách đã ở Family này. Chọn Family khác.');
+        if($m['email']===$f['email'])fail('Email khách trùng mail chủ Family nhận khách.');
+        if(one($db,'SELECT id FROM members WHERE family_id=? AND email=?',[$f['id'],$m['email']]))fail('Email khách đã có trong Family nhận khách.',409);
+        if($m['membership_status']!=='invited'&&one($db,"SELECT COUNT(*) AS n FROM members WHERE family_id=? AND membership_status!='invited'",[$f['id']])['n']>=5)fail('Family nhận khách đã đủ 5 thành viên đang ghi nhận.');
+        q($db,'UPDATE members SET family_id=?,renewal_revision=renewal_revision+1 WHERE id=?',[$f['id'],$m['id']]);
+        $removed=q($db,"DELETE FROM issues WHERE family_id=? AND target_type='member' AND target_id=? AND (subject_email=? OR original_email=?)",[$m['family_id'],$m['id'],$m['email'],$m['email']])->rowCount();
+        logEntry($db,"Cá nhân: chuyển khách {$m['email']} từ {$m['family_name']} ({$m['manager_email']}) sang {$f['name']} ({$f['email']})".($removed?" · xóa $removed case lỗi của khách":""));
+        return ['ok'=>true,'member_id'=>$m['id'],'family_id'=>$f['id'],'family_name'=>$f['name'],'manager_email'=>$f['email'],'removed_cases'=>$removed];
+    });
+}
 function pendingPayment(array $m): bool {return !in_array($m['renewal_status'],['paid','declined'],true)&&(in_array($m['renewal_status'],['awaiting_payment','partial'],true)||$m['expiry_status']==='expired');}
 function recentRenewals(PDO $db,array $members,array $archives,?DateTimeImmutable $now=null,int $days=14): array {
     $now=$now??new DateTimeImmutable('now',new DateTimeZone('UTC'));$now=$now->setTimezone(new DateTimeZone('UTC'));

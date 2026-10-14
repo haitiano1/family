@@ -96,3 +96,5 @@ Bản 0.10 thêm **Khách lưu trữ → Khách vừa gia hạn · 14 ngày gầ
 Bản 0.11 gộp đầy đủ Xóa khỏi lưu trữ và chuyển sản phẩm khác vào lưu trữ/khôi phục đúng loại. Mỗi Family chỉ có một case Chờ fix/Đang fix; tìm mail khách/chủ Family sẽ thấy trạng thái và nút Xem lỗi. Có copy email trong Fix lỗi, reset nội dung tìm kiếm khi chuyển mục và logo YouTube trên thanh điều hướng. Case Done có thể báo sự cố mới; case trùng từ trước vẫn được giữ để xử lý. Gói cài mới và cập nhật đều đã được tạo lại; website đã cài dùng [UPDATE.md](UPDATE.md), giữ config.php và database, không nhập lại khách.
 
 Bản 0.11.1 cho phép bấm email trong Fix lỗi để mở đúng Family và toàn bộ thành viên; icon copy vẫn sao chép riêng. Gói cài mới/cập nhật đã gồm thay đổi này cùng toàn bộ chức năng 0.11.
+
+Bản 0.12 thay nút Nhắc hạn của khách bằng Chuyển Family: tìm mail chủ nhóm/chọn nhóm, giữ hồ sơ/hạn/thanh toán/lịch sử, xóa case đúng mail khách và ghi dữ liệu trước xóa vào Nhật ký. Chỉ chuyển hồ sơ nội bộ; báo hạn 2 ngày trên Tổng quan vẫn giữ. Gói cài mới và cập nhật đều đã gồm thay đổi này; website đang chạy cập nhật cả PHP/giao diện theo UPDATE.md, giữ config.php/database.

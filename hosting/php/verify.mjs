@@ -310,3 +310,70 @@ test('PHP retains preexisting duplicate cases while preventing additional report
  state=await a('state');assert.equal(state.issues.length,2);assert.ok(state.issues.every(i=>i.status==='done'));
  await a('issues','POST',{family_id:family.id,title:'New problem'},201);assert.equal((await a('state')).issues.length,3);
 });
+
+const transferFamily=async(a,data)=>{const created=await a('families','POST',data,201);return (await a('state')).families.find(f=>f.id===created.id);};
+const transferPayload=(m,f)=>({family_id:f.id,expected_manager_email:f.manager_email,expected_family_id:m.family_id,expected_email:m.email,revision:m.renewal_revision});
+
+test('PHP transfers preserve the full member, historical periods and audit while deleting the customer cases with full audit',async()=>{
+ const f=await fixture();await f.login();const a=f.req;
+
+ const source=await transferFamily(a,{name:'Family A',manager_email:'owner-a@example.com',trial_date:'2026-10-08'}),target=await transferFamily(a,{name:'Family B',manager_email:'owner-b@example.com',trial_date:'2026-09-01'});
+ const member=await a('members','POST',{family_id:source.id,email:'moving@example.com',customer_name:'Khách chuyển',contact:'https://www.facebook.com/example\nZalo preserved',joined_at:'2026-01-05',expires_at:'2026-04-05',plan_months:3,payment_status:'paid',amount:150000,note:'Keep original note',membership_status:'active'},201);
+ await a('members','POST',{family_id:source.id,email:'stays@example.com'},201);const today=(await a('state')).today;
+ await a('members/'+member.id+'/renewal','PATCH',{revision:0,status:'paid',amount:200000,paid_at:today,plan_months:3,apply_now:true});
+ await a('members/'+member.id+'/renewal','PATCH',{revision:1,status:'partial',amount:50000,paid_at:today,note:'Pending next cycle'});
+ const managerCase=await a('issues','POST',{family_id:source.id,title:'Manager past incident'},201);await a('issues/'+managerCase.id,'PATCH',{status:'done',revision:0,resolution:'keep'});
+ const done=await a('issues','POST',{family_id:source.id,target_type:'member',target_id:member.id,title:'Previous member incident'},201);await a('issues/'+done.id,'PATCH',{status:'done',revision:0,resolution:'keep'});
+ const open=await a('issues','POST',{family_id:source.id,target_type:'member',target_id:member.id,title:'Current member incident'},201);
+ const before=await a('backup'),history=await a('members/'+member.id+'/renewal-history'),profile=before.tables.members.find(m=>m.id===member.id),guard=transferPayload(profile,target),count=(await a('journal')).total;
+ const result=await a('members/'+member.id+'/transfer','POST',guard);assert.equal(result.family_id,target.id);
+ const after=await a('backup'),moved=after.tables.members.find(m=>m.id===member.id);assert.deepEqual(moved,{...profile,family_id:target.id,renewal_revision:profile.renewal_revision+1});assert.deepEqual(await a('members/'+member.id+'/renewal-history'),history);
+ let state=await a('state');assert.equal(state.members.filter(m=>m.family_id===source.id).length,1);assert.equal(state.members.filter(m=>m.family_id===target.id).length,1);assert.equal(state.recent_renewals[0].customer.family_name,'Family B');assert.equal(state.recent_renewals[0].family_name,'Family A');assert.equal(state.archives.length,0);
+ assert.equal(result.removed_cases,2);for(const id of [done.id,open.id])assert.equal(state.issues.some(i=>i.id===id),false);
+ assert.equal(state.issues.find(i=>i.id===managerCase.id).family_id,source.id);
+ const journal=await a('journal');assert.equal(journal.total,count+1);const event=journal.entries.find(e=>e.action==='Chuyển Family');assert.ok(event);assert.match(event.message,/Family A.*owner-a@example.com.*Family B.*owner-b@example.com/);const details=await a('journal/audit/'+event.id),change=details.changes.find(c=>c.table==='members');assert.equal(change.before.family_id,source.id);assert.equal(change.after.family_id,target.id);for(const id of [done.id,open.id]){const removed=details.changes.find(c=>c.table==='issues'&&c.id===id);assert.deepEqual(removed.before,before.tables.issues.find(i=>i.id===id));assert.equal(removed.after,null);}
+ await a('members/'+member.id+'/transfer','POST',guard,409);await a('members/'+member.id+'/renewal','PATCH',{revision:profile.renewal_revision,status:'paid',apply_now:true},409);await a('issues/'+open.id,'PATCH',{revision:0,status:'done',resolution:'keep'},404);assert.equal((await a('journal')).total,count+1);
+ await f.restart();
+ state=await a('state');assert.equal(state.members.find(m=>m.id===member.id).family_id,target.id);assert.equal(state.issues.some(i=>i.id===open.id),false);
+ const copy=await fixture();await copy.login();await copy.req('restore','POST',await a('backup'));const restored=await copy.req('state');assert.equal(restored.members.find(m=>m.id===member.id).family_id,target.id);assert.equal(restored.issues.some(i=>i.id===open.id),false);assert.deepEqual(await copy.req('members/'+member.id+'/renewal-history'),history);
+
+});
+
+test('PHP transfers reject stale/duplicate/archived/owner/full destinations and retain pending invite behavior',async()=>{
+ const f=await fixture();await f.login();const a=f.req;
+
+ const source=await transferFamily(a,{name:'Source',manager_email:'source@example.com'}),target=await transferFamily(a,{name:'Destination',manager_email:'dest@example.com'}),full=await transferFamily(a,{name:'Full',manager_email:'full@example.com'}),archived=await transferFamily(a,{name:'Archived',manager_email:'archived@example.com'});await a('families/'+archived.id,'DELETE');
+ const member=await a('members','POST',{family_id:source.id,email:'move@example.com'},201);let profile=(await a('state')).members.find(m=>m.id===member.id),guard=transferPayload(profile,target);
+ for(const n of [1,2,3,4,5])await a('members','POST',{family_id:full.id,email:'full'+n+'@example.com',membership_status:'active'},201);
+ const duplicate=await a('members','POST',{family_id:target.id,email:profile.email},201),owner=await a('members','POST',{family_id:source.id,email:'dest@example.com'},201);const count=(await a('journal')).total;
+ await a('members/'+member.id+'/transfer','POST',{},400);await a('members/'+member.id+'/transfer','POST',{...guard,revision:99},409);await a('members/'+member.id+'/transfer','POST',{...guard,expected_family_id:target.id},409);await a('members/'+member.id+'/transfer','POST',{...guard,expected_email:'other@example.com'},409);await a('members/'+member.id+'/transfer','POST',{...guard,expected_manager_email:'old-dest@example.com'},409);
+ await a('members/'+member.id+'/transfer','POST',transferPayload(profile,source),400);await a('members/'+member.id+'/transfer','POST',transferPayload(profile,archived),400);await a('members/'+member.id+'/transfer','POST',{...guard,family_id:999999},400);await a('members/999999/transfer','POST',guard,404);
+ await a('members/'+member.id+'/transfer','POST',guard,409);await a('members/'+member.id+'/transfer','POST',transferPayload(profile,full),400);await a('members/'+owner.id+'/transfer','POST',transferPayload((await a('state')).members.find(m=>m.id===owner.id),target),400);
+ assert.equal((await a('journal')).total,count);assert.equal((await a('state')).members.find(m=>m.id===member.id).family_id,source.id);
+ const pending=await a('members','POST',{family_id:source.id,email:'pending@example.com',membership_status:'invited'},201),pendingProfile=(await a('state')).members.find(m=>m.id===pending.id);await a('members/'+pending.id+'/transfer','POST',transferPayload(pendingProfile,full));assert.equal((await a('state')).members.filter(m=>m.family_id===full.id).length,6);
+ await a('members/'+member.id,'PATCH',{email:profile.email,contact:'Edited while modal open'});await a('members/'+member.id+'/transfer','POST',guard,409);profile=(await a('state')).members.find(m=>m.id===member.id);
+ await a('families/'+target.id,'PATCH',{name:'Destination',manager_email:'dest-new@example.com'});await a('members/'+member.id+'/transfer','POST',transferPayload(profile,target),409);
+
+});
+
+test('PHP transfers roll back member/case writes and serialize competing moves and last-slot allocation',async()=>{
+ const f=await fixture();await f.login();const a=f.req;
+
+ const source=await transferFamily(a,{name:'From',manager_email:'from@example.com'}),target=await transferFamily(a,{name:'To',manager_email:'to@example.com'}),alternative=await transferFamily(a,{name:'Alternative',manager_email:'alt@example.com'});
+ const member=await a('members','POST',{family_id:source.id,email:'case-member@example.com',contact:'Keep me'},201),incident=await a('issues','POST',{family_id:source.id,target_type:'member',target_id:member.id,title:'Must follow'},201),destinationCase=await a('issues','POST',{family_id:target.id,title:'Destination already open'},201);
+ let profile=(await a('state')).members.find(m=>m.id===member.id),guard=transferPayload(profile,target),count=(await a('journal')).total;
+
+ sql(`INSERT INTO ${f.db}.issues(family_id,family_name,target_type,target_id,subject_email,original_email,title,note,created_at,updated_at,trial_date,reported_on) SELECT family_id,family_name,target_type,target_id,subject_email,original_email,'Legacy duplicate',note,created_at,updated_at,trial_date,reported_on FROM ${f.db}.issues WHERE id=${incident.id}`);
+ let state=await a('state');const duplicate=state.issues.find(i=>i.family_id===source.id&&i.id!==incident.id);assert.ok(duplicate);
+ count=(await a('journal')).total;
+ sql(`CREATE TRIGGER ${f.db}.reject_transfer_case BEFORE DELETE ON ${f.db}.issues FOR EACH ROW SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT='Injected transfer failure'`);
+ await a('members/'+member.id+'/transfer','POST',guard,500);state=await a('state');assert.equal(state.members.find(m=>m.id===member.id).family_id,source.id);assert.equal(state.issues.find(i=>i.id===incident.id).family_id,source.id);assert.equal((await a('journal')).total,count);
+ sql(`DROP TRIGGER ${f.db}.reject_transfer_case`);
+ const loginResponse=await fetch(f.base+'/api/access',{method:'POST',headers:{'Content-Type':'application/json','X-Fam-Request':'1'},body:JSON.stringify({password})});assert.equal(loginResponse.status,200);const raceCookie=loginResponse.headers.get('set-cookie').split(';')[0];
+ const race=async(id,payload)=>fetch(f.base+'/api/members/'+id+'/transfer',{method:'POST',headers:{'Content-Type':'application/json','X-Fam-Request':'1',Cookie:raceCookie},body:JSON.stringify(payload)});
+ const results=await Promise.all([race(member.id,guard),race(member.id,transferPayload(profile,alternative))]);assert.deepEqual(results.map(r=>r.status).sort(),[200,409]);state=await a('state');const moved=state.members.find(m=>m.id===member.id);assert.ok([target.id,alternative.id].includes(moved.family_id));assert.equal(state.issues.some(i=>i.id===incident.id||i.id===duplicate.id),false);assert.equal(state.issues.find(i=>i.id===destinationCase.id).family_id,target.id);assert.equal(state.issues.find(i=>i.id===destinationCase.id).status,'todo');assert.equal((await a('journal')).total,count+1);
+ const last=await transferFamily(a,{name:'Last slot',manager_email:'last@example.com'});for(const n of [1,2,3,4])await a('members','POST',{family_id:last.id,email:'existing'+n+'@example.com'},201);
+ const first=await a('members','POST',{family_id:source.id,email:'first@example.com'},201),second=await a('members','POST',{family_id:source.id,email:'second@example.com'},201);state=await a('state');const firstProfile=state.members.find(m=>m.id===first.id),secondProfile=state.members.find(m=>m.id===second.id);count=(await a('journal')).total;
+ const lastResults=await Promise.all([race(first.id,transferPayload(firstProfile,last)),race(second.id,transferPayload(secondProfile,last))]);assert.deepEqual(lastResults.map(r=>r.status).sort(),[200,400]);state=await a('state');assert.equal(state.members.filter(m=>m.family_id===last.id).length,5);assert.equal(state.members.filter(m=>[first.id,second.id].includes(m.id)&&m.family_id===source.id).length,1);assert.equal((await a('journal')).total,count+1);
+
+});

@@ -12,6 +12,7 @@ import { initImporter } from './importer.js';
 import { today, expiry, isPendingPayment, sortCustomers, sortFamilies, purchaseExpiry } from './domain.js';
 import { beginAudit,finishAudit,cancelAudit,auditLog,auditAction,journal,journalEntry,withAudit } from './audit.js';
 import { initIssues } from './issues.js';
+import { initTransfers } from './transfer.js';
 import { hosting } from './hosting.js';
 import { customerBackup, restoreCustomers } from './backup.js';
 
@@ -29,6 +30,7 @@ const actor = { username:'Cục bộ' };
 const { email,text,label,service,calendarDate,memberData } = validators(fail);
 const saveOtherProduct=initOtherProducts(db,{fail,text,email,calendarDate,log});
 const issues=initIssues(db,{fail,text,email,log});
+const transferMember=initTransfers(db,{fail,email,log});
 const archive = initArchive(db, { fail,log });
 await withAudit(db,'Tự động lưu trữ',()=>archive.sweep(),'Hệ thống');
 let requestQueue=Promise.resolve();
@@ -94,6 +96,7 @@ async function handle(req, res) {
       const data = await body(req); return send(res,200,archive.restore(Number(url.pathname.split('/')[3]),data.family_id,actor));
     }
     if (req.method === 'GET' && /^\/api\/archives\/\d+\/history$/.test(url.pathname)) return send(res,200,{ history:all('SELECT * FROM renewal_history WHERE archive_id=? ORDER BY id DESC',Number(url.pathname.split('/')[3])) });
+    if(req.method==='POST'&&/^\/api\/members\/\d+\/transfer$/.test(url.pathname))return send(res,200,transferMember(Number(url.pathname.split('/')[3]),await body(req)));
     if (req.method === 'GET' && /^\/api\/members\/\d+\/renewal-history$/.test(url.pathname)) {
       const id = Number(url.pathname.split('/')[3]);
       if (!one('SELECT id FROM members WHERE id=?', id)) fail('Không tìm thấy khách.', 404);

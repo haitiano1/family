@@ -1,4 +1,4 @@
-# YouTube Family — Quản lý khách hàng 0.11.1
+# YouTube Family — Quản lý khách hàng 0.12
 
 Ứng dụng quản lý cho cá nhân: **mở web là vào Tổng quan**, không cần tài khoản đăng nhập. Tập trung quản lý khách YouTube, Family, gia hạn và sản phẩm bán thêm. Không còn các mục admin, bảo mật tài khoản, Jobs hoặc thao tác Google. Có bản **PHP + MySQL dành cho Hostinger Premium** và bản Node.js chạy Windows/VPS. Có thể thêm biểu tượng vào màn hình chính iPhone; xem [hướng dẫn Hostinger](HOSTINGER.md). Bản hosting dùng một mật khẩu truy cập chung, không có tài khoản/role admin.
 
@@ -43,7 +43,7 @@ Exporter tự chạy bằng Node24+, không dùng source app khác, mở SQLite 
 - **Khách & Gia hạn:** tên, email, Contact (Facebook/Zalo/ghi chú liên hệ), gói, ngày mua, hạn, thanh toán và ghi chú. Có thể thêm khách trực tiếp và chọn Family nhận khách.
 - Gói chuẩn 1/2/3/6/12 tháng; gói đã nhập tùy chỉnh như 13 tháng được giữ, hỗ trợ đến 120 tháng.
 - Giữ toàn bộ hồ sơ khách đã mời nhưng chưa vào; các ghi chú “chưa vào” không mất và chưa tính vào 5 chỗ thành viên đang ghi nhận.
-- **Nhắc hạn:** tạo mẫu tin và sao chép để bạn tự gửi qua Zalo/Facebook, không gửi tự động. Contact được hiển thị dưới email và trong form sửa khách.
+- **Nhắc hạn:** Tổng quan vẫn báo khách còn 0–2 ngày và chờ thanh toán. Trong thao tác khách, nút Nhắc hạn được thay bằng Chuyển Family; dùng copy tên/email/Contact để liên hệ. Sản phẩm khác vẫn có mẫu tin nhắc hạn để tự gửi.
 - Ngày tính theo múi giờ Việt Nam. Còn 0–2 ngày là sắp hết hạn; ngày sau hạn mới là quá hạn. Ô không có ngày hết hạn không bị đoán ngày.
 
 ## Thanh toán và gia hạn
@@ -57,6 +57,18 @@ Thanh toán kỳ hiện tại tách với gia hạn tiếp theo: Chưa nhắc / 
 5. Ngày cuối tháng được giới hạn đúng tháng, kể cả năm nhuận. Lịch sử giữ ngày mua/hạn cũ/mới, tiền, ngày nhận và ghi chú. Số tiền cột kỳ hiện tại là của kỳ hiện tại, không phải tổng doanh thu.
 
 Sau gia hạn, lần tiếp theo trở về Chưa nhắc; lịch sử không mất. Việc tính sai ở những bản cũ không tự sửa hồi tố. Chỉnh ngày trực tiếp bằng form sửa hồ sơ không tạo lịch sử gia hạn hoàn tất.
+
+## Chuyển khách sang Family khác (bản 0.12)
+
+Trong Tổng quan, Khách & Gia hạn hoặc chi tiết Family, bấm **Chuyển Family** (thay nút Nhắc hạn, kể cả khách chưa có ngày hết hạn). Nhập mail chủ nhóm trong **Tìm mail chủ Family** hoặc chọn từ menu **Family nhận khách**. Menu hiển thị tất cả nhóm đang hoạt động, mail chủ nhóm và tên Family; nhóm hiện tại được ghi rõ và không thể chọn lại. Gõ đúng email chủ nhóm sẽ tự chọn Family tương ứng; hộp thoại hiện nhóm đích và số khách để đối chiếu. Bấm Chuyển Family để mở nhóm đích cùng toàn bộ thành viên.
+
+Chỉ đổi liên kết nhóm của hồ sơ, giữ ID khách, tên/mail/Contact, gói, ngày mua/hạn, tiền, thanh toán, trạng thái gia hạn/chưa vào và lịch sử. Lịch sử gia hạn giữ tên Family tại thời điểm gia hạn; Khách vừa gia hạn hiển thị nhóm hiện tại. Đây là chuyển hồ sơ quản lý trong ứng dụng.
+
+Tag lỗi trên dòng member lấy từ case Chờ fix/Đang fix của **mail chủ Family hiện tại**, không từ hồ sơ khách. Chuyển từ A sang B bỏ tag của chủ A; nếu chủ B đang có lỗi, hiện trạng thái đúng của chủ B. Case lỗi của chủ A vẫn ở nhóm A; các member còn ở A vẫn có tag. Case của mail khách không gắn tag lỗi cho toàn bộ member trong nhóm.
+
+**Theo yêu cầu mới, case Fix lỗi gắn với mail khách được xóa khi chuyển**, áp dụng cả Chờ fix/Đang fix/Đã fix và case trùng cũ của chính khách. Nhật ký Chuyển Family lưu Family cũ/mới và toàn bộ case trước khi xóa. Không chuyển case theo khách sang nhóm mới. Case mail chủ nhóm hoặc khách khác được giữ. Xóa case và chuyển khách lưu trong cùng giao dịch; nếu lưu lỗi, tất cả được giữ nguyên. Một Family đích có case đang mở vẫn có thể nhận khách; case đó không bị thay đổi.
+
+Backend kiểm tra Family đang hoạt động, mail không trùng chủ nhóm/khách đã có, 5 thành viên đang ghi nhận (Đã mời, chưa vào vẫn chưa chiếm chỗ). Không ghi một phần nếu bị từ chối. Guard nguồn/mail/revision và mail chủ nhóm đích chặn cửa sổ cũ hoặc gửi lặp; hai khách tranh chỗ cuối chỉ một khách được chuyển. Không cần nâng cấp schema hay nhập lại data. Gói cập nhật 0.12 cần thay cả PHP và giao diện theo [UPDATE.md](hosting/php/UPDATE.md), giữ config.php/database.
 
 ## Family, Fix lỗi và Nhật ký
 
