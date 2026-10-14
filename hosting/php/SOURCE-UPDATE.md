@@ -1,3 +1,7 @@
+# Hướng dẫn thay mã nguồn trước bản 0.11
+
+**Bản 0.11 đã có gói cập nhật đầy đủ theo yêu cầu mới. Dùng [UPDATE.md](UPDATE.md) để cập nhật toàn bộ, bao gồm Fix lỗi/tìm kiếm/logo. Các bước dưới đây chỉ mô tả thay đổi lưu trữ trước đây; thay bốn file này riêng lẻ chưa đủ cho bản 0.11.**
+
 # Cập nhật trực tiếp trên Hostinger, không cần ZIP
 
 Thêm Xóa khỏi lưu trữ và chuyển hồ sơ Sản phẩm khác vào Khách lưu trữ khi chọn Xóa. Chỉ thay 4 file sau, giữ config.php và database đang dùng.
@@ -21,4 +25,4 @@ Nếu link mở hộp tải file thay vì hiển thị chữ, tải file đó r�
 
 Mục Khách vừa gia hạn vẫn chỉ xem các lần xác nhận trong 14 ngày; không tự xóa hoặc lưu trữ khách hoạt động. Lịch sử gia hạn và nhật ký của các thao tác mới được giữ. Không phục hồi các hồ sơ sản phẩm đã bị xóa từ phiên bản cũ trong lần cập nhật này.
 
-Backup mới là v5, nhận cả backup v1–v4 cũ. Bản ứng dụng cũ không nhận v5; dùng mã nguồn mới để khôi phục hồ sơ sản phẩm lưu trữ đúng loại. Chưa tạo lại các ZIP cho bản cập nhật này theo yêu cầu của người dùng.
+Backup mới là v5, nhận cả backup v1–v4 cũ. Bản ứng dụng cũ không nhận v5; dùng mã nguồn mới để khôi phục hồ sơ sản phẩm lưu trữ đúng loại. Các ZIP đã được tạo lại ở bản 0.11.

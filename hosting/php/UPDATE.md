@@ -1,29 +1,32 @@
-# Cập nhật Family
+# Cập nhật YouTube Family 0.11
 
-**Cập nhật mới nhất bằng mã nguồn:** xem [SOURCE-UPDATE.md](SOURCE-UPDATE.md). Người dùng yêu cầu không tạo ZIP; chỉ thay bốn file để có Xóa khỏi lưu trữ và chuyển sản phẩm khác vào lưu trữ. Các bước ZIP dưới đây dành cho bản 0.10 đã phát hành trước thay đổi này.
+Bản này gộp đầy đủ các thay đổi trước đây chưa đóng gói và các yêu cầu mới. Dùng **gói cập nhật** cho website Family đang chạy; giữ cấu hình và dữ liệu hiện có.
 
-## Gói ZIP bản 0.10
+## Các bước cập nhật website đang dùng
 
-1. Trong website Family đang chạy, chọn **Sao lưu / Chuyển dữ liệu → Tải file sao lưu**.
-2. Tải [family-hostinger-update.zip](https://github.com/haitiano1/family/raw/refs/heads/main/downloads/family-hostinger-update.zip) và **giải nén trên máy tính**.
-3. Mở hPanel → File Manager của **đúng website Family**. Mở `family-private` đang chứa `config.php`. Upload toàn bộ **file bên trong family-private của gói cập nhật** và thay file trùng. Giữ `config.php` hiện có.
-4. Mở `public_html` chính. Upload toàn bộ **file bên trong public_html của gói cập nhật** và thay file trùng. Không tạo thêm public_html/public_html hoặc family-private/family-private.
-5. Mở lại website, nhấn **Ctrl+F5**. Trên iPhone, đóng rồi mở lại Family hoặc tải lại trang trong Safari.
+1. Trong app, chọn **Sao lưu / Chuyển dữ liệu → Tải file sao lưu** và giữ file JSON trên máy tính.
+2. Tải [family-hostinger-update.zip](https://github.com/haitiano1/family/raw/refs/heads/main/downloads/family-hostinger-update.zip), rồi **giải nén trên máy tính**. Bên trong có hai thư mục `family-private`, `public_html` và hướng dẫn này.
+3. Mở hPanel → Websites → Dashboard của **đúng website Family** → Files → File Manager. Mở thư mục `family-private` hiện có, đang chứa `config.php`. Upload **các file bên trong family-private của gói cập nhật**, chọn thay file trùng. **Giữ nguyên config.php**.
+4. Mở `public_html` chính của website. Upload **các file bên trong public_html của gói cập nhật**, chọn thay file trùng. Đưa file vào ngay thư mục đang dùng, không tạo `public_html/public_html` hoặc `family-private/family-private`.
+5. Mở lại website và nhấn **Ctrl+F5**. Trên iPhone, tải lại trang trong Safari hoặc đóng rồi mở lại Family trên màn hình chính.
 
-Không cần tạo database hoặc nhập lại khách. Gói không chứa dữ liệu hay config.php. MySQL tự thêm cột lưu trữ/gói tháng khi mở app; dữ liệu cũ và các hạn đã nhập được giữ. Backup v4 nhận cả JSON v1/v2/v3; không dùng bản ứng dụng cũ để nhập backup v4.
+Không cần tạo database, sửa SQL hay nhập lại khách. Gói không chứa config.php, mật khẩu, dữ liệu khách hoặc backup. Website giữ database hiện tại; nếu còn dùng schema cũ, ứng dụng tự thêm các cột cần thiết. Cài mới dùng [family-hostinger.zip](https://github.com/haitiano1/family/raw/refs/heads/main/downloads/family-hostinger.zip) và [INSTALL.md](INSTALL.md).
 
-## Khách vừa gia hạn mới ở bản 0.10
+## Thay đổi trong bản 0.11
 
-Trong **Khách lưu trữ** có thêm **Khách vừa gia hạn · 14 ngày gần nhất**. Sau khi xác nhận gia hạn thành công, khách hiện ở đây cùng thời điểm thao tác, gói/kỳ mới, tiền nhận và tên/email/Contact có nút copy. Mỗi khách hiện lần xác nhận mới nhất. Mốc 14 ngày tính từ thao tác thành công, không lấy ngày mua/hạn cũ/nhận tiền; khách trả muộn vẫn xuất hiện ngay.
+- **Một case đang mở cho mỗi Family:** dù chọn mail khách hay mail quản lý, Family có case Chờ fix/Đang fix không thể báo thêm. Khi tìm bằng mail khách hoặc chủ Family, dòng Family hiện **Mail đã báo lỗi — chờ fix/đang fix**, kèm email thực sự gặp lỗi. Nút Báo lỗi đổi thành **Xem lỗi**, mở và đánh dấu thẻ đang xử lý. Báo lỗi từ Fix lỗi chỉ cho chọn Family chưa có case đang mở. Khi đã Done, có thể báo một sự cố mới. Chặn cả gửi đồng thời hoặc mở lại case Done khi Family đang có case khác. Case trùng đã tồn tại ở bản cũ vẫn được giữ để bạn xử lý, không tự xóa dữ liệu.
+- **Tìm kiếm:** chuyển sang mục khác sẽ xóa nội dung các ô tìm kiếm. Ví dụ tìm mail → Báo lỗi → quay lại Family, ô tìm kiếm trống để tìm mail tiếp. Làm mới dữ liệu, mở form hoặc đổi bộ lọc trong cùng mục vẫn giữ nội dung đang tìm.
+- **Fix lỗi:** icon copy ngay sau email trên thẻ Chờ fix, Đang fix và Đã fix. Nếu đổi mail khi Done, có thể copy cả mail mới và mail báo lỗi ban đầu. Giữ ngày lỗi/trial/số ngày đã sử dụng, kéo thả, lựa chọn giữ/đổi mail và đồng bộ mail với Family.
+- **Logo:** biểu tượng ở đầu thanh điều hướng là logo YouTube đỏ với nút phát trắng, hiển thị trên máy tính và iPhone.
+- **Sản phẩm khác → Xóa:** chuyển toàn bộ hồ sơ vào Khách lưu trữ, giữ sản phẩm, khách/email/Contact, gói, ngày mua/hạn, thanh toán, tiền và ghi chú. Khôi phục đưa lại vào Sản phẩm khác, không cần chọn Family.
+- **Khách lưu trữ:** thêm **Xóa khỏi lưu trữ** với hộp xác nhận. Hủy giữ hồ sơ; xác nhận bỏ hồ sơ lưu trữ và khả năng khôi phục bằng nút. Nhật ký giữ dữ liệu trước xóa, lịch sử gia hạn vẫn được giữ. Không xóa khách đang hoạt động hoặc hồ sơ đã khôi phục.
 
-Sau đủ 14 ngày, chỉ bản ghi trong mục này rời danh sách. **Hồ sơ khách hoạt động và lịch sử vẫn được giữ**, không tự chuyển sang lưu trữ hay xóa khách. Trang mở tự cập nhật mỗi 10 giây. Chỉ mở hộp thoại Gia hạn hoặc chưa xác nhận hạn mới không tính là đã gia hạn. Lịch sử cũ gần đây cũng được hiển thị; không cần sửa database, tạo cron hay nhập lại data. Luồng lưu trữ/khôi phục và gói mua/bộ lọc của bản 0.9 vẫn được giữ.
+## Các tính năng đã có tiếp tục được giữ
 
-## Kiểm tra sau cập nhật
+- Gia hạn khách YouTube nối từ ngày hết hạn cũ, kể cả khách trả muộn; ngày nhận tiền được ghi riêng.
+- **Khách vừa gia hạn** hiển thị lần xác nhận mới nhất của mỗi khách trong 14 ngày từ lúc xác nhận thành công. Sau 14 ngày, chỉ dòng ở mục này rời danh sách; khách hoạt động và lịch sử vẫn giữ.
+- Gói 1/2/3/6/12 tháng tự tính ngày hết hạn theo ngày mua cho khách và sản phẩm khác. Hạn nhập thủ công được giữ khi chỉ mở form sửa.
+- Ba bộ lọc khách; Family xếp trial cũ đến mới, Fam dư slot dưới 5 hồ sơ, Theo tên giảm dần; copy thông tin và Contact bấm mở được.
+- Xóa hồ sơ khách/Family và chọn Không gia hạn chuyển vào lưu trữ. Family trống vẫn lưu trữ và khôi phục được. Nhật ký, CSV và bản sao lưu tiếp tục hoạt động.
 
-- **Thêm khách / Sản phẩm khác:** chọn 1/2/3/6/12 tháng, hạn tự nhảy theo ngày mua. Ví dụ 13/10/2026, gói 3 tháng → 13/01/2027. Đổi ngày mua sẽ tính lại; vẫn sửa hạn thủ công được. Mở Sửa hồ sơ giữ hạn đang có cho đến khi bạn đổi gói/ngày mua. Gia hạn YouTube tiếp tục nối từ hạn cũ, kể cả khách trả muộn.
-- **Family:** Tất cả xếp trial từ cũ đến mới, chưa nhập trial ở cuối. Fam dư slot chỉ có số Khách đang ghi nhận 0–4, tính cả hồ sơ đã mời/chưa vào. Theo tên xếp Family 48, Family 47, Family 46… Tìm kiếm dùng cùng bộ lọc.
-- **Xóa hồ sơ khách:** chuyển vào Khách lưu trữ, giữ thông tin/Contact/hạn/thanh toán/lịch sử. **Xóa hồ sơ Family:** cả nhóm và khách về Khách lưu trữ. Nhóm trống vẫn có trong phần Family lưu trữ. **Khôi phục Family** khôi phục nhóm cùng khách còn lưu trữ từ lần xóa, giữ trial/ghi chú/mail quản lý; khách đã khôi phục sang nhóm khác không được tạo lại. Email quản lý của nhóm lưu trữ vẫn gắn với hồ sơ đó; dùng Khôi phục Family để sử dụng lại.
-- **Sản phẩm khác:** gói tháng hiện trong danh sách; copy tên sản phẩm/tên khách/email/Contact/ngày mua/hạn/ghi chú; link Facebook/Zalo mở được. Hạn và nhắc hạn vẫn hiện trên Tổng quan.
-- **Nhật ký:** lưu cả chuyển hồ sơ vào lưu trữ và khôi phục. Giữ các tính năng Fix lỗi/ngày trial/đổi mail/copy/ba bộ lọc khách của bản trước. Khách chọn Không gia hạn vẫn lưu trữ ngay. Chỉ quá hạn chưa hủy gia hạn vẫn ở danh sách hoạt động.
-
-Gói cập nhật cần cả `import.php`, `business.php`, `core.php`, `issues.php`, `audit.php`, `features.sql`, `cron.php` trong family-private và các file mới trong public_html. Chỉ thay source; giữ cấu hình và database của website đang dùng. Gói đầy đủ `family-hostinger.zip` dành cho cài mới.
+Backup hiện tại là **v5**, nhận bản v1–v4 cũ; không dùng ứng dụng cũ để nhập backup v5. Cả ZIP cài mới, ZIP cập nhật và helper xuất Windows đã được tạo lại cho bản này. Không thể tự phục hồi sản phẩm đã bị xóa hẳn từ bản cũ trước khi tính năng lưu trữ được bổ sung.

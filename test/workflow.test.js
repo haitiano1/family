@@ -502,3 +502,48 @@ test('other-product deletion archives the full purchase, restores exact data aft
   await a('archives/'+archive.id,'DELETE',{expected_archived_at:archive.archived_at,expected_email:archive.email});assert.equal((await a('state')).archives.length,0);assert.equal((await a('members/'+member.id+'/renewal-history')).history.length,1);
  }finally{await f.close();await target.close();}
 });
+
+test('Family permits one open incident across all mails, concurrent reports and Done reopening',async()=>{
+ const f=await fixture();try{const a=f.admin,raceCookie='';
+
+  const family=await a('families','POST',{name:'One case Family',manager_email:'once@example.com'},201);
+  const member=await a('members','POST',{family_id:family.id,email:'guest-once@example.com'},201);
+  const other=await a('families','POST',{name:'Independent Family',manager_email:'other-once@example.com'},201);
+  const journalBefore=(await a('journal')).total;
+  const responses=await Promise.all(['First report','Concurrent report'].map(title=>fetch(f.base+'/api/issues',{method:'POST',headers:{'Content-Type':'application/json','X-Fam-Request':'1',Cookie:raceCookie},body:JSON.stringify({family_id:family.id,title})})));
+  assert.deepEqual(responses.map(r=>r.status).sort(),[201,409]);
+  const conflict=await responses.find(r=>r.status===409).json();assert.match(conflict.error,/once@example.com.*chờ fix/);
+  let state=await a('state'),open=state.issues.find(i=>i.family_id===family.id);assert.equal(state.issues.length,1);assert.equal((await a('journal')).total,journalBefore+1);
+  const blocked=await a('issues','POST',{family_id:family.id,target_type:'member',target_id:member.id,title:'Different mail, same Family'},409);assert.match(blocked.error,/chờ fix/);
+  await a('issues/'+open.id,'PATCH',{status:'doing',revision:0});
+  assert.match((await a('issues','POST',{family_id:family.id,title:'While doing'},409)).error,/đang fix/);
+  await a('issues','POST',{family_id:other.id,title:'Different Family allowed'},201);
+  await a('issues/'+open.id,'PATCH',{status:'done',revision:1,resolution:'keep'});
+  const next=await a('issues','POST',{family_id:family.id,target_type:'member',target_id:member.id,title:'New incident after Done'},201);
+  const beforeReopen=(await a('journal')).total;
+  await a('issues/'+open.id,'PATCH',{status:'todo',revision:2},409);
+  state=await a('state');assert.equal(state.issues.find(i=>i.id===open.id).status,'done');assert.equal((await a('journal')).total,beforeReopen);
+  await a('issues/'+next.id,'PATCH',{status:'done',revision:0,resolution:'keep'});
+  await a('issues/'+open.id,'PATCH',{status:'todo',revision:2});
+  await f.stop();await f.start();
+  state=await a('state');assert.equal(state.issues.filter(i=>i.family_id===family.id&&i.status!=='done').length,1);assert.equal(state.families.find(i=>i.id===family.id).manager_email,'once@example.com');assert.equal(state.members.find(i=>i.id===member.id).email,'guest-once@example.com');
+ }finally{await f.close();}
+});
+
+test('Previously duplicated open cases remain visible and fixable without deleting legacy data',async()=>{
+ const f=await fixture();try{const a=f.admin;
+
+ const family=await a('families','POST',{name:'Legacy open cases',manager_email:'legacy-once@example.com'},201);
+ const original=await a('issues','POST',{family_id:family.id,title:'Original case'},201);
+ const db=new DatabaseSync(path.join(f.dir,'family.sqlite'));try{db.exec("INSERT INTO issues(family_id,family_name,target_type,target_id,subject_email,original_email,title,note,created_at,updated_at,trial_date,reported_on) SELECT family_id,family_name,target_type,target_id,subject_email,original_email,'Legacy duplicate',note,created_at,updated_at,trial_date,reported_on FROM issues WHERE id="+original.id);}finally{db.close();}
+ let state=await a('state');assert.equal(state.issues.length,2);assert.equal(state.issues.filter(i=>i.status==='todo').length,2);
+ await a('issues','POST',{family_id:family.id,title:'No third duplicate'},409);
+ const legacy=state.issues.find(i=>i.id!==original.id);
+ await a('issues/'+legacy.id,'PATCH',{status:'doing',revision:0,title:'Legacy case still editable'});
+ await a('issues/'+original.id,'PATCH',{status:'done',revision:0,resolution:'keep'});
+ await a('issues','POST',{family_id:family.id,title:'Still occupied'},409);
+ await a('issues/'+legacy.id,'PATCH',{status:'done',revision:1,resolution:'keep'});
+ state=await a('state');assert.equal(state.issues.length,2);assert.ok(state.issues.every(i=>i.status==='done'));
+ await a('issues','POST',{family_id:family.id,title:'New problem'},201);assert.equal((await a('state')).issues.length,3);
+ }finally{await f.close();}
+});

@@ -1,4 +1,4 @@
-# YouTube Family — Quản lý khách hàng 0.10
+# YouTube Family — Quản lý khách hàng 0.11
 
 Ứng dụng quản lý cho cá nhân: **mở web là vào Tổng quan**, không cần tài khoản đăng nhập. Tập trung quản lý khách YouTube, Family, gia hạn và sản phẩm bán thêm. Không còn các mục admin, bảo mật tài khoản, Jobs hoặc thao tác Google. Có bản **PHP + MySQL dành cho Hostinger Premium** và bản Node.js chạy Windows/VPS. Có thể thêm biểu tượng vào màn hình chính iPhone; xem [hướng dẫn Hostinger](HOSTINGER.md). Bản hosting dùng một mật khẩu truy cập chung, không có tài khoản/role admin.
 
@@ -60,7 +60,7 @@ Sau gia hạn, lần tiếp theo trở về Chưa nhắc; lịch sử không m�
 
 ## Family, Fix lỗi và Nhật ký
 
-**Family** có tìm kiếm theo tên/email quản lý/email khách/ghi chú và nút **Báo lỗi** cạnh Sửa/Xóa hồ sơ. Chọn mail quản lý hoặc mail khách trong Family, nhập nội dung và ghi chú; thẻ xuất hiện ở **Fix lỗi**.
+**Family** có tìm kiếm theo tên/email quản lý/email khách/ghi chú và nút **Báo lỗi** cạnh Sửa/Xóa hồ sơ. Mỗi Family chỉ có một case Chờ fix/Đang fix; dòng Family và khách hiện mail đã báo lỗi cùng trạng thái, nút đổi thành **Xem lỗi**. Chọn mail quản lý hoặc mail khách, nhập nội dung và ghi chú; thẻ xuất hiện ở **Fix lỗi**. Case Done cho phép báo một sự cố mới; case trùng đã có trước cập nhật vẫn được giữ để xử lý. Backend chặn cả gửi đồng thời và mở lại Done khi Family đã có case khác đang mở. Email trên thẻ lỗi có icon copy; sau đổi mail có thể copy cả mail ban đầu. Nội dung tìm kiếm được reset khi chuyển mục, vẫn giữ khi làm mới/đổi bộ lọc trong cùng mục. Logo đầu thanh điều hướng là YouTube đỏ/trắng.
 
 Bảng **Chờ fix → Đang fix → Đã fix** hỗ trợ kéo thả, chọn trạng thái và nút Đã fix trên iPhone. Khi hoàn tất, bắt buộc chọn **Giữ nguyên mail** hoặc **Đổi sang mail mới**. Đổi cập nhật đúng hồ sơ quản lý/khách đã báo lỗi trong cùng lần lưu; thẻ Done ghi rõ mail cũ→mới và giữ mail báo lỗi ban đầu. Không đổi ngày mua/hạn/Contact/thanh toán. Mail trùng hoặc hồ sơ đã thay đổi/xóa sẽ không gây cập nhật một phần; trạng thái và đổi mail cùng rollback. Lỗi vẫn được giữ khi Family bị xóa. Thay đổi đồng thời có revision guard, cần tải lại khi có xung đột.
 
@@ -124,7 +124,7 @@ Sau 14 ngày, bản ghi tự rời **Khách vừa gia hạn** khi trang cập nh
 
 **Sản phẩm khác → Xóa** chuyển toàn bộ hồ sơ vào Khách lưu trữ, giữ tên sản phẩm, tên/email khách, Contact, gói, ngày mua/hạn, thanh toán, số tiền, ghi chú và thời điểm tạo. Xem dữ liệu hỗ trợ đúng hồ sơ sản phẩm; Khôi phục đưa lại vào Sản phẩm khác, không cần Family và không đổi hạn. Có thể Xóa khỏi lưu trữ như hồ sơ khách Family. Hồ sơ khách Family/lịch sử có trùng số ID nội bộ vẫn được giữ nguyên. Mục Khách vừa gia hạn tiếp tục là danh sách xem 14 ngày, không tự lưu trữ/xóa khách hoạt động.
 
-Người dùng yêu cầu cập nhật bằng mã nguồn, **không tạo lại ZIP** cho thay đổi này. Trong hPanel, thay đúng 4 file trên website đang chạy: `family-private/business.php`, `family-private/audit.php`, `public_html/api.php`, `public_html/app.js` (nguồn file cuối là `public/app.js`). Xem [SOURCE-UPDATE.md](hosting/php/SOURCE-UPDATE.md) để sao chép nội dung và cập nhật. Không thay config.php/database, không nhập lại khách. Các ZIP hiện có vẫn là bản trước cập nhật trực tiếp này. Backup v5 phân biệt hồ sơ sản phẩm lưu trữ với khách Family; mã mới nhận cả v1–v4, bản cũ không nhận v5. Exporter mã nguồn cũng xuất v5; gói helper ZIP chưa được tạo lại.
+Bản **0.11 đã đóng gói lại toàn bộ** thay đổi này cùng chặn báo lỗi trùng/reset tìm kiếm/copy mail lỗi/logo YouTube. Dùng [family-hostinger-update.zip](https://github.com/haitiano1/family/raw/refs/heads/main/downloads/family-hostinger-update.zip) cho website đang chạy và làm theo [UPDATE.md](hosting/php/UPDATE.md); giữ config.php/database, không nhập lại khách. ZIP cài mới cũng có đầy đủ các thay đổi. Backup v5 phân biệt sản phẩm lưu trữ với khách Family; mã mới nhận cả v1–v4, bản cũ không nhận v5. Gói helper xuất Windows đã được cập nhật để xuất v5.
 
 Kiểm tra PHP trực tiếp từ mã nguồn, không tạo ZIP: `FAMILY_PHP_SOURCE_ONLY=1 npm run test:php`. Chế độ này chép nguồn PHP/frontend vào các fixture riêng, bỏ config.php thật; không đụng database/config đang dùng. Chạy `npm run test:php` không có biến này vẫn kiểm tra luồng đóng gói khi cần.
 
