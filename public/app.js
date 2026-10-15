@@ -66,7 +66,7 @@ function draw() {
   document.querySelectorAll('nav a').forEach(a=>a.classList.toggle('active',a.dataset.page===parent));
   $('#breadcrumb').textContent=`YouTube Family › ${names[parent]} ${id ? '› #'+id : ''}`;
   $('#header-actions').innerHTML=btn('backup','Sao lưu / Chuyển dữ liệu','secondary tiny')+(state.hosted ? ' '+btn('close-access','Khóa ứng dụng','secondary tiny') : '');
-  if(page==='vault'){mountVault($('#main'),{families:state.families,members:state.members,issues:state.issues,getFamilyContext:()=>({families:state.families,members:state.members,issues:state.issues}),refreshFamilyContext:()=>refresh(false),toast});return;}
+  if(page==='vault'){mountVault($('#main'),{familyId:Number(id),families:state.families,members:state.members,issues:state.issues,getFamilyContext:()=>({families:state.families,members:state.members,issues:state.issues}),refreshFamilyContext:()=>refresh(false),toast});return;}
   unmountVault();
   let content = '';
   if (page==='overview') {
@@ -86,7 +86,7 @@ function draw() {
   } else if (page==='family') {
     const f=state.families.find(f=>f.id===Number(id));
     const familyMembers=sortCustomers(state.members.filter(m=>m.family_id===f?.id)),familyEmails=familyMembers.map(m=>m.email).filter(Boolean).join('\n');
-    content=f ? `<a class="back" href="#families">← Danh sách Family</a>`+hero('FAMILY',f.name,`Email quản lý: ${escape(f.manager_email)}`,btn('add-member','+ Thêm khách','primary',`data-id="${f.id}"`))+`<section class="card"><div class="section-heading"><div><h2>Thông tin Family</h2><p>Ngày trial: ${f.trial_date ? day(f.trial_date) : 'Chưa nhập'}</p><p>${escape(f.note||'Chưa có ghi chú')}</p>${familyIssueNotice(f.id)}</div><div class="row-actions">${btn('edit-family','Sửa Family','secondary',`data-id="${f.id}"`)}${familyIssueAction(f.id,'secondary')}</div></div></section><section class="card"><div class="section-heading"><h2>Khách trong Family</h2>${copyButton(familyEmails,'tất cả mail thành viên trong Family','Copy tất cả mail')}</div>${customerTable(familyMembers)}</section>` : empty('Không tìm thấy Family','Hồ sơ này có thể đã được chuyển vào Khách lưu trữ.');
+    content=f ? `<a class="back" href="#families">← Danh sách Family</a>`+hero('FAMILY',f.name,`Email quản lý: <a class="email-link" href="#vault/${f.id}" title="Mở thông tin trong Kho tài khoản">${escape(f.manager_email)}</a>`,btn('add-member','+ Thêm khách','primary',`data-id="${f.id}"`))+`<section class="card"><div class="section-heading"><div><h2>Thông tin Family</h2><p>Ngày trial: ${f.trial_date ? day(f.trial_date) : 'Chưa nhập'}</p><p>${escape(f.note||'Chưa có ghi chú')}</p>${familyIssueNotice(f.id)}</div><div class="row-actions">${btn('edit-family','Sửa Family','secondary',`data-id="${f.id}"`)}${familyIssueAction(f.id,'secondary')}</div></div></section><section class="card"><div class="section-heading"><h2>Khách trong Family</h2>${copyButton(familyEmails,'tất cả mail thành viên trong Family','Copy tất cả mail')}</div>${customerTable(familyMembers)}</section>` : empty('Không tìm thấy Family','Hồ sơ này có thể đã được chuyển vào Khách lưu trữ.');
   } else if (page==='import') content=importPage();
   else content=empty('Không tìm thấy trang','Chọn mục trong thanh điều hướng.');
   $('#main').innerHTML = content;

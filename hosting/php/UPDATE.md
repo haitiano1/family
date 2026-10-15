@@ -1,4 +1,4 @@
-# Cập nhật YouTube Family 0.13.5
+# Cập nhật YouTube Family 0.13.6
 
 Bản này gộp đầy đủ các thay đổi trước đây chưa đóng gói và các yêu cầu mới. Dùng **gói cập nhật** cho website Family đang chạy; giữ cấu hình và dữ liệu hiện có.
 
@@ -11,6 +11,14 @@ Bản này gộp đầy đủ các thay đổi trước đây chưa đóng gói 
 5. Mở lại website và nhấn **Ctrl+F5**. Trên iPhone, tải lại trang trong Safari hoặc đóng rồi mở lại Family trên màn hình chính.
 
 Không cần tạo database, sửa SQL hay nhập lại khách. Gói không chứa config.php, mật khẩu, dữ liệu khách hoặc backup. Website giữ database hiện tại; nếu còn dùng schema cũ, ứng dụng tự thêm các cột cần thiết. Cài mới dùng [family-hostinger.zip](https://github.com/haitiano1/family/raw/refs/heads/main/downloads/family-hostinger.zip) và [INSTALL.md](INSTALL.md).
+
+## Bổ sung trong bản 0.13.6
+
+Email quản lý ở đầu trang Family bấm được, mở đúng hồ sơ trong **Kho tài khoản** theo ID nhóm, chỉ hiện nhóm đã chọn. Có đủ mail/ngày trial/mật khẩu/2FA/mã 6 số/mail khôi phục/Note; vẫn Hiện/Ẩn/copy/sửa như trước. **Xem tất cả Family** trở về danh sách Kho. Nhóm chưa có thông tin Kho hiện trống để bổ sung.
+
+Phiên Kho còn hạn thì vào ngay; hết 30 phút/chưa mở/đã khóa thì hỏi pass và chỉ hiển thị thông tin sau khi nhập đúng. Giữ nhóm đã chọn qua bước nhập pass và tải lại trang. Liên kết không gia hạn phiên; khóa thủ công vẫn có hiệu lực. Ngày trial/khách/mật khẩu đã lưu không bị sửa bởi điều hướng.
+
+Nếu đã cài đủ **0.13.5**, thay **public_html/app.js** và **public_html/vault.js** từ gói mới rồi Ctrl+F5. Bản cũ hơn cập nhật đầy đủ hai thư mục theo hướng dẫn đầu tài liệu. Giữ config.php/database, không nhập lại khách. Schema và backup v7 không đổi; gói 0.13.6 gồm toàn bộ thay đổi trước đó.
 
 ## Bổ sung trong bản 0.13.5
 
