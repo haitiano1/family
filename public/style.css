@@ -18,6 +18,8 @@
 .vault-code{color:#7158e8;background:#f3f0ff;padding:6px 8px;border-radius:6px}.vault-key{font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:13px;line-height:1.7}@media(max-width:600px){.vault-key{font-size:14px}}
 
 .vault-note{white-space:pre-wrap;line-height:1.6}
+.copy-group{display:inline-flex;align-items:center;gap:6px}
+#vault-table tr.vault-last-copied td[data-label="MAIL FAMILY"] .info-text{color:#c45b08}
 #vault-dialog.vault-import-dialog{width:min(860px,calc(100vw - 24px))}#vault-sheet-source{font-family:ui-monospace,SFMono-Regular,Consolas,monospace;min-height:160px}#vault-sheet-mapping{display:grid;grid-template-columns:minmax(110px,1fr) minmax(140px,2fr);align-items:center;gap:8px 16px;margin-top:16px}#vault-sheet-mapping label{margin:0}#vault-sheet-preview{margin-top:18px}@media(max-width:600px){#vault-sheet-mapping{grid-template-columns:1fr}}
 
 #vault-count{margin:12px 0}#vault-unlinked{margin-top:22px;border-top:1px solid #e9edf3;padding-top:16px}#vault-unlinked summary{cursor:pointer;font-weight:650}#vault-dialog input[readonly]{background:#f6f8fc;color:#526277}#vault-linked-table .email-link{font-weight:650}

@@ -1,4 +1,4 @@
-# Cập nhật YouTube Family 0.13.2
+# Cập nhật YouTube Family 0.13.3
 
 Bản này gộp đầy đủ các thay đổi trước đây chưa đóng gói và các yêu cầu mới. Dùng **gói cập nhật** cho website Family đang chạy; giữ cấu hình và dữ liệu hiện có.
 
@@ -11,6 +11,13 @@ Bản này gộp đầy đủ các thay đổi trước đây chưa đóng gói 
 5. Mở lại website và nhấn **Ctrl+F5**. Trên iPhone, tải lại trang trong Safari hoặc đóng rồi mở lại Family trên màn hình chính.
 
 Không cần tạo database, sửa SQL hay nhập lại khách. Gói không chứa config.php, mật khẩu, dữ liệu khách hoặc backup. Website giữ database hiện tại; nếu còn dùng schema cũ, ứng dụng tự thêm các cột cần thiết. Cài mới dùng [family-hostinger.zip](https://github.com/haitiano1/family/raw/refs/heads/main/downloads/family-hostinger.zip) và [INSTALL.md](INSTALL.md).
+
+## Bổ sung trong bản 0.13.3
+
+- Trang chi tiết Family có **Copy tất cả mail** ở góc phải phần **Khách trong Family**. Sao chép email của mọi khách đang ghi nhận trong nhóm, mỗi mail một dòng theo thứ tự danh sách; gồm khách quá hạn và đã mời/chưa vào. Không kèm mail chủ, tên, Contact, khách nhóm khác hoặc hồ sơ lưu trữ. Nhóm trống không hiện nút. Có ô chọn để copy thủ công nếu trình duyệt chặn clipboard; thao tác không sửa dữ liệu.
+- Trong **Kho tài khoản**, sao chép thông tin ở hàng nào thì mail hàng đó chuyển **màu cam**. Áp dụng cho mọi icon copy: mail, ngày trial, mật khẩu, khóa 2FA, mã 6 số, mail khôi phục và Note. Copy hàng khác đưa mail trước về màu cũ. Dấu nhận biết theo hàng copy thành công gần nhất trong lần mở mục Kho, giữ khi lọc/tìm/làm mới dữ liệu hoặc mã 2FA tự đổi; khóa hoặc rời mục sẽ bỏ dấu. Không sửa dữ liệu hay ghi Nhật ký.
+
+Nếu đã cài đủ **0.13.2**, chỉ cần thay **public_html/app.js**, **public_html/vault.js** và **public_html/style.css** từ gói mới rồi Ctrl+F5. Nếu đang dùng bản cũ hơn, cập nhật đủ cả hai thư mục theo hướng dẫn trên. Gói 0.13.3 gồm toàn bộ thay đổi trước đó; giữ config.php và database, không nhập lại khách.
 
 ## Bổ sung trong bản 0.13.2
 
