@@ -10,7 +10,7 @@ import {summarizeRenewals} from '../../statistics.js';
 const root=path.resolve(import.meta.dirname,'../..'),prefix='family-php-'+process.pid,network=prefix+'-net',mysql=prefix+'-mysql',dir=mkdtempSync(tmpdir()+'/family-php-'),password=randomBytes(24).toString('hex');
 const containers=[];let count=0;
 const docker=(...args)=>execFileSync('docker',['--config',process.env.FAMILY_DOCKER_CONFIG || process.env.DOCKER_CONFIG || path.join(dir,'docker-config'),...args],{encoding:'utf8',maxBuffer:5e6,stdio:['ignore','pipe','pipe']}).trim();
-const sql=text=>docker('exec','-e','MYSQL_PWD='+password,mysql,'mysql','-h127.0.0.1','-uroot','-N','-e',text);
+const sql=text=>docker('exec','-e','MYSQL_PWD='+password,mysql,'mysql','--default-character-set=utf8mb4','-h127.0.0.1','-uroot','-N','-e',text);
 const port=name=>JSON.parse(docker('inspect',name))[0].NetworkSettings.Ports['80/tcp'][0].HostPort;
 before(async()=>{
  if(process.env.FAMILY_PHP_SOURCE_ONLY!=='1')execFileSync('python3',['scripts/package-php.py'],{cwd:root});
@@ -555,4 +555,17 @@ test('PHP and Node statistics agree on Vietnam month edges, leap years, paginati
  for(const [options,time] of [[{month:'2026-10'},'2026-11-15T00:00:00Z'],[{month:'all',search:'%_[]',page:2},'2026-11-15T00:00:00Z'],[{month:'2024-02',search:'NGUYỄN ÁNH'},'2026-11-15T00:00:00Z'],[{month:'all',search:'absent'},'2026-11-15T00:00:00Z'],[{},'2025-12-31T17:00:00Z']]){
   const encoded=Buffer.from(JSON.stringify(options)).toString('base64'),actual=JSON.parse(docker('exec',f.name,'php','-r',`require '/var/www/family-private/core.php';require '/var/www/family-private/statistics.php';$db=db(config());echo json_encode(renewalStatistics($db,json_decode(base64_decode('${encoded}'),true),new DateTimeImmutable('${time}')));`));assert.deepEqual(actual,summarizeRenewals(history,options,new Date(time)));
  }
+});
+
+test('PHP journal categories filter all existing actions and combine search/pagination without changing audit history',async()=>{
+ const f=await fixture();await f.req('journal?category=delete','GET',undefined,401);await f.login();await f.req('state');const a=f.req;
+ const cases=[['Xóa Family','delete'],['Xóa hồ sơ lưu trữ','delete'],['Lưu trữ sản phẩm','delete'],['Tự động lưu trữ dữ liệu','delete'],['Thêm khách','create'],['Tạo mật khẩu kho','create'],['Đổi mật khẩu kho','edit'],['Gia hạn khách','renewal'],['Chuyển Family','transfer'],['Khôi phục dữ liệu','restore'],['Nhập CSV','import'],['Nhập hàng loạt kho tài khoản','import'],['Xem trước CSV','import'],['Liên kết Kho với Family','other']];
+ const values=[...cases.map(([action])=>[action,'guest@example.com · '+action]),...Array.from({length:55},(_,i)=>['Sửa khách',`guest@example.com · sửa ${i} · ghi chú nhắc Xóa Family %_`])].map(([action,message])=>`('${action}','Cá nhân','${message}','{"changes":[]}','2026-10-15T00:00:00Z')`).join(',');
+ sql(`INSERT INTO ${f.db}.audit_events(action,actor,message,details,created_at) VALUES ${values};INSERT INTO ${f.db}.logs(message,created_at) VALUES ('Nhật ký cũ nhắc Xóa và Sửa khách','2025-01-01T00:00:00Z')`);
+ const before=(await a('backup')).tables.audit_events;assert.equal((await a('journal')).total,70);
+ for(const [action,category] of cases){const data=await a('journal?'+new URLSearchParams({category,search:action}));assert.ok(data.entries.some(e=>e.action===action&&e.category===category),action);}
+ const edits=await a('journal?category=edit');assert.equal(edits.total,56);assert.equal(edits.entries.length,50);assert.ok(edits.entries.every(e=>e.category==='edit'));const second=await a('journal?category=edit&page=2');assert.equal(second.total,56);assert.equal(second.entries.length,6);assert.equal(new Set([...edits.entries,...second.entries].map(e=>e.id)).size,56);
+ const deleted=await a('journal?category=delete');assert.equal(deleted.total,4);assert.ok(deleted.entries.every(e=>e.category==='delete'));assert.ok(deleted.entries.some(e=>e.action==='Xóa Family'));
+ assert.equal((await a('journal?'+new URLSearchParams({category:'delete',search:'ghi chú nhắc Xóa Family'}))).total,0);assert.equal((await a('journal?'+new URLSearchParams({category:'edit',search:'%_'}))).total,55);assert.equal((await a('journal?'+new URLSearchParams({category:'other',search:'Nhật ký cũ'}))).entries[0].kind,'log');await a('journal?category=invalid','GET',undefined,400);
+ assert.deepEqual((await a('backup')).tables.audit_events,before);assert.equal((await a('backup')).tables.logs.length,1);
 });

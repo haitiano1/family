@@ -1,4 +1,4 @@
-# YouTube Family — Quản lý khách hàng 0.14.0
+# YouTube Family — Quản lý khách hàng 0.14.1
 
 Ứng dụng quản lý cho cá nhân: **mở web là vào Tổng quan**, không cần tài khoản đăng nhập. Tập trung quản lý khách YouTube, Family, gia hạn và sản phẩm bán thêm. Không còn các mục admin, bảo mật tài khoản, Jobs hoặc thao tác Google. Có bản **PHP + MySQL dành cho Hostinger Premium** và bản Node.js chạy Windows/VPS. Có thể thêm biểu tượng vào màn hình chính iPhone; xem [hướng dẫn Hostinger](HOSTINGER.md). Bản hosting dùng một mật khẩu truy cập chung, không có tài khoản/role admin.
 
@@ -57,6 +57,12 @@ Thanh toán kỳ hiện tại tách với gia hạn tiếp theo: Chưa nhắc / 
 5. Ngày cuối tháng được giới hạn đúng tháng, kể cả năm nhuận. Lịch sử giữ ngày mua/hạn cũ/mới, tiền, ngày nhận và ghi chú. Số tiền cột kỳ hiện tại là của kỳ hiện tại, không phải tổng doanh thu.
 
 Sau gia hạn, lần tiếp theo trở về Chưa nhắc; lịch sử không mất. Việc tính sai ở những bản cũ không tự sửa hồi tố. Chỉnh ngày trực tiếp bằng form sửa hồ sơ không tạo lịch sử gia hạn hoàn tất.
+
+## Bổ sung trong bản 0.14.1
+
+Trong **Thống kê**, thứ tự là tổng số của tháng đang chọn → **Lịch sử gia hạn** → **6 tháng gần nhất**. Các nút chọn tháng và lịch sử lâu dài giữ nguyên.
+
+**Nhật ký** có một bộ lọc loại thao tác: Tất cả, Thêm mới, Sửa, Xóa / Lưu trữ, Gia hạn, Chuyển Family, Khôi phục, Nhập dữ liệu và Khác / Nhật ký cũ. Nhãn màu giúp nhận biết nhanh; chi tiết cũng đánh dấu từng dữ liệu Thêm/Sửa/Xóa. Kết hợp bộ lọc với tìm email/Family và phân trang trên toàn bộ nhật ký. Phân loại từ tên thao tác đã ghi, không từ nội dung ghi chú; nhật ký cũ thiếu loại vẫn giữ nguyên trong Khác. Không sửa/xóa lịch sử cũ hoặc đổi schema/backup.
 
 ## Bổ sung trong bản 0.14.0
 

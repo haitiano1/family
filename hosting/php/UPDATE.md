@@ -1,4 +1,4 @@
-# Cập nhật YouTube Family 0.14.0
+# Cập nhật YouTube Family 0.14.1
 
 Bản này gộp đầy đủ các thay đổi trước đây chưa đóng gói và các yêu cầu mới. Dùng **gói cập nhật** cho website Family đang chạy; giữ cấu hình và dữ liệu hiện có.
 
@@ -11,6 +11,14 @@ Bản này gộp đầy đủ các thay đổi trước đây chưa đóng gói 
 5. Mở lại website và nhấn **Ctrl+F5**. Trên iPhone, tải lại trang trong Safari hoặc đóng rồi mở lại Family trên màn hình chính.
 
 Không cần tạo database, sửa SQL hay nhập lại khách. Gói không chứa config.php, mật khẩu, dữ liệu khách hoặc backup. Website giữ database hiện tại; nếu còn dùng schema cũ, ứng dụng tự thêm các cột cần thiết. Cài mới dùng [family-hostinger.zip](https://github.com/haitiano1/family/raw/refs/heads/main/downloads/family-hostinger.zip) và [INSTALL.md](INSTALL.md).
+
+## Bổ sung trong bản 0.14.1
+
+- **Lịch sử gia hạn** nằm phía trên, **6 tháng gần nhất** nằm phía dưới. Tổng tháng, bộ chọn tháng và dữ liệu giữ nguyên.
+- **Nhật ký** có nhãn màu và bộ lọc: Thêm mới, Sửa, Xóa / Lưu trữ, Gia hạn, Chuyển Family, Khôi phục, Nhập dữ liệu, Khác / Nhật ký cũ. Bộ lọc kết hợp tìm email/Family và phân trang toàn bộ lịch sử. Chi tiết trước/sau cũng có nhãn Thêm/Sửa/Xóa.
+- Phân loại các nhật ký đã có khi xem, không viết lại hoặc xóa bản ghi. Nhật ký cũ thiếu loại vẫn nằm trong Khác. Schema và backup v7 không đổi.
+
+Cập nhật đầy đủ hai thư mục theo hướng dẫn đầu tài liệu, giữ config.php/database, không nhập lại khách. Nếu chỉ thay file từ **0.14.0**, các file đổi là `public_html/statistics.js`, `public_html/app.js`, `public_html/style.css`, `family-private/audit.php`.
 
 ## Bổ sung trong bản 0.14.0
 

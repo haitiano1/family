@@ -24,11 +24,14 @@ export function finishAudit(db) {
 export async function withAudit(db,action,operation,actor='Cá nhân') {beginAudit(db,action,actor);try {const result=await operation();finishAudit(db);return result;}catch(error){if(scopes.has(db))cancelAudit(db);throw error;}}
 export function journal(db,params) {
   if(!lowerRegistered.has(db)){db.function('fam_lower',{deterministic:true},s=>String(s||'').toLocaleLowerCase());lowerRegistered.add(db);}
-  const page=Math.max(1,Math.min(100000,Number(params.get('page'))||1)),search=String(params.get('search')||'').slice(0,200).toLocaleLowerCase();
-  const union="SELECT id,'audit' AS kind,action,actor,message,created_at FROM audit_events UNION ALL SELECT id,'log' AS kind,'Nhật ký cũ' AS action,'Cá nhân' AS actor,message,created_at FROM logs";
-  const where=" WHERE fam_lower(message) LIKE ? ESCAPE '\\'";const pattern='%'+search.replace(/[\\%_]/g,c=>'\\'+c)+'%';
-  const total=db.prepare(`SELECT COUNT(*) AS n FROM (${union}) j${where}`).get(pattern).n;
-  const entries=db.prepare(`SELECT * FROM (${union}) j${where} ORDER BY created_at DESC,id DESC LIMIT 50 OFFSET ?`).all(pattern,(page-1)*50);
+  const page=Math.max(1,Math.min(100000,Math.trunc(Number(params.get('page')))||1)),search=String(params.get('search')||'').slice(0,200).toLocaleLowerCase(),category=params.get('category')||'all';
+  if(!['all','create','edit','delete','renewal','transfer','restore','import','other'].includes(category))throw Object.assign(Error('Loại thao tác không hợp lệ.'),{status:400});
+  // Classify the recorded action, not free text that may mention another operation.
+  // "Lưu trữ sản phẩm" is the existing action for the product's Xóa button.
+  const union="SELECT id,'audit' AS kind,action,actor,message,created_at,CASE WHEN action LIKE 'Xóa %' OR action LIKE 'Lưu trữ %' OR action LIKE 'Tự động lưu trữ%' THEN 'delete' WHEN action LIKE 'Sửa %' OR action='Đổi mật khẩu kho' THEN 'edit' WHEN action LIKE 'Thêm %' OR action='Tạo mật khẩu kho' THEN 'create' WHEN action LIKE 'Gia hạn %' THEN 'renewal' WHEN action='Chuyển Family' THEN 'transfer' WHEN action LIKE 'Khôi phục %' THEN 'restore' WHEN action LIKE 'Nhập %' OR action LIKE 'Xem trước CSV%' THEN 'import' ELSE 'other' END AS category FROM audit_events UNION ALL SELECT id,'log' AS kind,'Nhật ký cũ' AS action,'Cá nhân' AS actor,message,created_at,'other' AS category FROM logs";
+  const where=" WHERE fam_lower(message) LIKE ? ESCAPE '\\'"+(category==='all'?'':' AND category=?'),pattern='%'+search.replace(/[\\%_]/g,c=>'\\'+c)+'%',values=category==='all'?[pattern]:[pattern,category];
+  const total=db.prepare(`SELECT COUNT(*) AS n FROM (${union}) j${where}`).get(...values).n;
+  const entries=db.prepare(`SELECT * FROM (${union}) j${where} ORDER BY created_at DESC,id DESC LIMIT 50 OFFSET ?`).all(...values,(page-1)*50);
   return {entries,total,page,page_size:50};
 }
 export function journalEntry(db,kind,id) {const row=db.prepare(`SELECT * FROM ${kind==='audit'?'audit_events':'logs'} WHERE id=?`).get(id);return row ? {...row,kind,changes:kind==='audit'?JSON.parse(row.details).changes:[]} : null;}
