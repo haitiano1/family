@@ -1,4 +1,4 @@
-# YouTube Family — Quản lý khách hàng 0.13.6
+# YouTube Family — Quản lý khách hàng 0.14.0
 
 Ứng dụng quản lý cho cá nhân: **mở web là vào Tổng quan**, không cần tài khoản đăng nhập. Tập trung quản lý khách YouTube, Family, gia hạn và sản phẩm bán thêm. Không còn các mục admin, bảo mật tài khoản, Jobs hoặc thao tác Google. Có bản **PHP + MySQL dành cho Hostinger Premium** và bản Node.js chạy Windows/VPS. Có thể thêm biểu tượng vào màn hình chính iPhone; xem [hướng dẫn Hostinger](HOSTINGER.md). Bản hosting dùng một mật khẩu truy cập chung, không có tài khoản/role admin.
 
@@ -58,6 +58,16 @@ Thanh toán kỳ hiện tại tách với gia hạn tiếp theo: Chưa nhắc / 
 
 Sau gia hạn, lần tiếp theo trở về Chưa nhắc; lịch sử không mất. Việc tính sai ở những bản cũ không tự sửa hồi tố. Chỉnh ngày trực tiếp bằng form sửa hồ sơ không tạo lịch sử gia hạn hoàn tất.
 
+## Bổ sung trong bản 0.14.0
+
+**Thống kê** là mục riêng, thay danh sách Khách vừa gia hạn 14 ngày. Hiển thị tháng hiện tại và 5 tháng trước, từ ngày đầu đến ngày cuối mỗi tháng theo giờ Việt Nam. Mỗi tháng có số email khách khác nhau, số lượt xác nhận gia hạn thành công và tổng tiền các lượt đó. Một email gia hạn hai lần: 1 khách, 2 lượt, cộng đủ tiền cả hai. Tính theo lúc xác nhận hạn mới, không theo ngày nhận tiền hoặc ngày hết hạn. Chờ tiền/trả một phần/đã thu nhưng chưa áp dụng hạn chưa được tính. Không suy đoán lượt gia hạn từ số tiền hiện tại hoặc dữ liệu nhập Sheet.
+
+Có bộ chọn tháng, tìm tên/email/Family/ghi chú và phân trang lịch sử. **Toàn bộ lịch sử** xem cả các tháng cũ hơn 6 tháng. Tìm kiếm chỉ lọc danh sách, không đổi tổng tháng. Lịch sử gia hạn được giữ lâu dài khi lưu trữ, khôi phục hoặc xóa hẳn hồ sơ khách/Family; không còn dọn theo mốc 14 ngày. Khách gia hạn vẫn ở danh sách hoạt động.
+
+**Khách lưu trữ** chỉ dành cho khách Không gia hạn, hồ sơ khách/sản phẩm vừa xóa và Family vừa xóa. Khách và Family đều có **Khôi phục / Xóa khỏi lưu trữ**. Xóa Family khỏi lưu trữ chỉ bỏ nhóm; giữ các khách để khôi phục riêng vào Family khác. Nhật ký lưu dữ liệu trước/sau; lịch sử gia hạn giữ nguyên. Thông tin Kho đã mã hóa được giữ riêng khi bỏ liên kết Family.
+
+Cập nhật đầy đủ **hai thư mục** theo [UPDATE.md](hosting/php/UPDATE.md), giữ config.php/database, không nhập lại khách. Không thay schema hoặc định dạng backup v7.
+
 ## Bổ sung trong bản 0.13.6
 
 Bấm **email quản lý ở đầu trang chi tiết Family** để mở đúng Family trong **Kho tài khoản**, gồm đủ các cột mail/trial/mật khẩu/khóa 2FA/mã 6 số/mail khôi phục/Note và các thao tác hiện có. Liên kết theo ID Family, giữ đúng hồ sơ sau đổi mail; chỉ hiện hàng của nhóm đã chọn. Có **Xem tất cả Family** để quay về danh sách Kho. Mật khẩu/khóa vẫn che mặc định; nhóm chưa nhập Kho hiện các trường trống.
@@ -108,7 +118,7 @@ SQLite nâng cấp13→14 có before-v14 backup; PHP schema5→6 bổ sung liên
 
 Trong Tổng quan, Khách & Gia hạn hoặc chi tiết Family, bấm **Chuyển Family** (thay nút Nhắc hạn, kể cả khách chưa có ngày hết hạn). Nhập mail chủ nhóm trong **Tìm mail chủ Family** hoặc chọn từ menu **Family nhận khách**. Menu hiển thị tất cả nhóm đang hoạt động, mail chủ nhóm và tên Family; nhóm hiện tại được ghi rõ và không thể chọn lại. Gõ đúng email chủ nhóm sẽ tự chọn Family tương ứng; hộp thoại hiện nhóm đích và số khách để đối chiếu. Bấm Chuyển Family để mở nhóm đích cùng toàn bộ thành viên.
 
-Chỉ đổi liên kết nhóm của hồ sơ, giữ ID khách, tên/mail/Contact, gói, ngày mua/hạn, tiền, thanh toán, trạng thái gia hạn/chưa vào và lịch sử. Lịch sử gia hạn giữ tên Family tại thời điểm gia hạn; Khách vừa gia hạn hiển thị nhóm hiện tại. Đây là chuyển hồ sơ quản lý trong ứng dụng.
+Chỉ đổi liên kết nhóm của hồ sơ, giữ ID khách, tên/mail/Contact, gói, ngày mua/hạn, tiền, thanh toán, trạng thái gia hạn/chưa vào và lịch sử. Lịch sử và thống kê gia hạn giữ tên Family tại thời điểm gia hạn. Đây là chuyển hồ sơ quản lý trong ứng dụng.
 
 Tag lỗi trên dòng member lấy từ case Chờ fix/Đang fix của **mail chủ Family hiện tại**, không từ hồ sơ khách. Chuyển từ A sang B bỏ tag của chủ A; nếu chủ B đang có lỗi, hiện trạng thái đúng của chủ B. Case lỗi của chủ A vẫn ở nhóm A; các member còn ở A vẫn có tag. Case của mail khách không gắn tag lỗi cho toàn bộ member trong nhóm.
 
@@ -168,19 +178,15 @@ Thông tin và lịch sử nằm trong `data/family.sqlite`. Có **Xem dữ li�
 - Trong **Khách lưu trữ → Family lưu trữ → Khôi phục Family**, khôi phục cả nhóm và khách còn lưu trữ cùng lần xóa. Khách đã chuyển sang Family khác không bị tạo trùng. Có thể khôi phục từng khách vào Family đang hoạt động. Email quản lý của Family lưu trữ vẫn thuộc hồ sơ đó; hãy khôi phục Family trước khi sử dụng lại email cho nhóm này. Case lỗi giữ liên kết sau khôi phục và mọi thao tác có nhật ký.
 - Sản phẩm khác hiện gói tháng, copy tên sản phẩm/tên khách/email/Contact/ngày mua/hạn/ghi chú. Contact là link bấm mở khi có URL, còn nội dung gốc vẫn được copy đầy đủ. Nhắc hạn ở Tổng quan vẫn áp dụng cho sản phẩm phụ.
 
-## Khách vừa gia hạn (bản 0.10)
+## Thống kê và lịch sử gia hạn
 
-Trong **Khách lưu trữ** có thêm mục **Khách vừa gia hạn · 14 ngày gần nhất**. Sau khi xác nhận gia hạn thành công, khách xuất hiện ở đây với tên/email/Contact có copy, Family, gói, thời điểm gia hạn, kỳ mới, tiền và ngày nhận tiền. Mỗi khách hiện lần xác nhận mới nhất; các lần cũ vẫn có trong Lịch sử.
-
-Thời gian 14 ngày tính từ **lúc xác nhận gia hạn thành công trên ứng dụng**, đủ 14 × 24 giờ, không lấy ngày mua, ngày hết hạn cũ hay ngày nhận tiền. Chỉ mở hộp thoại Gia hạn hoặc ghi nhận Chờ tiền/Trả một phần/Đã trả tiền nhưng chưa xác nhận hạn mới chưa đưa khách vào mục này. Khách trả tiền muộn vẫn được ghi nhận từ lúc thao tác; kỳ sử dụng mới vẫn nối từ hạn cũ theo quy tắc hiện có.
-
-Sau 14 ngày, bản ghi tự rời **Khách vừa gia hạn** khi trang cập nhật (tự làm mới mỗi 10 giây khi đang xem). **Hồ sơ khách hoạt động, Family, Contact, hạn, thanh toán, lịch sử gia hạn và nhật ký được giữ**, không tự chuyển khách sang lưu trữ theo mốc này. Danh sách được tính lại từ các lần gia hạn thành công nên không cần cron riêng hoặc thay database; lịch sử cũ trong 14 ngày gần nhất cũng xuất hiện sau cập nhật. Backup/khôi phục hiện có giữ mốc này qua lịch sử gia hạn.
+Từ 0.14.0 dùng mục **Thống kê** riêng thay Khách vừa gia hạn. Chọn một trong 6 tháng gần nhất hoặc **Toàn bộ lịch sử**; các lượt gia hạn cũ được giữ lâu dài. Xem quy tắc tính tại phần 0.14.0 ở trên.
 
 ## Cập nhật trực tiếp: xóa lưu trữ và lưu trữ sản phẩm khác
 
 **Khách lưu trữ** có nút **Xóa khỏi lưu trữ** cạnh Xem dữ liệu/Khôi phục. Hộp xác nhận nêu rõ hồ sơ bị bỏ khỏi danh sách và không còn khôi phục bằng nút Khôi phục. Nhật ký giữ bản trước xóa; lịch sử gia hạn vẫn được giữ để đối chiếu. Xóa không tác động đến khách hoạt động. Hồ sơ đã được khôi phục hoặc danh sách cũ không bị xóa nhầm. Family lưu trữ chỉ khôi phục những khách còn lưu trữ, không tạo lại hồ sơ đã chọn Xóa khỏi lưu trữ.
 
-**Sản phẩm khác → Xóa** chuyển toàn bộ hồ sơ vào Khách lưu trữ, giữ tên sản phẩm, tên/email khách, Contact, gói, ngày mua/hạn, thanh toán, số tiền, ghi chú và thời điểm tạo. Xem dữ liệu hỗ trợ đúng hồ sơ sản phẩm; Khôi phục đưa lại vào Sản phẩm khác, không cần Family và không đổi hạn. Có thể Xóa khỏi lưu trữ như hồ sơ khách Family. Hồ sơ khách Family/lịch sử có trùng số ID nội bộ vẫn được giữ nguyên. Mục Khách vừa gia hạn tiếp tục là danh sách xem 14 ngày, không tự lưu trữ/xóa khách hoạt động.
+**Sản phẩm khác → Xóa** chuyển toàn bộ hồ sơ vào Khách lưu trữ, giữ tên sản phẩm, tên/email khách, Contact, gói, ngày mua/hạn, thanh toán, số tiền, ghi chú và thời điểm tạo. Xem dữ liệu hỗ trợ đúng hồ sơ sản phẩm; Khôi phục đưa lại vào Sản phẩm khác, không cần Family và không đổi hạn. Có thể Xóa khỏi lưu trữ như hồ sơ khách Family. Hồ sơ khách Family/lịch sử có trùng số ID nội bộ vẫn được giữ nguyên. Mục Thống kê giữ các lượt gia hạn lâu dài; không tự lưu trữ/xóa khách hoạt động.
 
 Bản **0.11 đã đóng gói lại toàn bộ** thay đổi này cùng chặn báo lỗi trùng/reset tìm kiếm/copy mail lỗi/logo YouTube. Dùng [family-hostinger-update.zip](https://github.com/haitiano1/family/raw/refs/heads/main/downloads/family-hostinger-update.zip) cho website đang chạy và làm theo [UPDATE.md](hosting/php/UPDATE.md); giữ config.php/database, không nhập lại khách. ZIP cài mới cũng có đầy đủ các thay đổi. Từ bản0.11, backupv5 phân biệt sản phẩm lưu trữ với khách Family. Bản0.13/helper Windows hiện xuấtv6 có kho mã hóa và nhậnv1–v6; app cũ không nhập đượcv6.
 

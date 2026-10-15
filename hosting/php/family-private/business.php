@@ -19,17 +19,6 @@ function transferMember(PDO $db,int $id,array $d): array {
     });
 }
 function pendingPayment(array $m): bool {return !in_array($m['renewal_status'],['paid','declined'],true)&&(in_array($m['renewal_status'],['awaiting_payment','partial'],true)||$m['expiry_status']==='expired');}
-function recentRenewals(PDO $db,array $members,array $archives,?DateTimeImmutable $now=null,int $days=14): array {
-    $now=$now??new DateTimeImmutable('now',new DateTimeZone('UTC'));$now=$now->setTimezone(new DateTimeZone('UTC'));
-    $end=$now->format('Y-m-d\TH:i:s.v\Z');$start=$now->modify("-$days days")->format('Y-m-d\TH:i:s.v\Z');
-    $live=[];$stored=[];foreach($members as $m)$live[$m['id']]=$m;foreach($archives as $a)$stored[$a['id']]=$a['member'];$seen=[];$rows=[];
-    foreach(all($db,'SELECT * FROM renewal_history WHERE created_at>? AND created_at<=? ORDER BY created_at DESC,id DESC',[$start,$end]) as $h){
-        $key=$h['member_id']!==null?'member:'.$h['member_id']:($h['archive_id']!==null?'archive:'.$h['archive_id']:'history:'.$h['id']);if(isset($seen[$key]))continue;$seen[$key]=true;
-        $customer=$live[$h['member_id']]??$stored[$h['archive_id']]??['email'=>$h['email'],'customer_name'=>$h['customer_name'],'contact'=>'','family_name'=>$h['family_name']];
-        $rows[]=[...$h,'customer'=>$customer,'renewed_at'=>$h['created_at']];
-    }
-    return $rows;
-}
 function renew(PDO $db,int $id,array $d,bool $apply): array {
     return transaction($db,function()use($db,$id,$d,$apply){
         $m=one($db,'SELECT m.*,f.name AS family_name FROM members m JOIN families f ON f.id=m.family_id WHERE m.id=?',[$id]);if (!$m) fail('Không tìm thấy khách.',404);
@@ -82,6 +71,23 @@ function archiveFamily(PDO $db,int $id): array {
     });
 }
 function archivedFamilies(PDO $db): array {return all($db,"SELECT f.*,a.email AS manager_email,(SELECT COUNT(*) FROM archived_customers c WHERE c.family_archive_id=f.id AND c.restored_at IS NULL) AS customers FROM families f JOIN accounts a ON a.id=f.manager_id WHERE f.archived_at!='' ORDER BY f.archived_at DESC,f.id DESC");}
+function deleteArchivedFamily(PDO $db,int $id,array $data): array {
+    return transaction($db,function()use($db,$id,$data){
+        $f=one($db,'SELECT f.*,a.email AS manager_email FROM families f JOIN accounts a ON a.id=f.manager_id WHERE f.id=? FOR UPDATE',[$id]);
+        if(!$f)fail('Không tìm thấy Family lưu trữ.',404);
+        if(!$f['archived_at'])fail('Family đang hoạt động hoặc đã được khôi phục. Tải lại danh sách.',409);
+        foreach(['archived_at','created_at','manager_email'] as $key){
+            if(!is_string($data['expected_'.$key]??null))fail('Thiếu thông tin xác nhận Family cần xóa. Tải lại danh sách.');
+            if($data['expected_'.$key]!==$f[$key])fail('Family đã thay đổi. Tải lại danh sách trước khi xóa.',409);
+        }
+        if(one($db,'SELECT id FROM members WHERE family_id=? LIMIT 1',[$id]))fail('Family còn khách hoạt động. Tải lại danh sách.',409);
+        $count=one($db,'SELECT COUNT(*) AS n FROM archived_customers WHERE family_archive_id=? AND restored_at IS NULL',[$id])['n'];
+        q($db,'UPDATE archived_customers SET family_archive_id=NULL WHERE family_archive_id=?',[$id]);
+        q($db,'UPDATE vault_items SET family_id=NULL,revision=revision+1 WHERE family_id=?',[$id]);
+        q($db,'DELETE FROM families WHERE id=?',[$id]);
+        logEntry($db,"Cá nhân: xóa Family lưu trữ #$id ({$f['name']}, {$f['manager_email']}); giữ $count khách để khôi phục riêng, giữ lịch sử gia hạn và thông tin kho");return ['ok'=>true,'kept_customers'=>$count];
+    });
+}
 function restoreFamily(PDO $db,int $id): array {
     return transaction($db,function()use($db,$id){
         if(!one($db,"SELECT id FROM families WHERE id=? AND archived_at!=''",[$id]))fail('Không tìm thấy Family lưu trữ.',404);

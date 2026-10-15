@@ -7,7 +7,7 @@ import { initOtherProducts } from './other-products.js';
 import { validators } from './validation.js';
 import { initArchive } from './archive.js';
 import { initRenewals } from './renewal.js';
-import { recentRenewals } from './recent-renewals.js';
+import { renewalStatistics } from './statistics.js';
 import { initImporter } from './importer.js';
 import { today, expiry, isPendingPayment, sortCustomers, sortFamilies, purchaseExpiry } from './domain.js';
 import { beginAudit,finishAudit,cancelAudit,auditLog,auditAction,journal,journalEntry,withAudit } from './audit.js';
@@ -72,6 +72,7 @@ async function handle(req, res) {
       res.setHeader('Set-Cookie','fam_access=; HttpOnly; Secure; SameSite=Strict; Path=/; Max-Age=0');return send(res,200,{ok:true});
     }
     if(url.pathname.startsWith('/api/vault/'))return send(res,200,await vaultRoute(req,res,url.pathname,['GET','HEAD'].includes(req.method)?{}:await body(req)));
+    if(req.method==='GET'&&url.pathname==='/api/statistics')return send(res,200,renewalStatistics(db,Object.fromEntries(url.searchParams)));
     if(req.method==='GET'&&url.pathname==='/api/journal')return send(res,200,journal(db,url.searchParams));
     if(req.method==='GET'&&/^\/api\/journal\/(audit|log)\/\d+$/.test(url.pathname)){const [,,,kind,id]=url.pathname.split('/');const entry=journalEntry(db,kind,Number(id));if(!entry)fail('Không tìm thấy nhật ký.',404);return send(res,200,entry);}
     if(['POST','PATCH'].includes(req.method)&&/^\/api\/issues(?:\/\d+)?$/.test(url.pathname)){const id=req.method==='PATCH'?Number(url.pathname.split('/').pop()):null;if((req.method==='POST'&&url.pathname!=='/api/issues')||(req.method==='PATCH'&&!id))fail('Không tìm thấy.',404);return send(res,id?200:201,issues.save(id,await body(req)));}
@@ -93,6 +94,7 @@ async function handle(req, res) {
       const data = await body(req, 2000000);
       return send(res, 200, importCustomers(data, actor, url.pathname.endsWith('/commit')));
     }
+    if(req.method==='DELETE'&&/^\/api\/archived-families\/\d+$/.test(url.pathname))return send(res,200,archive.deleteFamily(Number(url.pathname.split('/')[3]),await body(req),actor));
     if(req.method==='POST'&&/^\/api\/archived-families\/\d+\/restore$/.test(url.pathname))return send(res,200,archive.restoreFamily(Number(url.pathname.split('/')[3]),actor));
     if(req.method==='DELETE'&&/^\/api\/archives\/\d+$/.test(url.pathname))return send(res,200,archive.remove(Number(url.pathname.split('/')[3]),await body(req),actor));
     if (req.method === 'POST' && /^\/api\/archives\/\d+\/restore$/.test(url.pathname)) {
@@ -120,7 +122,7 @@ async function handle(req, res) {
         other_products,other_reminders:{due_soon:other_products.filter(p=>p.expiry_status==='due_soon').length,expired:other_products.filter(p=>p.expiry_status==='expired').length},
         accounts: all("SELECT a.*, f.id AS family_id, f.name AS family_name, f.service FROM accounts a LEFT JOIN families f ON f.manager_id=a.id AND f.archived_at='' ORDER BY a.id DESC"),
         families: sortFamilies(all("SELECT f.*, a.email AS manager_email FROM families f JOIN accounts a ON a.id=f.manager_id WHERE f.archived_at=''"),members), archived_families:archive.familyList(),
-        members, archives, recent_renewals:recentRenewals(db,members,archives), archive_mode:archive.mode,
+        members, archives, archive_mode:archive.mode,
         logs: all('SELECT id,message,created_at FROM logs UNION ALL SELECT id,message,created_at FROM audit_events ORDER BY created_at DESC,id DESC LIMIT 100'), today: today(),
         reminders: { expired: members.filter(m => m.expiry_status === 'expired').length, due_soon: members.filter(m => m.expiry_status === 'due_soon').length, confirmed_pending:members.filter(isPendingPayment).length, unpaid: members.filter(m => ['unpaid','partial'].includes(m.payment_status)).length, renewal_waiting: members.filter(m => ['awaiting_payment','partial'].includes(m.renewal_status)).length, renewal_paid_pending: members.filter(m => m.renewal_status === 'paid').length }
       });
@@ -190,7 +192,7 @@ async function handle(req, res) {
       run(`DELETE FROM ${table} WHERE id=?`, id); log(`${actor.username}: xóa hồ sơ nội bộ ${table} #${id}`); return send(res, 200, { ok: true });
     }
     if (req.method === 'GET') {
-      const assets = { '/': ['index.html','text/html'], '/access':['access.html','text/html'], '/access.js':['access.js','text/javascript'], '/app.js': ['app.js','text/javascript'], '/vault.js': ['vault.js','text/javascript'], '/vault-sheet.js':['vault-sheet.js','text/javascript'], '/vault-families.js':['../vault-families.js','text/javascript'], '/style.css': ['style.css','text/css'], '/csv.js': ['csv.js','text/javascript'], '/contacts.js':['contacts.js','text/javascript'], '/domain.js': ['../domain.js','text/javascript'], '/manifest.webmanifest':['manifest.webmanifest','application/manifest+json'], '/icon-180.png':['icon-180.png','image/png'], '/icon-192.png':['icon-192.png','image/png'], '/icon-512.png':['icon-512.png','image/png'] };
+      const assets = { '/': ['index.html','text/html'], '/access':['access.html','text/html'], '/access.js':['access.js','text/javascript'], '/app.js': ['app.js','text/javascript'], '/statistics.js':['statistics.js','text/javascript'], '/vault.js': ['vault.js','text/javascript'], '/vault-sheet.js':['vault-sheet.js','text/javascript'], '/vault-families.js':['../vault-families.js','text/javascript'], '/style.css': ['style.css','text/css'], '/csv.js': ['csv.js','text/javascript'], '/contacts.js':['contacts.js','text/javascript'], '/domain.js': ['../domain.js','text/javascript'], '/manifest.webmanifest':['manifest.webmanifest','application/manifest+json'], '/icon-180.png':['icon-180.png','image/png'], '/icon-192.png':['icon-192.png','image/png'], '/icon-512.png':['icon-512.png','image/png'] };
       const asset = assets[url.pathname]; if (!asset) return send(res, 404, { error: 'Không tìm thấy.' });
       res.writeHead(200, { 'Content-Type': asset[1] + '; charset=utf-8', 'Cache-Control': 'no-store', 'Content-Security-Policy': "default-src 'self'; style-src 'self'; script-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'" });
       return res.end(readFileSync(path.join(root, 'public', asset[0])));

@@ -32,6 +32,24 @@ export function initArchive(db, { fail, log }) {
     }catch(error){db.exec('ROLLBACK TO archive_family; RELEASE archive_family');throw error;}
   }
   function familyList(){return db.prepare("SELECT f.*,a.email AS manager_email,(SELECT COUNT(*) FROM archived_customers c WHERE c.family_archive_id=f.id AND c.restored_at IS NULL) AS customers FROM families f JOIN accounts a ON a.id=f.manager_id WHERE f.archived_at!='' ORDER BY f.archived_at DESC,f.id DESC").all();}
+  function deleteFamily(id,data,user) {
+    const f=db.prepare('SELECT f.*,a.email AS manager_email FROM families f JOIN accounts a ON a.id=f.manager_id WHERE f.id=?').get(id);
+    if(!f)fail('Không tìm thấy Family lưu trữ.',404);
+    if(!f.archived_at)fail('Family đang hoạt động hoặc đã được khôi phục. Tải lại danh sách.',409);
+    for(const key of ['archived_at','created_at','manager_email']){
+      if(typeof data['expected_'+key]!=='string')fail('Thiếu thông tin xác nhận Family cần xóa. Tải lại danh sách.');
+      if(data['expected_'+key]!==f[key])fail('Family đã thay đổi. Tải lại danh sách trước khi xóa.',409);
+    }
+    if(db.prepare('SELECT id FROM members WHERE family_id=? LIMIT 1').get(id))fail('Family còn khách hoạt động. Tải lại danh sách.',409);
+    db.exec('SAVEPOINT delete_archived_family');try{
+      const count=db.prepare('SELECT COUNT(*) AS n FROM archived_customers WHERE family_archive_id=? AND restored_at IS NULL').get(id).n;
+      db.prepare('UPDATE archived_customers SET family_archive_id=NULL WHERE family_archive_id=?').run(id);
+      db.prepare('UPDATE vault_items SET family_id=NULL,revision=revision+1 WHERE family_id=?').run(id);
+      db.prepare('DELETE FROM families WHERE id=?').run(id);
+      log(`${user.username}: xóa Family lưu trữ #${id} (${f.name}, ${f.manager_email}); giữ ${count} khách để khôi phục riêng, giữ lịch sử gia hạn và thông tin kho`);
+      db.exec('RELEASE delete_archived_family');return {ok:true,kept_customers:count};
+    }catch(error){db.exec('ROLLBACK TO delete_archived_family; RELEASE delete_archived_family');throw error;}
+  }
   function restoreFamily(id,user) {
     const f=db.prepare("SELECT * FROM families WHERE id=? AND archived_at!=''").get(id);if(!f)fail('Không tìm thấy Family lưu trữ.',404);
     db.exec('SAVEPOINT archive_family');try{
@@ -96,5 +114,5 @@ export function initArchive(db, { fail, log }) {
       db.exec('RELEASE archive_save'); return { ok:true,member_id:restoredId };
     } catch (error) { db.exec('ROLLBACK TO archive_save; RELEASE archive_save'); throw error; }
   }
-  return { sweep,list,restore,remove,removeMember,removeProduct,removeFamily,familyList,restoreFamily,mode:'immediate' };
+  return { sweep,list,restore,remove,removeMember,removeProduct,removeFamily,familyList,restoreFamily,deleteFamily,mode:'immediate' };
 }

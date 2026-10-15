@@ -1,4 +1,4 @@
-# Cập nhật YouTube Family 0.13.6
+# Cập nhật YouTube Family 0.14.0
 
 Bản này gộp đầy đủ các thay đổi trước đây chưa đóng gói và các yêu cầu mới. Dùng **gói cập nhật** cho website Family đang chạy; giữ cấu hình và dữ liệu hiện có.
 
@@ -11,6 +11,15 @@ Bản này gộp đầy đủ các thay đổi trước đây chưa đóng gói 
 5. Mở lại website và nhấn **Ctrl+F5**. Trên iPhone, tải lại trang trong Safari hoặc đóng rồi mở lại Family trên màn hình chính.
 
 Không cần tạo database, sửa SQL hay nhập lại khách. Gói không chứa config.php, mật khẩu, dữ liệu khách hoặc backup. Website giữ database hiện tại; nếu còn dùng schema cũ, ứng dụng tự thêm các cột cần thiết. Cài mới dùng [family-hostinger.zip](https://github.com/haitiano1/family/raw/refs/heads/main/downloads/family-hostinger.zip) và [INSTALL.md](INSTALL.md).
+
+## Bổ sung trong bản 0.14.0
+
+- Thêm mục riêng **Thống kê**: 6 tháng gần nhất (tháng hiện tại + 5 tháng trước), mỗi tháng từ ngày 1 đến ngày cuối tháng theo giờ Việt Nam. Đếm số email khách khác nhau, số lượt gia hạn thành công và tổng tiền mọi lượt. Tính theo thời điểm xác nhận hạn mới; ngày trả tiền và hạn cũ không quyết định tháng thống kê. Chưa xác nhận hạn mới chưa được tính.
+- Chọn tháng hoặc **Toàn bộ lịch sử**, tìm tên/email/Family/ghi chú và phân trang. Toàn bộ lịch sử xem được cả các tháng cũ hơn. Tìm kiếm không thay tổng tháng. Chỉ tổng hợp lịch sử gia hạn thực có; không suy đoán từ dữ liệu Sheet hoặc cột tiền hiện tại.
+- Bỏ mục Khách vừa gia hạn và logic 14 ngày. Giữ vĩnh viễn lịch sử gia hạn, kể cả khi xóa hồ sơ khách hoặc Family. Khách hoạt động không bị ảnh hưởng bởi tuổi của lịch sử.
+- **Khách lưu trữ** chỉ gồm khách Không gia hạn, khách/sản phẩm vừa xóa, Family vừa xóa. Family có thêm **Xóa khỏi lưu trữ**. Xóa Family tại đây giữ khách để khôi phục riêng vào Family khác; giữ lịch sử và ghi Nhật ký. Thông tin Kho đã mã hóa vẫn giữ riêng khi bỏ liên kết Family.
+
+**Kể cả đã có 0.13.6, vẫn cập nhật đầy đủ hai thư mục** theo các bước đầu tài liệu. Có file mới `public_html/statistics.js`, `family-private/statistics.php` và thanh điều hướng mới trong `public_html/index.html`. Không thay config.php, không tạo database mới, không import lại; schema và backup v7 giữ nguyên. Các ghi chú phiên bản phía dưới là lịch sử thay đổi; mục Thống kê hiện thay thế hướng dẫn 14 ngày của bản cũ.
 
 ## Bổ sung trong bản 0.13.6
 

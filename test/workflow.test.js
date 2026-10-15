@@ -69,7 +69,7 @@ test('Customer CRUD, dates/payments, persistence and Family capacity', async () 
     await request('accounts/' + account.id, 'DELETE', undefined, 400);
     await request('members/' + member.id, 'DELETE'); await request('families/' + family.id, 'DELETE'); assert.equal((await request('state')).members.length, 0);
     await request('accounts/' + account.id, 'DELETE', undefined, 400);state=await request('state');assert.equal(state.archives.length,5);assert.equal(state.archived_families[0].manager_email,'newmanager@example.com');
-    for (const asset of ['/', '/app.js', '/style.css', '/contacts.js', '/domain.js']) assert.equal((await fetch(f.base + asset)).status, 200);
+    for (const asset of ['/', '/app.js', '/statistics.js', '/style.css', '/contacts.js', '/domain.js']) assert.equal((await fetch(f.base + asset)).status, 200);
     assert.equal((await fetch(f.base + '/../../server.js')).status, 404);
   } finally { await f.close(); }
 });
@@ -462,14 +462,16 @@ test('Family archival is atomic when one customer cannot be archived; v11 migrat
  }finally{await f.close();await target.close();}
 });
 
-test('recent customers appear only after successful renewal confirmation using actual action time, regardless of late receipt or period dates',async()=>{
+test('monthly statistics count confirmed renewals by action time and retain old history across restart',async()=>{
  const f=await fixture();try{
+  const module=await fetch(f.base+'/statistics.js');assert.equal(module.status,200);assert.match(module.headers.get('content-type'),/javascript/);assert.match(await module.text(),/export function mountStatistics/);
   const a=f.admin,family=await a('families','POST',{name:'Renewal review',manager_email:'recent@example.com'},201),member=await a('members','POST',{family_id:family.id,email:'late@example.com',contact:'Zalo recent',joined_at:'2025-10-05',expires_at:'2026-01-05',plan_months:3},201);
-  assert.equal((await a('state')).recent_renewals.length,0);await a('members/'+member.id+'/renewal','PATCH',{revision:0,status:'paid',amount:100000,paid_at:'2026-01-15',apply_now:false});assert.equal((await a('state')).recent_renewals.length,0);
-  await a('members/'+member.id+'/renewal/apply','POST',{revision:1,plan_months:3});let state=await a('state');assert.equal(state.recent_renewals.length,1);const review=state.recent_renewals[0];assert.equal(review.customer.contact,'Zalo recent');assert.equal(review.new_purchase_at,'2026-01-05');assert.equal(review.new_expires_at,'2026-04-05');assert.equal(review.paid_at,'2026-01-15');assert.ok(Math.abs(Date.now()-Date.parse(review.renewed_at))<5000);
-  const journal=(await a('journal')).total;await a('members/'+member.id+'/renewal/apply','POST',{revision:1,plan_months:3},409);assert.equal((await a('state')).recent_renewals.length,1);assert.equal((await a('journal')).total,journal);
-  await f.stop();await f.start();assert.equal((await a('state')).recent_renewals[0].renewed_at,review.renewed_at);
-  const db=new DatabaseSync(path.join(f.dir,'family.sqlite'));db.prepare('UPDATE renewal_history SET created_at=?').run(new Date(Date.now()-15*86400000).toISOString());db.close();state=await a('state');assert.equal(state.recent_renewals.length,0);assert.equal(state.members.length,1);assert.equal(state.archives.length,0);assert.equal(state.members[0].contact,'Zalo recent');assert.equal((await a('members/'+member.id+'/renewal-history')).history.length,1);
+  assert.equal((await a('statistics')).selected.renewals,0);await a('members/'+member.id+'/renewal','PATCH',{revision:0,status:'paid',amount:100000,paid_at:'2026-01-15',apply_now:false});assert.equal((await a('statistics')).selected.renewals,0);
+  await a('members/'+member.id+'/renewal/apply','POST',{revision:1,plan_months:3});let stats=await a('statistics');assert.equal(stats.selected.renewals,1);assert.equal(stats.selected.customers,1);assert.equal(stats.selected.amount,100000);const review=stats.rows[0];assert.equal(review.new_purchase_at,'2026-01-05');assert.equal(review.new_expires_at,'2026-04-05');assert.equal(review.paid_at,'2026-01-15');assert.ok(Math.abs(Date.now()-Date.parse(review.created_at))<5000);
+  const journal=(await a('journal')).total;await a('members/'+member.id+'/renewal/apply','POST',{revision:1,plan_months:3},409);assert.equal((await a('statistics')).selected.renewals,1);assert.equal((await a('journal')).total,journal);
+  await f.stop();await f.start();assert.equal((await a('statistics')).rows[0].created_at,review.created_at);
+  const db=new DatabaseSync(path.join(f.dir,'family.sqlite'));db.prepare('UPDATE renewal_history SET created_at=?').run('2024-02-29T16:59:59.999Z');db.close();stats=await a('statistics');assert.equal(stats.selected.renewals,0);assert.equal(stats.months.length,6);assert.equal((await a('statistics?month=all')).rows.length,1);assert.equal((await a('statistics?month=2024-02')).selected.amount,100000);const state=await a('state');assert.equal('recent_renewals' in state,false);assert.equal(state.members.length,1);assert.equal(state.archives.length,0);assert.equal(state.members[0].contact,'Zalo recent');assert.equal((await a('members/'+member.id+'/renewal-history')).history.length,1);assert.equal((await a('journal')).total,journal);
+  await a('statistics?month=2026-13','GET',undefined,400);
  }finally{await f.close();}
 });
 
@@ -479,7 +481,7 @@ test('archive deletion retains audit/history, protects active or restored custom
   await a('members/'+member.id+'/renewal','PATCH',{revision:0,status:'paid',amount:100000,paid_at:'2026-01-15',plan_months:3,apply_now:true});await a('members/'+member.id,'DELETE');let state=await a('state');const archived=state.archives[0],guard={expected_archived_at:archived.archived_at,expected_email:archived.email};
   const live=await a('members','POST',{family_id:family.id,email:'live@example.com',contact:'Active contact'},201);assert.equal(live.id,member.id);const count=(await a('journal')).total;
   await a('archives/'+archived.id,'DELETE',{},400);await a('archives/'+archived.id,'DELETE',{...guard,expected_email:'wrong@example.com'},409);assert.equal((await a('journal')).total,count);
-  await a('archives/'+archived.id,'DELETE',guard);state=await a('state');assert.equal(state.archives.length,0);assert.equal(state.members[0].email,'live@example.com');assert.equal(state.members[0].contact,'Active contact');assert.equal(state.recent_renewals[0].archive_id,null);assert.equal(state.recent_renewals[0].member_id,null);
+  await a('archives/'+archived.id,'DELETE',guard);state=await a('state');assert.equal(state.archives.length,0);assert.equal(state.members[0].email,'live@example.com');assert.equal(state.members[0].contact,'Active contact');assert.equal((await a('statistics?month=all')).rows[0].archive_id,null);assert.equal((await a('statistics?month=all')).rows[0].member_id,null);
   const backup=await a('backup');assert.equal(backup.tables.renewal_history.length,1);assert.equal(backup.tables.renewal_history[0].archive_id,null);assert.equal(backup.tables.renewal_history[0].paid_at,'2026-01-15');
   const event=(await a('journal?search=gone@example.com')).entries.find(e=>e.action==='Xóa hồ sơ lưu trữ'),detail=await a('journal/audit/'+event.id),change=detail.changes.find(c=>c.table==='archived_customers');assert.equal(JSON.parse(change.before.snapshot).contact,'Original contact');assert.equal(change.after,null);
   await a('archives/'+archived.id,'DELETE',guard,404);await a('archives/'+archived.id+'/restore','POST',{family_id:family.id},404);
@@ -569,7 +571,7 @@ test('Node transfers preserve the full member, historical periods and audit whil
  const before=await a('backup'),history=await a('members/'+member.id+'/renewal-history'),profile=before.tables.members.find(m=>m.id===member.id),guard=transferPayload(profile,target),count=(await a('journal')).total;
  const result=await a('members/'+member.id+'/transfer','POST',guard);assert.equal(result.family_id,target.id);
  const after=await a('backup'),moved=after.tables.members.find(m=>m.id===member.id);assert.deepEqual(moved,{...profile,family_id:target.id,renewal_revision:profile.renewal_revision+1});assert.deepEqual(await a('members/'+member.id+'/renewal-history'),history);
- let state=await a('state');assert.equal(state.members.filter(m=>m.family_id===source.id).length,1);assert.equal(state.members.filter(m=>m.family_id===target.id).length,1);assert.equal(state.recent_renewals[0].customer.family_name,'Family B');assert.equal(state.recent_renewals[0].family_name,'Family A');assert.equal(state.archives.length,0);
+ let state=await a('state');assert.equal(state.members.filter(m=>m.family_id===source.id).length,1);assert.equal(state.members.filter(m=>m.family_id===target.id).length,1);assert.equal(state.members.find(m=>m.id===member.id).family_name,'Family B');assert.equal((await a('statistics?month=all')).rows[0].family_name,'Family A');assert.equal(state.archives.length,0);
  assert.equal(result.removed_cases,2);for(const id of [done.id,open.id])assert.equal(state.issues.some(i=>i.id===id),false);
  assert.equal(state.issues.find(i=>i.id===managerCase.id).family_id,source.id);
  const journal=await a('journal');assert.equal(journal.total,count+1);const event=journal.entries.find(e=>e.action==='Chuyển Family');assert.ok(event);assert.match(event.message,/Family A.*owner-a@example.com.*Family B.*owner-b@example.com/);const details=await a('journal/audit/'+event.id),change=details.changes.find(c=>c.table==='members');assert.equal(change.before.family_id,source.id);assert.equal(change.after.family_id,target.id);for(const id of [done.id,open.id]){const removed=details.changes.find(c=>c.table==='issues'&&c.id===id);assert.deepEqual(removed.before,before.tables.issues.find(i=>i.id===id));assert.equal(removed.after,null);}
@@ -756,4 +758,23 @@ test('Node issue replacement clears only the owner vault while locked, rolls bac
  const memberCase=await a('issues','POST',{family_id:fa.id,target_type:'member',target_id:member.id,title:'Member replacement'},201);await a('issues/'+memberCase.id,'PATCH',{status:'done',revision:0,resolution:'replace',replacement_email:'new-guest@example.com'});assert.deepEqual((await a('backup')).tables.vault_items,currentRows);assert.equal((await v('vault/items/'+second.id)).password,'Other fake password');
 
 }finally{await f.close();}
+});
+test('permanent archived Family deletion keeps customers, vault ciphertext and renewal history for individual restore and rolls back failure',async()=>{
+ const f=await fixture();try{
+  const a=f.admin,family=await a('families','POST',{name:'Old Family',manager_email:'old@example.com',trial_date:'2026-10-01'},201),target=await a('families','POST',{name:'New Family',manager_email:'new@example.com'},201),member=await a('members','POST',{family_id:family.id,email:'guest@example.com',contact:'Keep contact',expires_at:'2026-01-05'},201);
+  await a('members/'+member.id+'/renewal','PATCH',{revision:0,status:'paid',amount:123000,paid_at:'2026-01-15',plan_months:3,apply_now:true});await a('issues','POST',{family_id:family.id,title:'Keep case snapshot'},201);
+  await a('archived-families/'+family.id,'DELETE',{},409);await a('families/'+family.id,'DELETE');
+  const archived=(await a('state')).archived_families[0],guard={expected_archived_at:archived.archived_at,expected_created_at:archived.created_at,expected_manager_email:archived.manager_email},db=new DatabaseSync(path.join(f.dir,'family.sqlite'));
+  try{
+   db.prepare('INSERT INTO vault_items(family_id,payload,created_at,updated_at) VALUES (?,?,?,?)').run(family.id,'opaque-encrypted-fixture','2026-10-01','2026-10-01');
+   const history=db.prepare('SELECT * FROM renewal_history').all(),count=(await a('journal')).total;
+   await a('archived-families/'+family.id,'DELETE',{},400);await a('archived-families/'+family.id,'DELETE',{...guard,expected_manager_email:'wrong@example.com'},409);
+   db.exec("CREATE TRIGGER reject_family_delete BEFORE DELETE ON families BEGIN SELECT RAISE(ABORT,'Injected failure'); END");await a('archived-families/'+family.id,'DELETE',guard,500);
+   assert.equal(db.prepare('SELECT family_archive_id FROM archived_customers').get().family_archive_id,family.id);assert.equal(db.prepare('SELECT family_id FROM vault_items').get().family_id,family.id);assert.deepEqual(db.prepare('SELECT * FROM renewal_history').all(),history);assert.equal((await a('journal')).total,count);db.exec('DROP TRIGGER reject_family_delete');
+   assert.equal((await a('archived-families/'+family.id,'DELETE',guard)).kept_customers,1);let state=await a('state');assert.equal(state.archived_families.length,0);assert.equal(state.archives.length,1);assert.equal(state.archives[0].member.contact,'Keep contact');assert.equal(state.issues[0].family_id,null);assert.equal(db.prepare('SELECT family_archive_id FROM archived_customers').get().family_archive_id,null);assert.equal(db.prepare('SELECT family_id FROM vault_items').get().family_id,null);assert.equal(db.prepare('SELECT payload FROM vault_items').get().payload,'opaque-encrypted-fixture');assert.deepEqual(db.prepare('SELECT * FROM renewal_history').all(),history);
+   assert.equal((await a('statistics?month=all')).selected.amount,123000);const event=(await a('journal')).entries.find(e=>e.action==='Xóa Family lưu trữ');assert.ok(event);assert.doesNotMatch(JSON.stringify(await a('journal/audit/'+event.id)),/opaque-encrypted-fixture/);
+   const restored=await a('archives/'+state.archives[0].id+'/restore','POST',{family_id:target.id});assert.equal((await a('members/'+restored.member_id+'/renewal-history')).history.length,1);assert.equal((await a('state')).members[0].contact,'Keep contact');await a('archived-families/'+family.id,'DELETE',guard,404);
+  }finally{db.close();}
+  const empty=await a('families','POST',{name:'Empty',manager_email:'empty@example.com'},201);await a('families/'+empty.id,'DELETE');const row=(await a('state')).archived_families[0],g={expected_archived_at:row.archived_at,expected_created_at:row.created_at,expected_manager_email:row.manager_email};await a('archived-families/'+empty.id+'/restore','POST',{});await a('archived-families/'+empty.id,'DELETE',g,409);
+ }finally{await f.close();}
 });

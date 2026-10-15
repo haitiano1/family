@@ -2,6 +2,7 @@
 declare(strict_types=1);
 require dirname(__DIR__).'/family-private/core.php';
 require dirname(__DIR__).'/family-private/business.php';
+require dirname(__DIR__).'/family-private/statistics.php';
 require dirname(__DIR__).'/family-private/import.php';
 require dirname(__DIR__).'/family-private/audit.php';
 require dirname(__DIR__).'/family-private/issues.php';
@@ -19,6 +20,7 @@ try {
     $db=db($c);
     if(str_starts_with($route,'/api/vault/'))vaultRequest($db,$c,$route,$method);
     if($route==='/api/state'||(!in_array($method,['GET','HEAD'],true)))beginAudit($db,auditAction($method,$route),$route==='/api/state'?'Hệ thống':'Cá nhân');
+    if($route==='/api/statistics'&&$method==='GET')reply(renewalStatistics($db,$_GET));
     if($route==='/api/journal'&&$method==='GET')reply(journal($db));
     if(preg_match('~^/api/journal/(audit|log)/(\d+)$~D',$route,$p)&&$method==='GET')reply(journalEntry($db,$p[1],(int)$p[2]));
     if(preg_match('~^/api/issues(?:/(\d+))?$~D',$route,$p)&&in_array($method,['POST','PATCH'],true)){
@@ -31,12 +33,13 @@ try {
         sweep($db);$members=array_map(fn($m)=>[...$m,...expiry($m['expires_at'])],all($db,'SELECT m.*,f.name AS family_name,f.service,a.email AS manager_email FROM members m JOIN families f ON f.id=m.family_id JOIN accounts a ON a.id=f.manager_id ORDER BY (CHAR_LENGTH(m.expires_at)=0) ASC,m.expires_at ASC,m.id ASC'));
         $products=array_map(fn($p)=>[...$p,...expiry($p['expires_at'])],all($db,'SELECT * FROM other_purchases ORDER BY id DESC'));$count=fn($rows,$status)=>count(array_filter($rows,fn($r)=>$r['expiry_status']===$status));
         $archives=archives($db);
-        reply(['hosted'=>true,'issues'=>issueList($db),'other_products'=>$products,'other_reminders'=>['due_soon'=>$count($products,'due_soon'),'expired'=>$count($products,'expired')],'accounts'=>all($db,"SELECT a.*,f.id AS family_id,f.name AS family_name,f.service FROM accounts a LEFT JOIN families f ON f.manager_id=a.id AND f.archived_at='' ORDER BY a.id DESC"),'families'=>all($db,"SELECT f.*,a.email AS manager_email FROM families f JOIN accounts a ON a.id=f.manager_id WHERE f.archived_at='' ORDER BY (CHAR_LENGTH(f.trial_date)=0),f.trial_date,f.id DESC"),'archived_families'=>archivedFamilies($db),'members'=>$members,'archives'=>$archives,'recent_renewals'=>recentRenewals($db,$members,$archives),'archive_mode'=>'immediate','logs'=>all($db,'SELECT * FROM logs ORDER BY id DESC LIMIT 100'),'today'=>today(),'reminders'=>['confirmed_pending'=>count(array_filter($members,'pendingPayment')),'expired'=>$count($members,'expired'),'due_soon'=>$count($members,'due_soon'),'unpaid'=>count(array_filter($members,fn($m)=>in_array($m['payment_status'],['unpaid','partial'],true))),'renewal_waiting'=>count(array_filter($members,fn($m)=>in_array($m['renewal_status'],['awaiting_payment','partial'],true))),'renewal_paid_pending'=>count(array_filter($members,fn($m)=>$m['renewal_status']==='paid'))]]);
+        reply(['hosted'=>true,'issues'=>issueList($db),'other_products'=>$products,'other_reminders'=>['due_soon'=>$count($products,'due_soon'),'expired'=>$count($products,'expired')],'accounts'=>all($db,"SELECT a.*,f.id AS family_id,f.name AS family_name,f.service FROM accounts a LEFT JOIN families f ON f.manager_id=a.id AND f.archived_at='' ORDER BY a.id DESC"),'families'=>all($db,"SELECT f.*,a.email AS manager_email FROM families f JOIN accounts a ON a.id=f.manager_id WHERE f.archived_at='' ORDER BY (CHAR_LENGTH(f.trial_date)=0),f.trial_date,f.id DESC"),'archived_families'=>archivedFamilies($db),'members'=>$members,'archives'=>$archives,'archive_mode'=>'immediate','logs'=>all($db,'SELECT * FROM logs ORDER BY id DESC LIMIT 100'),'today'=>today(),'reminders'=>['confirmed_pending'=>count(array_filter($members,'pendingPayment')),'expired'=>$count($members,'expired'),'due_soon'=>$count($members,'due_soon'),'unpaid'=>count(array_filter($members,fn($m)=>in_array($m['payment_status'],['unpaid','partial'],true))),'renewal_waiting'=>count(array_filter($members,fn($m)=>in_array($m['renewal_status'],['awaiting_payment','partial'],true))),'renewal_paid_pending'=>count(array_filter($members,fn($m)=>$m['renewal_status']==='paid'))]]);
     }
     if(preg_match('~^/api/import/(preview|commit)$~D',$route,$p)&&$method==='POST')reply(importCustomers($db,body(2000000),$p[1]==='commit',$c));
     if(preg_match('~^/api/members/(\d+)/transfer$~D',$route,$p)&&$method==='POST')reply(transferMember($db,(int)$p[1],body()));
     if(preg_match('~^/api/members/(\d+)/renewal(/apply)?$~D',$route,$p)&&$method===(isset($p[2])?'POST':'PATCH'))reply(renew($db,(int)$p[1],body(),isset($p[2])));
     if(preg_match('~^/api/members/(\d+)/renewal-history$~D',$route,$p)&&$method==='GET'){if(!one($db,'SELECT id FROM members WHERE id=?',[(int)$p[1]]))fail('Không tìm thấy khách.',404);reply(['history'=>all($db,'SELECT * FROM renewal_history WHERE member_id=? ORDER BY id DESC',[(int)$p[1]])]);}
+    if(preg_match('~^/api/archived-families/(\d+)$~D',$route,$p)&&$method==='DELETE')reply(deleteArchivedFamily($db,(int)$p[1],body()));
     if(preg_match('~^/api/archived-families/(\d+)/restore$~D',$route,$p)&&$method==='POST')reply(restoreFamily($db,(int)$p[1]));
     if(preg_match('~^/api/archives/(\d+)$~D',$route,$p)&&$method==='DELETE')reply(deleteArchive($db,(int)$p[1],body()));
     if(preg_match('~^/api/archives/(\d+)/restore$~D',$route,$p)&&$method==='POST')reply(restoreArchive($db,(int)$p[1],body()));

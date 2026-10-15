@@ -17,7 +17,7 @@ function finishAudit(bool $success=true): void {
 }
 function auditAction(string $method,string $route): string {
     $part=explode('/',$route)[2]??'';$label=['families'=>'Family','members'=>'khách','accounts'=>'email quản lý','other-products'=>'sản phẩm','issues'=>'lỗi','restore'=>'dữ liệu','archives'=>'khách lưu trữ','import'=>'CSV'][$part]??'dữ liệu';
-    if(preg_match('~^/api/members/\d+/transfer$~D',$route))return 'Chuyển Family';if(str_contains($route,'/renewal'))return 'Gia hạn khách';if($part==='import')return str_ends_with($route,'commit')?'Nhập CSV':'Xem trước CSV';if($part==='restore')return 'Khôi phục dữ liệu';if($part==='archives')return $method==='DELETE'?'Xóa hồ sơ lưu trữ':'Khôi phục hồ sơ lưu trữ';if($part==='other-products'&&$method==='DELETE')return 'Lưu trữ sản phẩm';return (['POST'=>'Thêm','PATCH'=>'Sửa','DELETE'=>'Xóa'][$method]??'Tự động lưu trữ').' '.$label;
+    if(preg_match('~^/api/members/\d+/transfer$~D',$route))return 'Chuyển Family';if($part==='archived-families')return $method==='DELETE'?'Xóa Family lưu trữ':'Khôi phục Family';if(str_contains($route,'/renewal'))return 'Gia hạn khách';if($part==='import')return str_ends_with($route,'commit')?'Nhập CSV':'Xem trước CSV';if($part==='restore')return 'Khôi phục dữ liệu';if($part==='archives')return $method==='DELETE'?'Xóa hồ sơ lưu trữ':'Khôi phục hồ sơ lưu trữ';if($part==='other-products'&&$method==='DELETE')return 'Lưu trữ sản phẩm';return (['POST'=>'Thêm','PATCH'=>'Sửa','DELETE'=>'Xóa'][$method]??'Tự động lưu trữ').' '.$label;
 }
 function journal(PDO $db): array {
     $page=max(1,min(100000,(int)($_GET['page']??1)));$search=strtolower(text($_GET['search']??'',200));$pattern='%'.str_replace(['!','%','_'],['!!','!%','!_'],$search).'%';
