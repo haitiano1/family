@@ -1,4 +1,4 @@
-# Cập nhật YouTube Family 0.14.1
+# Cập nhật YouTube Family 0.14.2
 
 Bản này gộp đầy đủ các thay đổi trước đây chưa đóng gói và các yêu cầu mới. Dùng **gói cập nhật** cho website Family đang chạy; giữ cấu hình và dữ liệu hiện có.
 
@@ -11,6 +11,19 @@ Bản này gộp đầy đủ các thay đổi trước đây chưa đóng gói 
 5. Mở lại website và nhấn **Ctrl+F5**. Trên iPhone, tải lại trang trong Safari hoặc đóng rồi mở lại Family trên màn hình chính.
 
 Không cần tạo database, sửa SQL hay nhập lại khách. Gói không chứa config.php, mật khẩu, dữ liệu khách hoặc backup. Website giữ database hiện tại; nếu còn dùng schema cũ, ứng dụng tự thêm các cột cần thiết. Cài mới dùng [family-hostinger.zip](https://github.com/haitiano1/family/raw/refs/heads/main/downloads/family-hostinger.zip) và [INSTALL.md](INSTALL.md).
+
+## Sửa lỗi trong bản 0.14.2
+
+Sửa lỗi **Nhật ký**: Tất cả thao tác chạy được nhưng khi chọn loại riêng (Thêm mới/Sửa/Xóa/Gia hạn/…) lại báo lỗi hệ thống. Nguyên nhân đã tái hiện trên MariaDB: collation của chuỗi mã loại trong UNION khác tham số PDO. Truy vấn mới so sánh mã loại ở dạng binary; nội dung tiếng Việt, tìm kiếm và phân trang giữ nguyên.
+
+**Nếu đang dùng 0.14.1, chỉ cần thay một file:**
+
+1. Giải nén gói cập nhật trên máy tính.
+2. Trong File Manager của đúng website Family, mở `family-private` đang chứa `config.php` (nằm cạnh `public_html`).
+3. Upload đè **file `audit.php` trong thư mục family-private của gói mới** vào đó. Giữ `config.php` và database.
+4. Mở lại Nhật ký, nhấn Ctrl+F5 và chọn từng nhóm thao tác.
+
+Không cần sửa collation, chạy SQL hoặc import dữ liệu. Bản cũ hơn 0.14.1 cập nhật đầy đủ hai thư mục theo hướng dẫn đầu tài liệu. Schema và backup v7 không đổi. Đã kiểm tra bộ lọc/tìm kiếm/phân trang bằng PDO native trên MySQL 8.4, MariaDB 10.11 và 11.4 với general_ci, unicode_ci, unicode_520_ci và bin.
 
 ## Bổ sung trong bản 0.14.1
 

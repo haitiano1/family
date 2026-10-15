@@ -1,4 +1,4 @@
-# YouTube Family — Quản lý khách hàng 0.14.1
+# YouTube Family — Quản lý khách hàng 0.14.2
 
 Ứng dụng quản lý cho cá nhân: **mở web là vào Tổng quan**, không cần tài khoản đăng nhập. Tập trung quản lý khách YouTube, Family, gia hạn và sản phẩm bán thêm. Không còn các mục admin, bảo mật tài khoản, Jobs hoặc thao tác Google. Có bản **PHP + MySQL dành cho Hostinger Premium** và bản Node.js chạy Windows/VPS. Có thể thêm biểu tượng vào màn hình chính iPhone; xem [hướng dẫn Hostinger](HOSTINGER.md). Bản hosting dùng một mật khẩu truy cập chung, không có tài khoản/role admin.
 
@@ -57,6 +57,12 @@ Thanh toán kỳ hiện tại tách với gia hạn tiếp theo: Chưa nhắc / 
 5. Ngày cuối tháng được giới hạn đúng tháng, kể cả năm nhuận. Lịch sử giữ ngày mua/hạn cũ/mới, tiền, ngày nhận và ghi chú. Số tiền cột kỳ hiện tại là của kỳ hiện tại, không phải tổng doanh thu.
 
 Sau gia hạn, lần tiếp theo trở về Chưa nhắc; lịch sử không mất. Việc tính sai ở những bản cũ không tự sửa hồi tố. Chỉnh ngày trực tiếp bằng form sửa hồ sơ không tạo lịch sử gia hạn hoàn tất.
+
+## Sửa lỗi trong bản 0.14.2
+
+Sửa lỗi **Nhật ký**: Tất cả thao tác vẫn xem được nhưng các nhóm riêng trả lỗi hệ thống trên một số cấu hình MariaDB. So sánh mã loại bằng dạng binary để không xung đột collation giữa chuỗi trong UNION và tham số PDO. Giữ tìm kiếm tiếng Việt, phân trang và dữ liệu trước/sau. Không đổi schema, cấu hình hoặc viết lại lịch sử.
+
+Nếu đã cài **0.14.1**, chỉ thay `family-private/audit.php` từ gói mới, giữ `config.php` và database, rồi Ctrl+F5. Bộ lọc được kiểm tra trên MySQL 8.4 và MariaDB 10.11/11.4 với bốn collation kết nối. Bộ kiểm thử PHP hỗ trợ `FAMILY_PHP_DATABASE_IMAGE=mariadb:10.11` hoặc `mariadb:11.4` để chạy lại ca này.
 
 ## Bổ sung trong bản 0.14.1
 

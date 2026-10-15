@@ -8,16 +8,17 @@ import {randomBytes} from 'node:crypto';
 import path from 'node:path';
 import {summarizeRenewals} from '../../statistics.js';
 const root=path.resolve(import.meta.dirname,'../..'),prefix='family-php-'+process.pid,network=prefix+'-net',mysql=prefix+'-mysql',dir=mkdtempSync(tmpdir()+'/family-php-'),password=randomBytes(24).toString('hex');
+const databaseImage=process.env.FAMILY_PHP_DATABASE_IMAGE||'mysql:8.4',databaseClient=databaseImage.startsWith('mariadb:')?'mariadb':'mysql';
 const containers=[];let count=0;
 const docker=(...args)=>execFileSync('docker',['--config',process.env.FAMILY_DOCKER_CONFIG || process.env.DOCKER_CONFIG || path.join(dir,'docker-config'),...args],{encoding:'utf8',maxBuffer:5e6,stdio:['ignore','pipe','pipe']}).trim();
-const sql=text=>docker('exec','-e','MYSQL_PWD='+password,mysql,'mysql','--default-character-set=utf8mb4','-h127.0.0.1','-uroot','-N','-e',text);
+const sql=text=>docker('exec','-e','MYSQL_PWD='+password,mysql,databaseClient,'--default-character-set=utf8mb4','-h127.0.0.1','-uroot','-N','-e',text);
 const port=name=>JSON.parse(docker('inspect',name))[0].NetworkSettings.Ports['80/tcp'][0].HostPort;
 before(async()=>{
  if(process.env.FAMILY_PHP_SOURCE_ONLY!=='1')execFileSync('python3',['scripts/package-php.py'],{cwd:root});
  docker('build','-q','-t','family-php-test:8.3','-f','hosting/php/Test.Dockerfile','.');
  docker('run','--rm','-v',root+'/hosting/php:/source:ro','family-php-test:8.3','bash','-o','pipefail','-c',"find /source -type f -name '*.php' ! -name 'config.php' -print0 | xargs -0 -n1 php -l");
  docker('network','create',network);
- docker('run','-d','--name',mysql,'--network',network,'-e','MYSQL_ROOT_PASSWORD='+password,'-e','MYSQL_ROOT_HOST=%','mysql:8.4');
+ docker('run','-d','--name',mysql,'--network',network,'-e','MYSQL_ROOT_PASSWORD='+password,'-e','MYSQL_ROOT_HOST=%',databaseImage);
  let ready=false;for(let i=0;i<150;i++){try{sql('SELECT 1');ready=true;break;}catch{await new Promise(r=>setTimeout(r,200));}}
  assert.ok(ready,'MySQL did not start');
 });
@@ -567,5 +568,11 @@ test('PHP journal categories filter all existing actions and combine search/pagi
  const edits=await a('journal?category=edit');assert.equal(edits.total,56);assert.equal(edits.entries.length,50);assert.ok(edits.entries.every(e=>e.category==='edit'));const second=await a('journal?category=edit&page=2');assert.equal(second.total,56);assert.equal(second.entries.length,6);assert.equal(new Set([...edits.entries,...second.entries].map(e=>e.id)).size,56);
  const deleted=await a('journal?category=delete');assert.equal(deleted.total,4);assert.ok(deleted.entries.every(e=>e.category==='delete'));assert.ok(deleted.entries.some(e=>e.action==='Xóa Family'));
  assert.equal((await a('journal?'+new URLSearchParams({category:'delete',search:'ghi chú nhắc Xóa Family'}))).total,0);assert.equal((await a('journal?'+new URLSearchParams({category:'edit',search:'%_'}))).total,55);assert.equal((await a('journal?'+new URLSearchParams({category:'other',search:'Nhật ký cũ'}))).entries[0].kind,'log');await a('journal?category=invalid','GET',undefined,400);
+ // MariaDB can give native parameters a different collation than CASE/UNION
+ // literals, even though every category key is ASCII. Exercise the real PDO path.
+ const queries=[...['all','create','edit','delete','renewal','transfer','restore','import','other'].map(category=>({category})),{category:'edit',page:2},{category:'edit',search:'%_'},{category:'other',search:'Nhật ký cũ'},{category:'delete',search:'ghi chú nhắc Xóa Family'}],expected=[];
+ for(const query of queries)expected.push(await a('journal?'+new URLSearchParams(query)));
+ const encoded=Buffer.from(JSON.stringify(queries)).toString('base64'),results=JSON.parse(docker('exec',f.name,'php','-r',`require '/var/www/family-private/core.php';require '/var/www/family-private/audit.php';$db=db(config());$requests=json_decode(base64_decode('${encoded}'),true);$results=[];foreach(['utf8mb4_general_ci','utf8mb4_unicode_ci','utf8mb4_unicode_520_ci','utf8mb4_bin'] as $collation){$db->exec("SET collation_connection='$collation'");foreach($requests as $request){$_GET=$request;$results[$collation][]=journal($db);}}echo json_encode($results,JSON_UNESCAPED_UNICODE|JSON_THROW_ON_ERROR);`));
+ for(const [collation,actual] of Object.entries(results))assert.deepEqual(actual,expected,collation);
  assert.deepEqual((await a('backup')).tables.audit_events,before);assert.equal((await a('backup')).tables.logs.length,1);
 });
