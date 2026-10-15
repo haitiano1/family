@@ -1,4 +1,4 @@
-# YouTube Family — Quản lý khách hàng 0.13.4
+# YouTube Family — Quản lý khách hàng 0.13.5
 
 Ứng dụng quản lý cho cá nhân: **mở web là vào Tổng quan**, không cần tài khoản đăng nhập. Tập trung quản lý khách YouTube, Family, gia hạn và sản phẩm bán thêm. Không còn các mục admin, bảo mật tài khoản, Jobs hoặc thao tác Google. Có bản **PHP + MySQL dành cho Hostinger Premium** và bản Node.js chạy Windows/VPS. Có thể thêm biểu tượng vào màn hình chính iPhone; xem [hướng dẫn Hostinger](HOSTINGER.md). Bản hosting dùng một mật khẩu truy cập chung, không có tài khoản/role admin.
 
@@ -57,6 +57,12 @@ Thanh toán kỳ hiện tại tách với gia hạn tiếp theo: Chưa nhắc / 
 5. Ngày cuối tháng được giới hạn đúng tháng, kể cả năm nhuận. Lịch sử giữ ngày mua/hạn cũ/mới, tiền, ngày nhận và ghi chú. Số tiền cột kỳ hiện tại là của kỳ hiện tại, không phải tổng doanh thu.
 
 Sau gia hạn, lần tiếp theo trở về Chưa nhắc; lịch sử không mất. Việc tính sai ở những bản cũ không tự sửa hồi tố. Chỉnh ngày trực tiếp bằng form sửa hồ sơ không tạo lịch sử gia hạn hoàn tất.
+
+## Bổ sung trong bản 0.13.5
+
+Khi **Đã fix → Đổi sang mail mới** cho chủ Family, Kho chỉ giữ mail mới/ngày trial mới lấy từ Family. Mật khẩu, khóa 2FA, mã 2FA, mail khôi phục và Note cũ được bỏ khỏi hồ sơ Kho của nhóm trong cùng giao dịch, kể cả khi Kho đang khóa. Bạn có thể nhập lại từ Sheet theo mail mới. **Giữ nguyên mail** hoặc đổi mail member không xóa thông tin Kho của chủ. Sửa ghi chú case đã Done không xóa lại thông tin đã nhập. Dữ liệu khách/Family/lịch sử lỗi vẫn giữ; Nhật ký chỉ ghi đã làm trống Kho, không chứa mật khẩu/khóa/Note. Không tự xử lý hồi tố các lượt đổi mail trước cập nhật.
+
+Khi một mục Kho đang mở nhận được mail chủ mới qua cập nhật dữ liệu, giao diện bỏ thông tin cache của mail cũ và nạp lại Kho, tránh gắn mật khẩu/2FA của mail cũ vào mail mới. Phiên mở Kho vẫn giữ 30 phút.
 
 ## Bổ sung trong bản 0.13.4
 

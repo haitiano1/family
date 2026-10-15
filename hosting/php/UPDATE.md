@@ -1,4 +1,4 @@
-# Cập nhật YouTube Family 0.13.4
+# Cập nhật YouTube Family 0.13.5
 
 Bản này gộp đầy đủ các thay đổi trước đây chưa đóng gói và các yêu cầu mới. Dùng **gói cập nhật** cho website Family đang chạy; giữ cấu hình và dữ liệu hiện có.
 
@@ -11,6 +11,12 @@ Bản này gộp đầy đủ các thay đổi trước đây chưa đóng gói 
 5. Mở lại website và nhấn **Ctrl+F5**. Trên iPhone, tải lại trang trong Safari hoặc đóng rồi mở lại Family trên màn hình chính.
 
 Không cần tạo database, sửa SQL hay nhập lại khách. Gói không chứa config.php, mật khẩu, dữ liệu khách hoặc backup. Website giữ database hiện tại; nếu còn dùng schema cũ, ứng dụng tự thêm các cột cần thiết. Cài mới dùng [family-hostinger.zip](https://github.com/haitiano1/family/raw/refs/heads/main/downloads/family-hostinger.zip) và [INSTALL.md](INSTALL.md).
+
+## Bổ sung trong bản 0.13.5
+
+**Đã fix → Đổi sang mail mới** cho mail chủ Family: Kho chỉ còn **mail mới và ngày trial mới**. Các trường **mật khẩu, khóa 2FA, mã 6 số, mail khôi phục và Note** của mail cũ để trống để bạn nhập từ Sheet sau. Thực hiện được khi Kho đang khóa. **Giữ nguyên mail** vẫn giữ đủ thông tin cũ; đổi mail member không xóa Kho của chủ. Chỉnh lại ghi chú case Done không xóa dữ liệu đã nhập cho mail mới. Xử lý mail/trial/thông tin Kho/case cùng giao dịch, lỗi lưu sẽ hoàn tác; giữ khách, lịch sử và Nhật ký không chứa thông tin bí mật. Mục Kho đang mở cũng bỏ cache của mail cũ khi nhận mail chủ mới. Không tự xóa dữ liệu của các lượt fix trước khi cập nhật.
+
+Nếu đã cài đủ **0.13.4**, thay **family-private/issues.php**, **public_html/app.js** và **public_html/vault.js** từ gói mới rồi Ctrl+F5. Bản cũ hơn nên cập nhật đầy đủ hai thư mục như hướng dẫn đầu tài liệu. Giữ config.php/database, không nhập lại khách. Schema và backup v7 không đổi; gói 0.13.5 đã có toàn bộ tính năng cũ.
 
 ## Bổ sung trong bản 0.13.4
 
