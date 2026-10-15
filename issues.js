@@ -20,9 +20,10 @@ export function initIssues(db,{fail,text,email,log}) {
       if(resolution==='replace'){
         const replacement=email(data.replacement_email);if(!current||current.email!==(data.expected_email??old.subject_email))fail('Mail trong Family đã thay đổi hoặc bị xóa. Tải lại để kiểm tra; chưa đổi mail.',409);if(replacement===current.email)fail('Mail mới cần khác mail hiện tại.');
         const f=one('SELECT f.*,a.email AS manager_email FROM families f JOIN accounts a ON a.id=f.manager_id WHERE f.id=?',old.family_id);
-        if(old.target_type==='manager'){if(one('SELECT id FROM accounts WHERE email=? AND id!=?',replacement,current.id)||one('SELECT id FROM members WHERE family_id=? AND email=?',f.id,replacement))fail('Mail mới đã tồn tại hoặc trùng khách trong Family.',409);run('UPDATE accounts SET email=? WHERE id=?',replacement,current.id);}
+        let newTrial='';
+        if(old.target_type==='manager'){if(one('SELECT id FROM accounts WHERE email=? AND id!=?',replacement,current.id)||one('SELECT id FROM members WHERE family_id=? AND email=?',f.id,replacement))fail('Mail mới đã tồn tại hoặc trùng khách trong Family.',409);newTrial=today(new Date(now));run('UPDATE accounts SET email=? WHERE id=?',replacement,current.id);run('UPDATE families SET trial_date=? WHERE id=?',newTrial,f.id);}
         else{if(replacement===f.manager_email||one('SELECT id FROM members WHERE family_id=? AND email=? AND id!=?',f.id,replacement,current.id))fail('Mail mới đã có trong Family.',409);run('UPDATE members SET email=?,renewal_revision=renewal_revision+1 WHERE id=?',replacement,current.id);}
-        resolutionNote=`Đã đổi từ ${current.email} sang ${replacement}.`;subject=replacement;
+        resolutionNote=`Đã đổi từ ${current.email} sang ${replacement}.${newTrial?' Ngày trial mới: '+newTrial.split('-').reverse().join('/')+'.':''}`;subject=replacement;
       }else{subject=current?.email||old.subject_email;resolutionNote=`Giữ nguyên mail ${subject}.`;}
       resolutionEmail=subject;done=now;
     }else if(status!=='done'){resolution='';resolutionEmail='';resolutionNote='';done='';}

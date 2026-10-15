@@ -1,4 +1,4 @@
-# YouTube Family — Quản lý khách hàng 0.13.3
+# YouTube Family — Quản lý khách hàng 0.13.4
 
 Ứng dụng quản lý cho cá nhân: **mở web là vào Tổng quan**, không cần tài khoản đăng nhập. Tập trung quản lý khách YouTube, Family, gia hạn và sản phẩm bán thêm. Không còn các mục admin, bảo mật tài khoản, Jobs hoặc thao tác Google. Có bản **PHP + MySQL dành cho Hostinger Premium** và bản Node.js chạy Windows/VPS. Có thể thêm biểu tượng vào màn hình chính iPhone; xem [hướng dẫn Hostinger](HOSTINGER.md). Bản hosting dùng một mật khẩu truy cập chung, không có tài khoản/role admin.
 
@@ -57,6 +57,10 @@ Thanh toán kỳ hiện tại tách với gia hạn tiếp theo: Chưa nhắc / 
 5. Ngày cuối tháng được giới hạn đúng tháng, kể cả năm nhuận. Lịch sử giữ ngày mua/hạn cũ/mới, tiền, ngày nhận và ghi chú. Số tiền cột kỳ hiện tại là của kỳ hiện tại, không phải tổng doanh thu.
 
 Sau gia hạn, lần tiếp theo trở về Chưa nhắc; lịch sử không mất. Việc tính sai ở những bản cũ không tự sửa hồi tố. Chỉnh ngày trực tiếp bằng form sửa hồ sơ không tạo lịch sử gia hạn hoàn tất.
+
+## Bổ sung trong bản 0.13.4
+
+Khi hoàn tất Fix lỗi bằng **Đổi sang mail mới** cho **mail chủ Family**, ngày trial của Family được đặt về ngày xác nhận theo giờ Việt Nam, cùng giao dịch với đổi mail và hoàn tất case. Kho tự hiện mail/ngày trial mới. Chọn **Giữ nguyên mail** hoặc đổi mail member không đổi ngày trial của mail chủ. Sửa lại ghi chú case đã Done không đặt lại ngày trial. Thẻ lỗi cũ giữ ngày trial/ngày báo lỗi/số ngày sử dụng ban đầu; kết quả fix và Nhật ký ghi mail cũ → mới, ngày trial mới cùng dữ liệu trước/sau. Lượt báo lỗi tiếp theo dùng ngày trial mới; lỗi lưu/conflict hoàn tác cả mail/ngày trial/case.
 
 ## Bổ sung trong bản 0.13.3
 

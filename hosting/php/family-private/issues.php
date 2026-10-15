@@ -28,9 +28,10 @@ function saveIssue(PDO $db,?int $id,array $d): array {
         if($resolution==='replace'){
             $replacement=email($d['replacement_email']??'');if(!$target||$target['email']!==($d['expected_email']??$old['subject_email']))fail('Mail trong Family đã thay đổi hoặc bị xóa. Tải lại để kiểm tra; chưa đổi mail.',409);if($replacement===$target['email'])fail('Mail mới cần khác mail hiện tại.');
             $f=one($db,'SELECT f.*,a.email AS manager_email FROM families f JOIN accounts a ON a.id=f.manager_id WHERE f.id=?',[$old['family_id']]);
-            if($old['target_type']==='manager'){if(one($db,'SELECT id FROM accounts WHERE email=? AND id!=?',[$replacement,$target['id']])||one($db,'SELECT id FROM members WHERE family_id=? AND email=?',[$f['id'],$replacement]))fail('Mail mới đã tồn tại hoặc trùng khách trong Family.',409);q($db,'UPDATE accounts SET email=? WHERE id=?',[$replacement,$target['id']]);}
+            $newTrial='';
+            if($old['target_type']==='manager'){if(one($db,'SELECT id FROM accounts WHERE email=? AND id!=?',[$replacement,$target['id']])||one($db,'SELECT id FROM members WHERE family_id=? AND email=?',[$f['id'],$replacement]))fail('Mail mới đã tồn tại hoặc trùng khách trong Family.',409);$newTrial=(new DateTimeImmutable($now))->setTimezone(new DateTimeZone('Asia/Ho_Chi_Minh'))->format('Y-m-d');q($db,'UPDATE accounts SET email=? WHERE id=?',[$replacement,$target['id']]);q($db,'UPDATE families SET trial_date=? WHERE id=?',[$newTrial,$f['id']]);}
             else{if($replacement===$f['manager_email']||one($db,'SELECT id FROM members WHERE family_id=? AND email=? AND id!=?',[$f['id'],$replacement,$target['id']]))fail('Mail mới đã có trong Family.',409);q($db,'UPDATE members SET email=?,renewal_revision=renewal_revision+1 WHERE id=?',[$replacement,$target['id']]);}
-            $resolutionNote="Đã đổi từ {$target['email']} sang $replacement.";$subject=$replacement;
+            $resolutionNote="Đã đổi từ {$target['email']} sang $replacement.".($newTrial?' Ngày trial mới: '.implode('/',array_reverse(explode('-',$newTrial))).'.':'');$subject=$replacement;
         }else{$subject=$target['email']??$old['subject_email'];$resolutionNote="Giữ nguyên mail $subject.";}
         $resolved=$subject;$done=$now;
     }elseif($status!=='done'){$resolution='';$resolved='';$resolutionNote='';$done='';}

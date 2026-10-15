@@ -1,4 +1,4 @@
-# Cập nhật YouTube Family 0.13.3
+# Cập nhật YouTube Family 0.13.4
 
 Bản này gộp đầy đủ các thay đổi trước đây chưa đóng gói và các yêu cầu mới. Dùng **gói cập nhật** cho website Family đang chạy; giữ cấu hình và dữ liệu hiện có.
 
@@ -11,6 +11,12 @@ Bản này gộp đầy đủ các thay đổi trước đây chưa đóng gói 
 5. Mở lại website và nhấn **Ctrl+F5**. Trên iPhone, tải lại trang trong Safari hoặc đóng rồi mở lại Family trên màn hình chính.
 
 Không cần tạo database, sửa SQL hay nhập lại khách. Gói không chứa config.php, mật khẩu, dữ liệu khách hoặc backup. Website giữ database hiện tại; nếu còn dùng schema cũ, ứng dụng tự thêm các cột cần thiết. Cài mới dùng [family-hostinger.zip](https://github.com/haitiano1/family/raw/refs/heads/main/downloads/family-hostinger.zip) và [INSTALL.md](INSTALL.md).
+
+## Bổ sung trong bản 0.13.4
+
+**Đã fix → Đổi sang mail mới** cho **mail chủ Family** sẽ đặt ngày trial về đúng ngày xác nhận đổi mail theo giờ Việt Nam. Mail và ngày trial mới hiện tại Family/Kho. **Giữ nguyên mail** giữ ngày trial cũ; đổi mail member không thay ngày trial của chủ. Case cũ giữ ngày trial và số ngày đã sử dụng trước khi fix, còn kết quả fix ghi thêm ngày trial mới. Nhật ký giữ đầy đủ trước/sau; lượt báo lỗi kế tiếp lấy trial mới. Lỗi ghi hoặc mail trùng không đổi mail/ngày trial một phần. Không tự sửa ngày của các lượt fix đã hoàn tất trước cập nhật.
+
+Nếu đã có đủ **0.13.3**, thay **family-private/issues.php** và **public_html/app.js** từ gói mới rồi Ctrl+F5. Bản cũ hơn nên cập nhật đủ hai thư mục theo các bước đầu tài liệu. Giữ config.php/database, không nhập lại khách. Schema và backup v7 không đổi; gói 0.13.4 gồm mọi tính năng trước đó.
 
 ## Bổ sung trong bản 0.13.3
 

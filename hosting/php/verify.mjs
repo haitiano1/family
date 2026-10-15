@@ -158,19 +158,23 @@ test('Node SQLite backup migrates to PHP MySQL with complete renewal history and
 
 test('PHP Family issues support keep/replace for manager and customer with atomic conflict/stale guards',async()=>{
  const f=await fixture();await f.login();const a=f.req;
- const family=await a('families','POST',{name:'Fix Family',manager_email:'manager-a@example.com'},201);const member=await a('members','POST',{family_id:family.id,email:'customer-a@example.com',contact:'Zalo contact',note:'Customer note'},201);
+ const family=await a('families','POST',{name:'Fix Family',manager_email:'manager-a@example.com',trial_date:'2026-08-10'},201);const member=await a('members','POST',{family_id:family.id,email:'customer-a@example.com',contact:'Zalo contact',note:'Customer note'},201);
  const issue=await a('issues','POST',{family_id:family.id,target_type:'manager',title:'Manager error'},201);
  await a('issues/'+issue.id,'PATCH',{status:'done',revision:0},400);await a('issues/'+issue.id,'PATCH',{status:'doing',revision:0});
  sql(`CREATE TRIGGER ${f.db}.reject_issue_completion BEFORE UPDATE ON ${f.db}.issues FOR EACH ROW SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT='Injected issue write failure'`);
- const journalBefore=(await a('journal')).total;await a('issues/'+issue.id,'PATCH',{status:'done',revision:1,resolution:'replace',replacement_email:'manager-b@example.com'},500);
- assert.equal((await a('state')).families[0].manager_email,'manager-a@example.com');assert.equal((await a('state')).issues[0].status,'doing');assert.equal((await a('journal')).total,journalBefore);
+ const before=(await a('backup')).tables,reported=(await a('state')).issues[0];const journalBefore=(await a('journal')).total;await a('issues/'+issue.id,'PATCH',{status:'done',revision:1,resolution:'replace',replacement_email:'manager-b@example.com'},500);
+ assert.equal((await a('state')).families[0].manager_email,'manager-a@example.com');assert.equal((await a('state')).issues[0].status,'doing');assert.equal((await a('journal')).total,journalBefore);assert.deepEqual((await a('backup')).tables,before);
  sql(`DROP TRIGGER ${f.db}.reject_issue_completion`);await a('issues/'+issue.id,'PATCH',{status:'done',revision:1,resolution:'replace',replacement_email:'manager-b@example.com'});
  let state=await a('state');assert.equal(state.families[0].manager_email,'manager-b@example.com');assert.equal(state.issues[0].original_email,'manager-a@example.com');assert.match(state.issues[0].resolution_note,/manager-a@example.com.*manager-b@example.com/);
+ const fixed=state.issues[0],expected=new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Ho_Chi_Minh',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date(fixed.done_at));assert.equal(state.families[0].trial_date,expected);assert.equal(fixed.trial_date,reported.trial_date);assert.equal(fixed.reported_on,reported.reported_on);assert.equal(fixed.days_used,reported.days_used);assert.ok(fixed.resolution_note.includes(expected.split('-').reverse().join('/')));
+ const audit=(await a('journal')).entries.find(e=>e.action==='Sửa lỗi'),detail=await a('journal/audit/'+audit.id),change=detail.changes.find(c=>c.table==='families');assert.equal(change.before.trial_date,'2026-08-10');assert.equal(change.after.trial_date,expected);assert.ok(detail.changes.some(c=>c.table==='accounts'&&c.after.email==='manager-b@example.com'));
+ await a('families/'+family.id,'PATCH',{name:'Fix Family',manager_email:'manager-b@example.com',trial_date:'2026-09-01'});await a('issues/'+issue.id,'PATCH',{status:'done',revision:fixed.revision,note:'Edited completed note'});assert.equal((await a('state')).families[0].trial_date,'2026-09-01');
+
  await a('issues/'+issue.id,'PATCH',{status:'todo',revision:1},409);
  const customer=await a('issues','POST',{family_id:family.id,target_type:'member',target_id:member.id,title:'Customer error'},201);
  await a('issues/'+customer.id,'PATCH',{status:'done',revision:0,resolution:'replace',replacement_email:'manager-b@example.com'},409);assert.equal((await a('state')).issues.find(i=>i.id===customer.id).status,'todo');assert.equal((await a('state')).members[0].email,'customer-a@example.com');
- await a('issues/'+customer.id,'PATCH',{status:'done',revision:0,resolution:'replace',replacement_email:'customer-b@example.com'});state=await a('state');assert.equal(state.members[0].email,'customer-b@example.com');assert.equal(state.members[0].note,'Customer note');assert.equal(state.members[0].contact,'Zalo contact');
- const keep=await a('issues','POST',{family_id:family.id,title:'Keep'},201);await a('issues/'+keep.id,'PATCH',{status:'done',revision:0,resolution:'keep'});assert.equal((await a('state')).families[0].manager_email,'manager-b@example.com');
+ await a('issues/'+customer.id,'PATCH',{status:'done',revision:0,resolution:'replace',replacement_email:'customer-b@example.com'});state=await a('state');assert.equal(state.members[0].email,'customer-b@example.com');assert.equal(state.families[0].trial_date,'2026-09-01');assert.equal(state.members[0].note,'Customer note');assert.equal(state.members[0].contact,'Zalo contact');
+ const keep=await a('issues','POST',{family_id:family.id,title:'Keep'},201);await a('issues/'+keep.id,'PATCH',{status:'done',revision:0,resolution:'keep'});assert.equal((await a('state')).families[0].manager_email,'manager-b@example.com');assert.equal((await a('state')).families[0].trial_date,'2026-09-01');
  await f.restart();assert.equal((await a('state')).issues.filter(i=>i.status==='done').length,3);
 });
 

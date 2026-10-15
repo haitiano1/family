@@ -342,23 +342,27 @@ test('portable backup restores all customer data transactionally without overwri
 
 test('Family issues keep or replace the linked manager/member mail atomically and retain fix notes',async()=>{
  const f=await fixture();try{
-  const a=f.admin;const family=await a('families','POST',{name:'Trouble Family',manager_email:'manager-a@example.com'},201);const member=await a('members','POST',{family_id:family.id,email:'customer-a@example.com',contact:'Zalo',note:'Keep note'},201);
+  const a=f.admin;const family=await a('families','POST',{name:'Trouble Family',manager_email:'manager-a@example.com',trial_date:'2026-08-10'},201);const member=await a('members','POST',{family_id:family.id,email:'customer-a@example.com',contact:'Zalo',note:'Keep note'},201);
   const issue=await a('issues','POST',{family_id:family.id,target_type:'manager',title:'Manager error',note:'Needs fix'},201);
   await a('issues/'+issue.id,'PATCH',{status:'done',revision:0},400);
   await a('issues/'+issue.id,'PATCH',{status:'doing',revision:0});
   // Fail the issue update after the linked email UPDATE to verify the outer transaction.
   const fault=new DatabaseSync(path.join(f.dir,'family.sqlite'));fault.exec("CREATE TRIGGER reject_issue_completion BEFORE UPDATE ON issues BEGIN SELECT RAISE(ABORT, 'Injected issue write failure'); END");
-  const journalBefore=(await a('journal')).total;
+  const before=(await a('backup')).tables,reported=(await a('state')).issues[0];const journalBefore=(await a('journal')).total;
   await a('issues/'+issue.id,'PATCH',{status:'done',revision:1,resolution:'replace',replacement_email:'manager-b@example.com'},500);
-  assert.equal((await a('state')).families[0].manager_email,'manager-a@example.com');assert.equal((await a('state')).issues[0].status,'doing');assert.equal((await a('journal')).total,journalBefore);
+  assert.equal((await a('state')).families[0].manager_email,'manager-a@example.com');assert.equal((await a('state')).issues[0].status,'doing');assert.equal((await a('journal')).total,journalBefore);assert.deepEqual((await a('backup')).tables,before);
   fault.exec('DROP TRIGGER reject_issue_completion');fault.close();
   await a('issues/'+issue.id,'PATCH',{status:'done',revision:1,resolution:'replace',replacement_email:'manager-b@example.com'});
   let state=await a('state');assert.equal(state.families[0].manager_email,'manager-b@example.com');let fixed=state.issues[0];assert.equal(fixed.status,'done');assert.equal(fixed.original_email,'manager-a@example.com');assert.equal(fixed.subject_email,'manager-b@example.com');assert.match(fixed.resolution_note,/manager-a@example.com.*manager-b@example.com/);
+  const expected=new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Ho_Chi_Minh',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date(fixed.done_at));assert.equal(state.families[0].trial_date,expected);assert.equal(fixed.trial_date,reported.trial_date);assert.equal(fixed.reported_on,reported.reported_on);assert.equal(fixed.days_used,reported.days_used);assert.ok(fixed.resolution_note.includes(expected.split('-').reverse().join('/')));
+  const audit=(await a('journal')).entries.find(e=>e.action==='Sửa lỗi'),detail=await a('journal/audit/'+audit.id),change=detail.changes.find(c=>c.table==='families');assert.equal(change.before.trial_date,'2026-08-10');assert.equal(change.after.trial_date,expected);assert.ok(detail.changes.some(c=>c.table==='accounts'&&c.after.email==='manager-b@example.com'));
+  await a('families/'+family.id,'PATCH',{name:'Trouble Family',manager_email:'manager-b@example.com',trial_date:'2026-09-01'});await a('issues/'+issue.id,'PATCH',{status:'done',revision:fixed.revision,note:'Edited completed note'});assert.equal((await a('state')).families[0].trial_date,'2026-09-01');
+
   await a('issues/'+issue.id,'PATCH',{status:'doing',revision:1},409);
   const customerIssue=await a('issues','POST',{family_id:family.id,target_type:'member',target_id:member.id,title:'Customer error'},201);
   await a('issues/'+customerIssue.id,'PATCH',{status:'done',revision:0,resolution:'replace',replacement_email:'manager-b@example.com'},409);state=await a('state');assert.equal(state.issues.find(i=>i.id===customerIssue.id).status,'todo');assert.equal(state.members[0].email,'customer-a@example.com');
-  await a('issues/'+customerIssue.id,'PATCH',{status:'done',revision:0,resolution:'replace',replacement_email:'customer-b@example.com'});state=await a('state');assert.equal(state.members[0].email,'customer-b@example.com');assert.equal(state.members[0].contact,'Zalo');assert.equal(state.members[0].note,'Keep note');
-  const keep=await a('issues','POST',{family_id:family.id,target_type:'manager',title:'Keep mail'},201);await a('issues/'+keep.id,'PATCH',{status:'done',revision:0,resolution:'keep'});assert.equal((await a('state')).families[0].manager_email,'manager-b@example.com');
+  await a('issues/'+customerIssue.id,'PATCH',{status:'done',revision:0,resolution:'replace',replacement_email:'customer-b@example.com'});state=await a('state');assert.equal(state.members[0].email,'customer-b@example.com');assert.equal(state.families[0].trial_date,'2026-09-01');assert.equal(state.members[0].contact,'Zalo');assert.equal(state.members[0].note,'Keep note');
+  const keep=await a('issues','POST',{family_id:family.id,target_type:'manager',title:'Keep mail'},201);await a('issues/'+keep.id,'PATCH',{status:'done',revision:0,resolution:'keep'});assert.equal((await a('state')).families[0].manager_email,'manager-b@example.com');assert.equal((await a('state')).families[0].trial_date,'2026-09-01');
   await f.stop();await f.start();assert.equal((await a('state')).issues.filter(i=>i.status==='done').length,3);
  }finally{await f.close();}
 });
