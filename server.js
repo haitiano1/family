@@ -4,10 +4,12 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 import { initOtherProducts } from './other-products.js';
+import { initProductImport } from './product-import.js';
 import { validators } from './validation.js';
 import { initArchive } from './archive.js';
 import { initRenewals } from './renewal.js';
 import { renewalStatistics } from './statistics.js';
+import { recordNewPurchase } from './purchases.js';
 import { initImporter } from './importer.js';
 import { today, expiry, isPendingPayment, sortCustomers, sortFamilies, purchaseExpiry } from './domain.js';
 import { beginAudit,finishAudit,cancelAudit,auditLog,auditAction,journal,journalEntry,withAudit } from './audit.js';
@@ -30,6 +32,7 @@ const fail = (message, status = 400) => { throw Object.assign(new Error(message)
 const actor = { username:'Cục bộ' };
 const { email,text,label,service,calendarDate,memberData } = validators(fail);
 const saveOtherProduct=initOtherProducts(db,{fail,text,email,calendarDate,log});
+const productImport=initProductImport(db,{fail,text,email,calendarDate,log,saveOtherProduct});
 const issues=initIssues(db,{fail,text,email,log});
 const transferMember=initTransfers(db,{fail,email,log});
 const vaultRoute=initVault(db,{fail,email,text,commonPassword:process.env.ACCESS_PASSWORD||'',secure:access.enabled});
@@ -75,6 +78,9 @@ async function handle(req, res) {
     if(req.method==='GET'&&url.pathname==='/api/statistics')return send(res,200,renewalStatistics(db,Object.fromEntries(url.searchParams)));
     if(req.method==='GET'&&url.pathname==='/api/journal')return send(res,200,journal(db,url.searchParams));
     if(req.method==='GET'&&/^\/api\/journal\/(audit|log)\/\d+$/.test(url.pathname)){const [,,,kind,id]=url.pathname.split('/');const entry=journalEntry(db,kind,Number(id));if(!entry)fail('Không tìm thấy nhật ký.',404);return send(res,200,entry);}
+    if(req.method==='POST'&&url.pathname==='/api/issues/order')return send(res,200,issues.reorder(await body(req,262144)));
+    if(req.method==='POST'&&url.pathname==='/api/other-products/import/preview')return send(res,200,productImport.preview(await body(req,2000000)));
+    if(req.method==='POST'&&url.pathname==='/api/other-products/import/confirm')return send(res,200,productImport.confirm(await body(req,2000000)));
     if(['POST','PATCH'].includes(req.method)&&/^\/api\/issues(?:\/\d+)?$/.test(url.pathname)){const id=req.method==='PATCH'?Number(url.pathname.split('/').pop()):null;if((req.method==='POST'&&url.pathname!=='/api/issues')||(req.method==='PATCH'&&!id))fail('Không tìm thấy.',404);return send(res,id?200:201,issues.save(id,await body(req)));}
     if(req.method==='DELETE'&&/^\/api\/issues\/\d+$/.test(url.pathname))return send(res,200,issues.remove(Number(url.pathname.split('/').pop()),await body(req)));
     if (req.method==='GET' && url.pathname==='/api/backup') {
@@ -175,11 +181,13 @@ async function handle(req, res) {
       if (req.method === 'POST' && url.pathname === '/api/members') {
         if (values[9] !== 'invited' && one("SELECT COUNT(*) AS n FROM members WHERE family_id=? AND membership_status!='invited'", family.id).n >= 5) fail('Hồ sơ đã đủ 6 người gồm tài khoản quản lý.');
         const result = run('INSERT INTO members(family_id,email,customer_name,contact,joined_at,expires_at,payment_status,amount,note,plan_months,membership_status) VALUES (?,?,?,?,?,?,?,?,?,?,?)', family.id, ...values);
+        recordNewPurchase(db,Number(result.lastInsertRowid));
         log(`${actor.username}: ghi nhận khách ${values[0]} trong ${family.name}`); return send(res, 201, { id: Number(result.lastInsertRowid) });
       }
       if (req.method === 'PATCH') {
-        if (values[9] !== 'invited' && one("SELECT COUNT(*) AS n FROM members WHERE family_id=? AND id!=? AND membership_status!='invited'", family.id,id).n >= 5) fail('Family đã đủ 5 thành viên ghi nhận.');
+        if (values[9] !== 'invited' && prior.membership_status === 'invited' && one("SELECT COUNT(*) AS n FROM members WHERE family_id=? AND id!=? AND membership_status!='invited'", family.id,id).n >= 5) fail('Family đã đủ 5 thành viên ghi nhận.');
         run('UPDATE members SET email=?,customer_name=?,contact=?,joined_at=?,expires_at=?,payment_status=?,amount=?,note=?,plan_months=?,membership_status=?,renewal_revision=renewal_revision+1 WHERE id=?', ...values, id);
+        recordNewPurchase(db,id);
         log(`${actor.username}: cập nhật khách #${id}, hạn ${values[4] || 'chưa đặt'}, thanh toán ${values[5]}`); return send(res, 200, { ok: true });
       }
     }
@@ -192,7 +200,7 @@ async function handle(req, res) {
       run(`DELETE FROM ${table} WHERE id=?`, id); log(`${actor.username}: xóa hồ sơ nội bộ ${table} #${id}`); return send(res, 200, { ok: true });
     }
     if (req.method === 'GET') {
-      const assets = { '/': ['index.html','text/html'], '/access':['access.html','text/html'], '/access.js':['access.js','text/javascript'], '/app.js': ['app.js','text/javascript'], '/statistics.js':['statistics.js','text/javascript'], '/vault.js': ['vault.js','text/javascript'], '/vault-sheet.js':['vault-sheet.js','text/javascript'], '/vault-families.js':['../vault-families.js','text/javascript'], '/style.css': ['style.css','text/css'], '/csv.js': ['csv.js','text/javascript'], '/contacts.js':['contacts.js','text/javascript'], '/domain.js': ['../domain.js','text/javascript'], '/manifest.webmanifest':['manifest.webmanifest','application/manifest+json'], '/icon-180.png':['icon-180.png','image/png'], '/icon-192.png':['icon-192.png','image/png'], '/icon-512.png':['icon-512.png','image/png'] };
+      const assets = { '/': ['index.html','text/html'], '/access':['access.html','text/html'], '/access.js':['access.js','text/javascript'], '/app.js': ['app.js','text/javascript'], '/product-import.js':['product-import.js','text/javascript'], '/sync-status.css':['sync-status.css','text/css'], '/sheets.js':['sheets.js','text/javascript'], '/updater.js':['updater.js','text/javascript'], '/statistics.js':['statistics.js','text/javascript'], '/vault.js': ['vault.js','text/javascript'], '/vault-sheet.js':['vault-sheet.js','text/javascript'], '/vault-families.js':['../vault-families.js','text/javascript'], '/style.css': ['style.css','text/css'], '/csv.js': ['csv.js','text/javascript'], '/contacts.js':['contacts.js','text/javascript'], '/domain.js': ['../domain.js','text/javascript'], '/manifest.webmanifest':['manifest.webmanifest','application/manifest+json'], '/icon-180.png':['icon-180.png','image/png'], '/icon-192.png':['icon-192.png','image/png'], '/icon-512.png':['icon-512.png','image/png'] };
       const asset = assets[url.pathname]; if (!asset) return send(res, 404, { error: 'Không tìm thấy.' });
       res.writeHead(200, { 'Content-Type': asset[1] + '; charset=utf-8', 'Cache-Control': 'no-store', 'Content-Security-Policy': "default-src 'self'; style-src 'self'; script-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'" });
       return res.end(readFileSync(path.join(root, 'public', asset[0])));
@@ -205,7 +213,7 @@ async function handle(req, res) {
 }
 const server=http.createServer(async(req,res)=>{
   let path;
-  try{path=new URL(req.url,'http://localhost').pathname;if(!['GET','HEAD'].includes(req.method)&&path.startsWith('/api/'))req.famBody=await body(req,path==='/api/restore'?32000000:path.startsWith('/api/import/')||path.startsWith('/api/vault/import')?2000000:path.startsWith('/api/vault/')?32768:16384);}
+  try{path=new URL(req.url,'http://localhost').pathname;if(!['GET','HEAD'].includes(req.method)&&path.startsWith('/api/'))req.famBody=await body(req,path==='/api/restore'?32000000:path==='/api/issues/order'?262144:path.startsWith('/api/import/')||path.startsWith('/api/other-products/import/')||path.startsWith('/api/vault/import')?2000000:path.startsWith('/api/vault/')?32768:16384);}
   catch(error){return send(res,error.status||400,{error:error.message});}
   requestQueue=requestQueue.then(async()=>{
     const audited=path==='/api/state'||(!['GET','HEAD'].includes(req.method)&&path.startsWith('/api/')&&!path.startsWith('/api/access')&&!path.startsWith('/api/vault/'));

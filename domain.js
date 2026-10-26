@@ -12,11 +12,21 @@ export const services = ['google_one', 'google_ai', 'youtube', 'other'];
 export function isPendingPayment(member) {
   return !['paid','declined'].includes(member.renewal_status) && (['awaiting_payment','partial'].includes(member.renewal_status) || member.expiry_status==='expired');
 }
+export function renewalReceiptDate(member,status,current=today()) {
+  if(!['paid','partial'].includes(status))return '';
+  return status===member.renewal_status&&member.renewal_paid_at?member.renewal_paid_at:current;
+}
 export function sortCustomers(members) {
   return [...members].sort((a,b)=>(a.expires_at||'9999-99-99').localeCompare(b.expires_at||'9999-99-99') || a.id-b.id);
 }
+export function familyOccupancy(members, familyId) {
+  const rows=familyId===undefined?members:members.filter(member=>member.family_id===familyId);
+  const pending=rows.filter(member=>member.membership_status==='invited').length;
+  const occupied=rows.length-pending;
+  return {occupied,pending,capacity:5,label:`${occupied}/5${pending?` (${pending} chưa vào)`:''}`};
+}
 export function sortFamilies(families, members, filter='') {
-  const counts=new Map();for(const m of members)counts.set(m.family_id,(counts.get(m.family_id)||0)+1);
+  const counts=new Map();for(const m of members)if(m.membership_status!=='invited')counts.set(m.family_id,(counts.get(m.family_id)||0)+1);
   const rows=families.filter(f=>filter!=='spare'||(counts.get(f.id)||0)<5);
   return [...rows].sort(filter==='name'?(a,b)=>b.name.localeCompare(a.name,'vi',{numeric:true})||b.id-a.id:(a,b)=>(a.trial_date||'9999-99-99').localeCompare(b.trial_date||'9999-99-99')||b.id-a.id);
 }

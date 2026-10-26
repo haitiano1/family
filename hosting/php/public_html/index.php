@@ -1,4 +1,6 @@
 <?php
+require dirname(__DIR__).'/family-private/runtime.php';
+familyRuntimeEnter();
 require dirname(__DIR__).'/family-private/core.php';
 try {
     $c=config();checkRequest($c);

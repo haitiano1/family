@@ -1,0 +1,10 @@
+{
+  "format": "family-php-release",
+  "protocol": 1,
+  "version": "0.20.1",
+  "schema": 8,
+  "min_php": "8.2.0",
+  "size": 151741,
+  "sha256": "c46c2de9b8fa545ec58726de3d23d9184fb825ea891e41c04ab52ee495472692",
+  "url": "https://github.com/haitiano1/family/releases/download/v0.20.1/family-php-release.zip"
+}

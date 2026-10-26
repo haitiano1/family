@@ -1,0 +1,39 @@
+name: Phát hành Family PHP
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Verify target and version
+        run: |
+          test "$GITHUB_REPOSITORY" = haitiano1/family
+          node -e "if(!/^\d+\.\d+\.\d+$/.test(JSON.parse(require('fs').readFileSync('package.json')).version))process.exit(1)"
+      - name: Test application
+        run: node --test test/*.test.js
+      - name: Test PHP and MySQL
+        run: node --test hosting/php/verify.mjs
+      - name: Build verified release assets
+        run: |
+          python3 scripts/package-php.py
+          python3 scripts/package-release.py
+      - name: Publish a new release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          release_commit=$(git rev-parse HEAD)
+          release_version=$(node -p "JSON.parse(require('fs').readFileSync('package.json')).version")
+          gh release create "v$release_version" \
+            downloads/family-php-release.zip downloads/family-latest.json downloads/family-cap-nhat-mot-cham.zip \
+            --target "$release_commit" --title "Family PHP $release_version" \
+            --notes-file hosting/php/RELEASE-NOTES.md

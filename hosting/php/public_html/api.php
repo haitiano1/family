@@ -1,5 +1,8 @@
 <?php
 declare(strict_types=1);
+require dirname(__DIR__).'/family-private/runtime.php';
+if(is_file(dirname(__DIR__).'/family-private/.updates/maintenance.json')&&($_SERVER['REQUEST_METHOD']??'')==='POST'&&parse_url($_SERVER['REQUEST_URI']??'',PHP_URL_PATH)==='/api/access'){$_GET['action']='unlock';require __DIR__.'/update.php';exit;}
+familyRuntimeEnter();
 require dirname(__DIR__).'/family-private/core.php';
 require dirname(__DIR__).'/family-private/business.php';
 require dirname(__DIR__).'/family-private/statistics.php';
@@ -7,6 +10,9 @@ require dirname(__DIR__).'/family-private/import.php';
 require dirname(__DIR__).'/family-private/audit.php';
 require dirname(__DIR__).'/family-private/issues.php';
 require dirname(__DIR__).'/family-private/vault.php';
+require dirname(__DIR__).'/family-private/records.php';
+require dirname(__DIR__).'/family-private/product-import.php';
+require dirname(__DIR__).'/family-private/sheets.php';
 try {
     $c=config();checkRequest($c);$route=parse_url($_SERVER['REQUEST_URI'],PHP_URL_PATH);$method=$_SERVER['REQUEST_METHOD'];
     if ($route==='/api/access' && $method==='POST') {
@@ -18,11 +24,16 @@ try {
     if(!authorized($c))fail('Nhập mật khẩu truy cập để mở dữ liệu.',401);
     if($route==='/api/access/close'&&$method==='POST'){accessCookie($c,true);reply(['ok'=>true]);}
     $db=db($c);
+    if(str_starts_with($route,'/api/sheets'))sheetsRequest($db,$c,$route,$method);
+    if($route==='/api/vault/sheets-sync'&&$method==='POST')sheetsVaultRequest($db,$c);
     if(str_starts_with($route,'/api/vault/'))vaultRequest($db,$c,$route,$method);
     if($route==='/api/state'||(!in_array($method,['GET','HEAD'],true)))beginAudit($db,auditAction($method,$route),$route==='/api/state'?'Hệ thống':'Cá nhân');
     if($route==='/api/statistics'&&$method==='GET')reply(renewalStatistics($db,$_GET));
     if($route==='/api/journal'&&$method==='GET')reply(journal($db));
     if(preg_match('~^/api/journal/(audit|log)/(\d+)$~D',$route,$p)&&$method==='GET')reply(journalEntry($db,$p[1],(int)$p[2]));
+    if($route==='/api/issues/order'&&$method==='POST')reply(reorderIssues($db,body(262144)));
+    if($route==='/api/other-products/import/preview'&&$method==='POST')reply(productImportPreview($db,body(2000000)));
+    if($route==='/api/other-products/import/confirm'&&$method==='POST')reply(productImportConfirm($db,body(2000000)));
     if(preg_match('~^/api/issues(?:/(\d+))?$~D',$route,$p)&&in_array($method,['POST','PATCH'],true)){
         $id=isset($p[1])?(int)$p[1]:null;if(($method==='POST'&&$id)||($method==='PATCH'&&!$id))fail('Không tìm thấy.',404);reply(saveIssue($db,$id,body()),$id?200:201);
     }
@@ -33,7 +44,7 @@ try {
         sweep($db);$members=array_map(fn($m)=>[...$m,...expiry($m['expires_at'])],all($db,'SELECT m.*,f.name AS family_name,f.service,a.email AS manager_email FROM members m JOIN families f ON f.id=m.family_id JOIN accounts a ON a.id=f.manager_id ORDER BY (CHAR_LENGTH(m.expires_at)=0) ASC,m.expires_at ASC,m.id ASC'));
         $products=array_map(fn($p)=>[...$p,...expiry($p['expires_at'])],all($db,'SELECT * FROM other_purchases ORDER BY id DESC'));$count=fn($rows,$status)=>count(array_filter($rows,fn($r)=>$r['expiry_status']===$status));
         $archives=archives($db);
-        reply(['hosted'=>true,'issues'=>issueList($db),'other_products'=>$products,'other_reminders'=>['due_soon'=>$count($products,'due_soon'),'expired'=>$count($products,'expired')],'accounts'=>all($db,"SELECT a.*,f.id AS family_id,f.name AS family_name,f.service FROM accounts a LEFT JOIN families f ON f.manager_id=a.id AND f.archived_at='' ORDER BY a.id DESC"),'families'=>all($db,"SELECT f.*,a.email AS manager_email FROM families f JOIN accounts a ON a.id=f.manager_id WHERE f.archived_at='' ORDER BY (CHAR_LENGTH(f.trial_date)=0),f.trial_date,f.id DESC"),'archived_families'=>archivedFamilies($db),'members'=>$members,'archives'=>$archives,'archive_mode'=>'immediate','logs'=>all($db,'SELECT * FROM logs ORDER BY id DESC LIMIT 100'),'today'=>today(),'reminders'=>['confirmed_pending'=>count(array_filter($members,'pendingPayment')),'expired'=>$count($members,'expired'),'due_soon'=>$count($members,'due_soon'),'unpaid'=>count(array_filter($members,fn($m)=>in_array($m['payment_status'],['unpaid','partial'],true))),'renewal_waiting'=>count(array_filter($members,fn($m)=>in_array($m['renewal_status'],['awaiting_payment','partial'],true))),'renewal_paid_pending'=>count(array_filter($members,fn($m)=>$m['renewal_status']==='paid'))]]);
+        reply(['hosted'=>true,'sheets_supported'=>true,'updates_supported'=>true,'issues'=>issueList($db),'other_products'=>$products,'other_reminders'=>['due_soon'=>$count($products,'due_soon'),'expired'=>$count($products,'expired')],'accounts'=>all($db,"SELECT a.*,f.id AS family_id,f.name AS family_name,f.service FROM accounts a LEFT JOIN families f ON f.manager_id=a.id AND f.archived_at='' ORDER BY a.id DESC"),'families'=>all($db,"SELECT f.*,a.email AS manager_email FROM families f JOIN accounts a ON a.id=f.manager_id WHERE f.archived_at='' ORDER BY (CHAR_LENGTH(f.trial_date)=0),f.trial_date,f.id DESC"),'archived_families'=>archivedFamilies($db),'members'=>$members,'archives'=>$archives,'archive_mode'=>'immediate','logs'=>all($db,'SELECT * FROM logs ORDER BY id DESC LIMIT 100'),'today'=>today(),'reminders'=>['confirmed_pending'=>count(array_filter($members,'pendingPayment')),'expired'=>$count($members,'expired'),'due_soon'=>$count($members,'due_soon'),'unpaid'=>count(array_filter($members,fn($m)=>in_array($m['payment_status'],['unpaid','partial'],true))),'renewal_waiting'=>count(array_filter($members,fn($m)=>in_array($m['renewal_status'],['awaiting_payment','partial'],true))),'renewal_paid_pending'=>count(array_filter($members,fn($m)=>$m['renewal_status']==='paid'))]]);
     }
     if(preg_match('~^/api/import/(preview|commit)$~D',$route,$p)&&$method==='POST')reply(importCustomers($db,body(2000000),$p[1]==='commit',$c));
     if(preg_match('~^/api/members/(\d+)/transfer$~D',$route,$p)&&$method==='POST')reply(transferMember($db,(int)$p[1],body()));
@@ -56,20 +67,10 @@ try {
         if($method==='PATCH'&&$id){if(!one($db,'SELECT id FROM accounts WHERE id=?',[$id]))fail('Không tìm thấy tài khoản.',404);if(one($db,'SELECT m.id FROM members m JOIN families f ON f.id=m.family_id WHERE f.manager_id=? AND m.email=?',[$id,$address]))fail('Email trùng thành viên của Family.');q($db,'UPDATE accounts SET email=?,note=? WHERE id=?',[$address,$note,$id]);reply(['ok'=>true]);}
     }
     if(preg_match('~^/api/families(?:/(\d+))?$~D',$route,$p)&&in_array($method,['POST','PATCH'],true)){
-        $id=isset($p[1])?(int)$p[1]:null;if(($method==='POST'&&$id)||($method==='PATCH'&&!$id))fail('Không tìm thấy.',404);$d=body();$name=text($d['name']??'',200);if(!$name)fail('Tên không được để trống.');$service=$d['service']??'youtube';if(!in_array($service,['youtube','google_one','google_ai','other'],true))fail('Dịch vụ không hợp lệ.');$note=text($d['note']??'');
-        $result=transaction($db,function()use($db,$id,$d,$name,$service,$note){
-            $old=$id?one($db,'SELECT * FROM families WHERE id=?',[$id]):null;if($id&&(!$old||$old['archived_at']))fail('Không tìm thấy Family đang hoạt động.',404);$trial=calendarDate($d['trial_date']??$old['trial_date']??'');$address=!empty($d['manager_email'])?email($d['manager_email']):null;$manager=$address?one($db,'SELECT * FROM accounts WHERE email=?',[$address]):one($db,'SELECT * FROM accounts WHERE id=?',[(int)($d['manager_id']??0)]);
-            if(!$manager&&$address){q($db,'INSERT INTO accounts(email,note,created_at) VALUES (?,?,?)',[$address,'',stamp()]);$manager=['id'=>(int)$db->lastInsertId(),'email'=>$address];}if(!$manager)fail('Nhập email quản lý Family hợp lệ.');
-            if($id){if(one($db,'SELECT id FROM members WHERE family_id=? AND email=?',[$id,$manager['email']]))fail('Email quản lý trùng một khách trong nhóm.');q($db,'UPDATE families SET name=?,manager_id=?,service=?,note=?,trial_date=? WHERE id=?',[$name,$manager['id'],$service,$note,$trial,$id]);$oldMail=one($db,'SELECT email FROM accounts WHERE id=?',[$old['manager_id']])['email'];if($oldMail!==$manager['email'])logEntry($db,"Cá nhân: đổi mail Family #$id từ $oldMail sang {$manager['email']}");logEntry($db,"Cá nhân: sửa Family #$id");return ['ok'=>true];}
-            q($db,'INSERT INTO families(name,manager_id,service,note,created_at,trial_date) VALUES (?,?,?,?,?,?)',[$name,$manager['id'],$service,$note,stamp(),$trial]);$new=(int)$db->lastInsertId();logEntry($db,"Cá nhân: tạo Family $name");return ['id'=>$new];
-        });reply($result,$id?200:201);
+        $id=isset($p[1])?(int)$p[1]:null;if(($method==='POST'&&$id)||($method==='PATCH'&&!$id))fail('Không tìm thấy.',404);reply(saveFamilyRecord($db,$id,body()),$id?200:201);
     }
     if(preg_match('~^/api/members(?:/(\d+))?$~D',$route,$p)&&in_array($method,['POST','PATCH'],true)){
-        $id=isset($p[1])?(int)$p[1]:null;if(($method==='POST'&&$id)||($method==='PATCH'&&!$id))fail('Không tìm thấy.',404);$d=body();$v=memberValues($d);if(!$id&&!$v[4]&&$v[3]&&$v[8])$v[4]=purchaseExpiry($v[3],$v[8]);$old=$id?one($db,'SELECT * FROM members WHERE id=?',[$id]):null;if($id&&!$old)fail('Không tìm thấy khách.',404);
-        $family=one($db,'SELECT f.*,a.email FROM families f JOIN accounts a ON a.id=f.manager_id WHERE f.id=?',[$old['family_id']??(int)($d['family_id']??0)]);if(!$family||$family['archived_at'])fail('Không tìm thấy Family đang hoạt động.');if($v[0]===$family['email'])fail('Email khách trùng tài khoản quản lý.');
-        if($v[9]!=='invited'&&one($db,"SELECT COUNT(*) AS n FROM members WHERE family_id=? AND id!=? AND membership_status!='invited'",[$family['id'],$id??0])['n']>=5)fail('Family đã đủ 5 khách.');
-        if($id){q($db,'UPDATE members SET email=?,customer_name=?,contact=?,joined_at=?,expires_at=?,payment_status=?,amount=?,note=?,plan_months=?,membership_status=?,renewal_revision=renewal_revision+1 WHERE id=?',[...$v,$id]);logEntry($db,"Cá nhân: cập nhật khách #$id");reply(['ok'=>true]);}
-        q($db,'INSERT INTO members(family_id,email,customer_name,contact,joined_at,expires_at,payment_status,amount,note,plan_months,membership_status) VALUES (?,?,?,?,?,?,?,?,?,?,?)',[$family['id'],...$v]);$new=(int)$db->lastInsertId();logEntry($db,"Cá nhân: thêm khách {$v[0]}");reply(['id'=>$new],201);
+        $id=isset($p[1])?(int)$p[1]:null;if(($method==='POST'&&$id)||($method==='PATCH'&&!$id))fail('Không tìm thấy.',404);reply(saveMemberRecord($db,$id,body()),$id?200:201);
     }
     if(preg_match('~^/api/(accounts|families|members)/(\d+)$~D',$route,$p)&&$method==='DELETE'){
         $table=$p[1];$id=(int)$p[2];if(!one($db,"SELECT id FROM `$table` WHERE id=?",[$id]))fail('Không tìm thấy hồ sơ.',404);if($table==='accounts'&&one($db,'SELECT id FROM families WHERE manager_id=?',[$id]))fail('Hãy xóa hồ sơ Family liên quan trước.');if($table==='members')reply(archiveMember($db,$id));if($table==='families')reply(archiveFamily($db,$id));q($db,"DELETE FROM `$table` WHERE id=?",[$id]);logEntry($db,"Cá nhân: xóa hồ sơ $table #$id");reply(['ok'=>true]);

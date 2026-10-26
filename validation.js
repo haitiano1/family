@@ -19,7 +19,8 @@ function memberData(data) {
   const payment = data.payment_status || 'unpaid'; if (!['unknown','unpaid', 'paid', 'partial'].includes(payment)) fail('Trạng thái thanh toán không hợp lệ.');
   const amount = Number(data.amount || 0); if (!Number.isSafeInteger(amount) || amount < 0 || amount > 1000000000) fail('Số tiền phải là số nguyên từ 0 đến 1 tỷ đồng.');
   const plan = Number(data.plan_months || 0); if (!Number.isInteger(plan) || plan < 0 || plan > 120) fail('Gói mua cần từ 1 đến 120 tháng hoặc để chưa đặt.');
-  const membership = data.membership_status || 'unknown'; if (!['unknown','active','invited'].includes(membership)) fail('Trạng thái thành viên không hợp lệ.');
+  const membership = data.membership_status || 'unknown'; if (!['unknown','active','invited','new'].includes(membership)) fail('Trạng thái thành viên không hợp lệ.');
+  if(membership==='new'&&!joined)fail('Nhập Ngày mua để ghi nhận khách Mua mới.');
   return [email(data.email), text(data.customer_name, 200), text(data.contact, 1000), joined, expires, payment, amount, text(data.note), plan, membership];
 }
 return { email,text,label,service,calendarDate,memberData };

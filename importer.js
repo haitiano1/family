@@ -1,3 +1,4 @@
+import {recordNewPurchase} from './purchases.js';
 import { createHmac, randomBytes } from 'node:crypto';
 import { parseCSV, importFields, normalizeHeader } from './public/csv.js';
 export function initImporter(db, { fail, email, text, memberData, log }) {
@@ -89,7 +90,7 @@ export function initImporter(db, { fail, email, text, memberData, log }) {
         item.values = memberData(values); item.member_id = existing?.id;
         const before = existing && existing.membership_status !== 'invited' ? 1 : 0;
         const after = item.values[9] !== 'invited' ? 1 : 0;
-        if (counts.get(group.key) - before + after > 5) fail('Family đã đủ 5 khách và 1 quản lý.');
+        if (after > before && counts.get(group.key) - before + after > 5) fail('Family đã đủ 5 khách và 1 quản lý.');
         counts.set(group.key, counts.get(group.key) - before + after);
         item.status = existing ? 'update' : 'create'; item.message = existing ? 'Cập nhật trường đã chọn, giữ dữ liệu ô trống.' : 'Thêm khách mới.';
       } catch (error) { if (!error.status) throw error; item.message = error.message; }
@@ -115,8 +116,8 @@ export function initImporter(db, { fail, email, text, memberData, log }) {
           const id = Number(db.prepare('INSERT INTO families(name,manager_id,service,note,created_at) VALUES (?,?,?,?,?)').run(g.name,accountId,'youtube','',new Date().toISOString()).lastInsertRowid); groupIds.set(g.key,id);
         }
         for (const row of plan.items) {
-          if (row.status === 'create') db.prepare('INSERT INTO members(family_id,email,customer_name,contact,joined_at,expires_at,payment_status,amount,note,plan_months,membership_status) VALUES (?,?,?,?,?,?,?,?,?,?,?)').run(groupIds.get(row.group_key) || Number(row.group_key),...row.values);
-          else if (row.status === 'update') db.prepare('UPDATE members SET email=?,customer_name=?,contact=?,joined_at=?,expires_at=?,payment_status=?,amount=?,note=?,plan_months=?,membership_status=?,renewal_revision=renewal_revision+1 WHERE id=?').run(...row.values,row.member_id);
+          if (row.status === 'create') {const inserted=db.prepare('INSERT INTO members(family_id,email,customer_name,contact,joined_at,expires_at,payment_status,amount,note,plan_months,membership_status) VALUES (?,?,?,?,?,?,?,?,?,?,?)').run(groupIds.get(row.group_key) || Number(row.group_key),...row.values);recordNewPurchase(db,Number(inserted.lastInsertRowid));}
+          else if (row.status === 'update') {db.prepare('UPDATE members SET email=?,customer_name=?,contact=?,joined_at=?,expires_at=?,payment_status=?,amount=?,note=?,plan_months=?,membership_status=?,renewal_revision=renewal_revision+1 WHERE id=?').run(...row.values,row.member_id);recordNewPurchase(db,row.member_id);}
         }
         log(`${user.username}: nhập CSV ${plan.summary.create} khách mới, ${plan.summary.update} cập nhật, ${plan.summary.skip} bỏ qua, ${plan.summary.new_families} Family mới`);
       }

@@ -12,7 +12,6 @@ export function initTransfers(db,{fail,email,log}) {
     if(family.id===member.family_id)fail('Khách đã ở Family này. Chọn Family khác.');
     if(member.email===family.email)fail('Email khách trùng mail chủ Family nhận khách.');
     if(one('SELECT id FROM members WHERE family_id=? AND email=?',family.id,member.email))fail('Email khách đã có trong Family nhận khách.',409);
-    if(member.membership_status!=='invited'&&one("SELECT COUNT(*) AS n FROM members WHERE family_id=? AND membership_status!='invited'",family.id).n>=5)fail('Family nhận khách đã đủ 5 thành viên đang ghi nhận.');
     db.prepare('UPDATE members SET family_id=?,renewal_revision=renewal_revision+1 WHERE id=?').run(family.id,member.id);
     const removed=Number(db.prepare("DELETE FROM issues WHERE family_id=? AND target_type='member' AND target_id=? AND (subject_email=? OR original_email=?)").run(member.family_id,member.id,member.email,member.email).changes);
     log(`Cá nhân: chuyển khách ${member.email} từ ${member.family_name} (${member.manager_email}) sang ${family.name} (${family.email})${removed?` · xóa ${removed} case lỗi của khách`:""}`);

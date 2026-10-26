@@ -1,6 +1,7 @@
 <?php
 declare(strict_types=1);
 ini_set('display_errors','0');
+const FAMILY_DATA_SCHEMA_VERSION=8;
 class FamilyError extends RuntimeException {
     public function __construct(string $message, public int $status=400) {parent::__construct($message);}
 }
@@ -44,9 +45,22 @@ function accessCookie(array $c,bool $close=false): void {
 function db(array $c): PDO {
     try {$db=new PDO('mysql:host='.$c['db_host'].';port='.($c['db_port']??3306).';dbname='.$c['db_name'].';charset=utf8mb4',$c['db_user'],$c['db_password'],[PDO::ATTR_ERRMODE=>PDO::ERRMODE_EXCEPTION,PDO::ATTR_DEFAULT_FETCH_MODE=>PDO::FETCH_ASSOC,PDO::ATTR_EMULATE_PREPARES=>false]);}
     catch (PDOException $e) {error_log('Family database connection failed.');fail('Không kết nối được MySQL. Kiểm tra cấu hình database của website Family.',503);}
-    if ((int)q($db,'SELECT GET_LOCK(?,10) AS ok',['family:'.$c['db_name']])->fetch()['ok']!==1) fail('Ứng dụng đang xử lý dữ liệu. Thử lại sau ít giây.',503);
+    databaseLock($db,$c);
     initializeSchema($db);
     return $db;
+}
+// Named locks are connection-scoped; do not recursively acquire the same lock.
+function databaseOwnsLock(PDO $db,array $c): bool {
+    $row=q($db,'SELECT IS_USED_LOCK(?) AS owner,CONNECTION_ID() AS current_id',['family:'.$c['db_name']])->fetch();
+    return $row['owner']!==null&&(string)$row['owner']===(string)$row['current_id'];
+}
+function databaseLock(PDO $db,array $c,int $wait=10): void {
+    if(databaseOwnsLock($db,$c))return;
+    if((int)q($db,'SELECT GET_LOCK(?,?) AS ok',['family:'.$c['db_name'],$wait])->fetch()['ok']!==1)fail('Ứng dụng đang xử lý dữ liệu. Thử lại sau ít giây.',503);
+}
+function databaseUnlock(PDO $db,array $c): void {
+    if($db->inTransaction())throw new RuntimeException('Cannot release the application lock during a transaction.');
+    if(databaseOwnsLock($db,$c))q($db,'SELECT RELEASE_LOCK(?)',['family:'.$c['db_name']]);
 }
 function q(PDO $db,string $sql,array $args=[]): PDOStatement {$stmt=$db->prepare($sql);$stmt->execute($args);return $stmt;}
 function one(PDO $db,string $sql,array $args=[]): array|false {return q($db,$sql,$args)->fetch();}
@@ -82,7 +96,8 @@ function integer(mixed $value,int $min,int $max,string $message): int {
 function memberValues(array $d): array {
     $joined=calendarDate($d['joined_at']??'');$expires=calendarDate($d['expires_at']??'');if ($joined && $expires && $expires<$joined) fail('Ngày hết hạn phải từ ngày mua trở đi.');
     $payment=$d['payment_status']??'unpaid';if (!in_array($payment,['unknown','unpaid','partial','paid'],true)) fail('Trạng thái thanh toán không hợp lệ.');
-    $membership=$d['membership_status']??'unknown';if (!in_array($membership,['unknown','active','invited'],true)) fail('Trạng thái thành viên không hợp lệ.');
+    $membership=$d['membership_status']??'unknown';if (!in_array($membership,['unknown','active','invited','new'],true)) fail('Trạng thái thành viên không hợp lệ.');
+    if($membership==='new'&&!$joined)fail('Nhập Ngày mua để ghi nhận khách Mua mới.');
     return [email($d['email']??''),text($d['customer_name']??'',200),text($d['contact']??''),$joined,$expires,$payment,integer($d['amount']??0,0,1000000000,'Số tiền từ 0 đến 1 tỷ VND.'),text($d['note']??''),integer($d['plan_months']??0,0,120,'Gói mua cần từ 1 đến 120 tháng hoặc để chưa đặt.'),$membership];
 }
 function expiry(string $value): array {
@@ -99,16 +114,16 @@ function initializeSchema(PDO $db): void {
     if ($tables && !in_array('app_meta',$tables,true)) fail('Database đang chứa dữ liệu khác. Tạo database trống riêng cho Family.',503);
     if (in_array('app_meta',$tables,true)) {
         $version=one($db,"SELECT value FROM app_meta WHERE name='schema_version'");
-        if (($version['value']??'')==='6') return;
-        if ($version && !in_array($version['value'],['1','2','3','4','5'],true)) fail('Database dùng phiên bản khác. Hãy dùng mã nguồn tương ứng.',503);
+        if (($version['value']??'')===(string)FAMILY_DATA_SCHEMA_VERSION) return;
+        if ($version && !in_array($version['value'],['1','2','3','4','5','6','7'],true)) fail('Database dùng phiên bản khác. Hãy dùng mã nguồn tương ứng.',503);
     }
     foreach(explode(';',file_get_contents(__DIR__.'/schema.sql')) as $sql) if (trim($sql)) $db->exec($sql);
     foreach(explode(';',file_get_contents(__DIR__.'/features.sql')) as $sql)if(trim($sql))$db->exec($sql);
     foreach(['families'=>['trial_date'],'issues'=>['trial_date','reported_on']]as $table=>$fields){$known=array_column(all($db,"SHOW COLUMNS FROM `$table`"),'Field');foreach($fields as $field)if(!in_array($field,$known,true))$db->exec("ALTER TABLE `$table` ADD COLUMN `$field` VARCHAR(10) NOT NULL DEFAULT ''");}
-    foreach(['families'=>['archived_at'=>"VARCHAR(32) NOT NULL DEFAULT ''"],'archived_customers'=>['family_archive_id'=>'BIGINT NULL'],'other_purchases'=>['plan_months'=>'INT NOT NULL DEFAULT 0']] as $table=>$fields){$known=array_column(all($db,"SHOW COLUMNS FROM `$table`"),'Field');foreach($fields as $field=>$type)if(!in_array($field,$known,true))$db->exec("ALTER TABLE `$table` ADD COLUMN `$field` $type");}
+    foreach(['families'=>['archived_at'=>"VARCHAR(32) NOT NULL DEFAULT ''"],'archived_customers'=>['family_archive_id'=>'BIGINT NULL'],'other_purchases'=>['plan_months'=>'INT NOT NULL DEFAULT 0','purchase_source'=>"VARCHAR(200) NOT NULL DEFAULT ''"]] as $table=>$fields){$known=array_column(all($db,"SHOW COLUMNS FROM `$table`"),'Field');foreach($fields as $field=>$type)if(!in_array($field,$known,true))$db->exec("ALTER TABLE `$table` ADD COLUMN `$field` $type");}
     foreach(explode(';',file_get_contents(__DIR__.'/vault.sql')) as $sql)if(trim($sql))$db->exec($sql);
     if(!in_array('family_id',array_column(all($db,'SHOW COLUMNS FROM vault_items'),'Field'),true))$db->exec('ALTER TABLE vault_items ADD COLUMN family_id INT NULL, ADD UNIQUE KEY vault_family_link(family_id), ADD CONSTRAINT vault_family_fk FOREIGN KEY(family_id) REFERENCES families(id)');
-    q($db,"INSERT INTO app_meta(name,value) VALUES ('schema_version','6') ON DUPLICATE KEY UPDATE value='6'");
+    q($db,"INSERT INTO app_meta(name,value) VALUES ('schema_version',?) ON DUPLICATE KEY UPDATE value=VALUES(value)",[(string)FAMILY_DATA_SCHEMA_VERSION]);
 }
 function errorReply(Throwable $e): never {
     if ($e instanceof FamilyError) reply(['error'=>$e->getMessage()],$e->status);

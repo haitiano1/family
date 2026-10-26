@@ -1,6 +1,38 @@
-# YouTube Family — Quản lý khách hàng 0.14.2
+# YouTube Family — Quản lý khách hàng 0.20.1
+
+Bản 0.20.1 cho phép hoàn tất Fix lỗi bằng mail đã nhập vào Kho từ Sheet, giữ thông tin tài khoản mới và lưu trữ mail cũ. Xem [đổi mail từ Kho](hosting/php/DOI-MAIL-TU-KHO.md).
+
+Bản 0.20.0 thêm trạng thái/lịch sử đồng bộ, sắp xếp case, nhập Sheet sản phẩm và Nguồn mua. Xem [hướng dẫn cập nhật](hosting/php/DONG-BO-VA-SAN-PHAM.md).
+
+Bản 0.19.0 làm mới giao diện theo phong cách dịch vụ số: Tổng quan tập trung việc hôm nay, menu gọn, bảng và form dễ đọc, điều hướng dưới cùng trên điện thoại. Xem [cập nhật giao diện](hosting/php/GIAO-DIEN-HIEN-DAI.md).
+
+Bản 0.18.1 sửa ngày nhận tiền gia hạn: Chờ thanh toán để trống ngày nhận tiền; khi chuyển sang Đã thanh toán, mặc định ngày hiện tại theo giờ Việt Nam. Xem [hướng dẫn cập nhật](hosting/php/NGAY-NHAN-TIEN-GIA-HAN.md).
+
+Bản 0.18.0 hiển thị slot Family theo x/5, tách khách Đã mời, chưa vào, và cho phép chuyển khách vào nhóm đã đủ/vượt 5. Bộ lọc Fam dư slot dùng số khách chiếm slot; xem [slot và chuyển Family](hosting/php/SLOT-VA-CHUYEN-FAMILY.md).
 
 Ứng dụng quản lý cho cá nhân: **mở web là vào Tổng quan**, không cần tài khoản đăng nhập. Tập trung quản lý khách YouTube, Family, gia hạn và sản phẩm bán thêm. Không còn các mục admin, bảo mật tài khoản, Jobs hoặc thao tác Google. Có bản **PHP + MySQL dành cho Hostinger Premium** và bản Node.js chạy Windows/VPS. Có thể thêm biểu tượng vào màn hình chính iPhone; xem [hướng dẫn Hostinger](HOSTINGER.md). Bản hosting dùng một mật khẩu truy cập chung, không có tài khoản/role admin.
+
+Tab Khách Google Sheet có bản rút gọn 7 cột: ngày dd/mm/yyyy, Còn ngày = hạn − TODAY() − 2; giữ dữ liệu thanh toán/gia hạn trong phần kỹ thuật ẩn và quản lý trên web. Xem [cách áp dụng vào Sheet hiện tại](integrations/google-sheets/GON-COT-VA-CON-NGAY.md).
+
+Tab Kho Google Sheet hỗ trợ nhập tài khoản mới trực tiếp: một dòng tạo cả Family và tài khoản Kho khi web đang mở khóa ở mục Kho. Ngày trial dd/mm/yyyy; ID ẩn tự cấp; chống tạo trùng khi thử lại. Cần cập nhật cả PHP và Apps Script v5; xem [hướng dẫn nhập tài khoản](integrations/google-sheets/NHAP-TAI-KHOAN.md).
+
+Apps Script v5.7 bỏ qua dòng Kho đã xóa toàn bộ phần nhập nhưng còn ID ẩn, tránh chặn đồng bộ vì thiếu Email. Xem [bản sửa dòng Kho trống](integrations/google-sheets/SUA-DONG-KHO-TRONG.md); kết nối hiện tại chỉ cần thay script và cập nhật bản triển khai đang dùng.
+
+Bản PHP 0.17.1 nối lại MySQL khi kết nối bị đóng trong lúc chờ Google, kiểm tra lại khóa/mốc dữ liệu và giữ phản hồi đã được xác nhận. Xem [bản sửa mất kết nối MySQL](integrations/google-sheets/SUA-MAT-KET-NOI-MYSQL.md); website đã dùng bộ đồng bộ hiện tại chỉ cần cập nhật sheets.php.
+
+Các tab đồng bộ nên dùng vùng ô thường. Google Table có thể chặn ghi vì kiểu cột/định dạng hoặc xác thực dữ liệu; đã xác nhận việc chuyển Bảng_2 ở tab Family về vùng ô thường giúp đồng bộ thành công. Khi đã đồng bộ được bằng v5.7, giữ nguyên script và kết nối; xem [ghi Family và Google Table](integrations/google-sheets/SUA-GHI-FAMILY-TABLE.md).
+
+## Bản 0.15.1: sửa chờ database khi đồng bộ
+
+Không giữ khóa database trong khi chờ Google; các tab đồng bộ dùng khóa riêng, còn đọc/sửa khách tiếp tục hoạt động. Giữ các thay đổi web phát sinh trong lúc gửi, và bỏ lượt ghi Google nếu dữ liệu/bố cục không đổi. Xem [hướng dẫn cập nhật bản sửa khóa](integrations/google-sheets/SUA-KHOA-DATABASE.md). Không cần đổi URL /exec hoặc triển khai lại Apps Script.
+
+## Bản 0.15.0: việc cần làm và đồng bộ Google Sheet
+
+Tổng quan tập trung vào hạn/thanh toán cần xử lý, điều hướng có mục Thêm, thao tác phụ nằm trong menu “…”. Danh sách Khách/Family/Sản phẩm có 25 hồ sơ mỗi trang, tìm không dấu và giữ trang/bộ lọc/vị trí cuộn khi quay lại trong cùng phiên.
+
+**Bản PHP trên Hostinger** có kết nối Google Sheet hai chiều qua Apps Script do chủ tài khoản tự triển khai. Có thể tạo Sheet mới từ dữ liệu website, không cần bố cục Sheet cũ. Family/khách/hạn/thanh toán được kiểm tra mỗi 30 giây khi web mở; Kho chỉ đồng bộ khi đang mở khóa và đang ở mục Kho. Mật khẩu/khóa 2FA đọc được trên Sheet theo lựa chọn của người dùng, vẫn mã hóa trong database website. Xung đột cần chọn bản giữ; xóa dòng Sheet không xóa dữ liệu web. Sửa ngày/tiền trên Sheet không tự ghi lịch sử gia hạn; gia hạn dùng luồng Gia hạn trên web.
+
+Xem [hướng dẫn kết nối từng bước](integrations/google-sheets/HUONG-DAN.md). Cần cấp quyền Google, triển khai Apps Script, rồi điền URL /exec và mã kết nối trên website; không gửi bí mật qua chat. Chưa có đồng bộ Sheet cho backend Node. Việc có mã nguồn/gói ZIP không có nghĩa tài khoản Google hoặc website Hostinger đã kết nối.
 
 ## Chạy trên Hostinger Premium
 
@@ -23,7 +55,7 @@ Lần sau chạy lại START-WINDOWS.cmd và mở cùng địa chỉ. Nếu `EAD
 3. Tải ZIP mới, giải nén riêng và sao chép toàn bộ nội dung bên trong thư mục mới sang thư mục ứng dụng cũ. Thay thế tệp trùng tên, **giữ nguyên thư mục data**.
 4. Chạy START-WINDOWS.cmd và nhấn **Ctrl+F5** trên trình duyệt.
 
-Dữ liệu khách, Family, Contact, thanh toán, gia hạn, lưu trữ và bản sao cũ được giữ. Startup nâng cấp SQLite bằng thay đổi cộng thêm, sao lưu trước nâng cấp vào `data/before-v14-*.sqlite`. Dữ liệu admin/Jobs cũ, nếu có, vẫn nằm trong bản dữ liệu cũ nhưng không được ứng dụng mới sử dụng hoặc trả qua API. Không cần tạo admin hoặc đăng nhập sau cập nhật. Bookmark cũ đến các trang đã bỏ được đưa về Tổng quan.
+Dữ liệu khách, Family, Contact, thanh toán, gia hạn, lưu trữ và bản sao cũ được giữ. Startup nâng cấp SQLite bằng thay đổi cộng thêm, sao lưu trước nâng cấp vào `data/before-v15-*.sqlite`. Dữ liệu admin/Jobs cũ, nếu có, vẫn nằm trong bản dữ liệu cũ nhưng không được ứng dụng mới sử dụng hoặc trả qua API. Không cần tạo admin hoặc đăng nhập sau cập nhật. Bookmark cũ đến các trang đã bỏ được đưa về Tổng quan.
 
 ## Chuyển dữ liệu từ bản Windows cũ mà không cập nhật ứng dụng
 
@@ -34,7 +66,7 @@ Bạn vẫn dùng **IMPORT-CSV-WINDOWS.cmd** trong thư mục cũ để nhập C
 3. Đóng server, nhấp đúp **EXPORT-BACKUP-WINDOWS.cmd**. Khi có **Export complete**, một file `family-backup-…json` xuất hiện ngay trong thư mục đó; cửa sổ báo số khách/Family/lịch sử/lưu trữ/sản phẩm.
 4. Mở website Family trên Hostinger → **Sao lưu / Chuyển dữ liệu**, chọn JSON vừa tạo → **Khôi phục dữ liệu** vào ứng dụng trống.
 
-Exporter tự chạy bằng Node24+, không dùng source app khác, mở SQLite **read-only**, không upgrade/thay đổi database gốc, không ghi đè file backup có sẵn. Hỗ trợ schema0–14; bảng/field không tồn tại được bổ sung vào JSON bằng ô trống/default cần thiết, không đoán ngày mua/hạn. Admin/jobs/mật khẩu ứng dụng cũ không được chuyển. Original Contact/notes/history/archive snapshots được giữ. Không tải file SQLite/JSON chứa khách vào File Manager hoặc GitHub; nhập JSON qua ứng dụng đã mở bằng mật khẩu. Hai bản Windows/hosting không tự đồng bộ; dùng địa chỉ hosting sau chuyển.
+Exporter tự chạy bằng Node24+, không dùng source app khác, mở SQLite **read-only**, không upgrade/thay đổi database gốc, không ghi đè file backup có sẵn. Hỗ trợ schema0–15; bảng/field không tồn tại được bổ sung vào JSON bằng ô trống/default cần thiết, không đoán ngày mua/hạn. Admin/jobs/mật khẩu ứng dụng cũ không được chuyển. Original Contact/notes/history/archive snapshots được giữ. Không tải file SQLite/JSON chứa khách vào File Manager hoặc GitHub; nhập JSON qua ứng dụng đã mở bằng mật khẩu. Hai bản Windows/hosting không tự đồng bộ; dùng địa chỉ hosting sau chuyển.
 
 ## Khách hàng và Family
 
@@ -146,7 +178,7 @@ Bảng **Chờ fix → Đang fix → Đã fix** hỗ trợ kéo thả, chọn tr
 
 **Nhật ký** tìm kiếm/phân trang, lưu thời gian/người thao tác/nội dung và **Xem chi tiết trước-sau** cho các thay đổi từ bản này. Ghi thêm/sửa/xóa/import/gia hạn/lưu trữ/khôi phục/sửa lỗi/đổi mail; không ghi refresh/xem trang. Khi xóa Family, cả hồ sơ nhóm và khách được chuyển vào lưu trữ; nhật ký ghi thay đổi và hồ sơ khách đã lưu. Log cũ vẫn đọc được; dữ liệu trước-sau không thể tạo lại cho thao tác đã xảy ra trước bản cập nhật. Nhật ký hiện giúp đối chiếu, chưa có hoàn tác tự động. Bản sao lưu hiện tại v6 giữ lỗi/nhật ký/ngày trial, Family lưu trữ, sản phẩm phụ và kho đã mã hóa; vẫn nhận v1–v6.
 
-Cập nhật Hostinger bằng [gói cập nhật riêng](https://github.com/haitiano1/family/raw/refs/heads/main/downloads/family-hostinger-update.zip) và [hướng dẫn](hosting/php/UPDATE.md), giữ nguyên config.php/database. Không cần nhập lại khách. MySQL schema1–5 nâng cấp cộng thêm lên6; Node schema14 sao lưu before-v14 trước nâng cấp. Exporter độc lập hỗ trợ schema0–14.
+Cập nhật Hostinger bằng [gói cập nhật riêng](https://github.com/haitiano1/family/raw/refs/heads/main/downloads/family-hostinger-update.zip) và [hướng dẫn](hosting/php/UPDATE.md), giữ nguyên config.php/database. Không cần nhập lại khách. MySQL schema1–6 nâng cấp cộng thêm lên7; Node schema15 sao lưu before-v15 trước nâng cấp. Exporter độc lập hỗ trợ schema0–15.
 
 ## Bộ lọc và thao tác khách (bản0.8)
 
@@ -233,3 +265,17 @@ Chế độ hosting: cần `HOST=0.0.0.0`, `PUBLIC_ORIGIN=https://dia-chi-websit
 Trên iPhone: mở địa chỉ HTTPS bằng Safari → Chia sẻ → Thêm vào Màn hình chính → Thêm. Có icon và chế độ mở riêng như ứng dụng. Cần Internet, chưa có thông báo đẩy hoặc làm việc offline; nhắc hạn hiển thị khi mở Tổng quan. Không cần đưa lên App Store.
 
 Kiểm thử dùng SQLite tạm: CRUD, nhập CSV, chống trùng/thay đổi khi xem trước, nâng cấp dữ liệu cũ, kỳ gia hạn từ hạn cũ, lưu trữ/khôi phục, mở trực tiếp không đăng nhập, tạo Family bằng email, sản phẩm phụ và nhắc hạn. Có thêm kiểm thử truy cập hosting, asset iPhone, sao lưu/khôi phục đầy đủ và tránh ghi đè. Windows batch chưa được chạy trên Linux; phần nhập Node đã được kiểm thử độc lập.
+
+## Thống kê mua mới và kỳ gia hạn (0.16.0)
+
+Chọn trạng thái thành viên **Mua mới** để lưu lượt mua đầu vào tháng của Ngày mua. Lịch sử này giữ nguyên khi đổi trạng thái, gia hạn hoặc lưu trữ khách. Trang Thống kê hiển thị Khách mua mới dưới lịch sử gia hạn; 6 tháng gần nhất mở/đóng bằng menu thu gọn.
+
+Gia hạn chỉ tính sau khi trả đủ và xác nhận hạn mới, vào tháng của **hạn cũ**. Hạn 10/09, nhận tiền 21/10, gia hạn 3 tháng vẫn ra kỳ 10/09–10/12 và thống kê tháng 9. Ngày nhận tiền/ngày xác nhận vẫn giữ riêng. Quy tắc này thay thế cách phân tháng theo thời điểm xác nhận của các phiên bản cũ.
+
+Bản cập nhật Hostinger và quy tắc ghi nhận chi tiết: [THONG-KE-MUA-MOI.md](hosting/php/THONG-KE-MUA-MOI.md). Sao lưu v8 thêm lịch sử mua mới; khôi phục vẫn hỗ trợ v1–v7.
+
+## Cập nhật một chạm trên Hostinger (0.17.0)
+
+Cài gói kích hoạt một lần rồi dùng nút **Cập nhật một chạm** để tải bản ổn định từ GitHub Releases `haitiano1/family`. Bộ cài kiểm tra gói, sao lưu dữ liệu/mã, giữ cấu hình và kết nối Sheet, khóa yêu cầu ứng dụng khi thay mã và khôi phục mã nếu kiểm tra khởi động thất bại. Chỉ tự áp dụng gói cùng cấu trúc database; Apps Script và bộ khôi phục nền có quy trình riêng.
+
+Mã cần được đưa lên main và phát hành bằng workflow thủ công **Phát hành Family PHP** trước khi website nhìn thấy bản mới. Tạo gói trong workspace không phải là phát hành. Xem [CAP-NHAT-MOT-CHAM.md](hosting/php/CAP-NHAT-MOT-CHAM.md). Đóng gói: `python3 scripts/package-php.py`, sau đó `python3 scripts/package-release.py`. Kiểm thử PHP với image có sẵn có thể dùng `FAMILY_PHP_USE_EXISTING_IMAGE=1`; mặc định bộ test dựng image từ Dockerfile.

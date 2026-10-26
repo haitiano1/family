@@ -1,0 +1,114 @@
+/* Sheet health and history: operational status without exposing account values. */
+.header-tools-group { display: flex; align-items: center; justify-content: flex-end; gap: 12px; min-width: 0; margin-left: auto; }
+#sheet-health-slot { min-width: 0; margin-left: auto; }
+.sheet-health { display: flex; align-items: center; gap: 9px; min-height: 44px; max-width: 270px; padding: 8px 11px; color: #405774; background: #f7f9fc; border: 1px solid #dce5f0; border-radius: 11px; text-align: left; }
+.sheet-health-icon { display: grid; place-items: center; flex: 0 0 auto; }
+.sheet-health-icon svg { width: 19px; height: 19px; }
+.sheet-health-copy { min-width: 0; }
+.sheet-health-copy strong, .sheet-health-copy small { display: block; }
+.sheet-health-copy strong { font-size: 11px; line-height: 1.4; font-weight: 700; }
+.sheet-health-copy small { font-size: 10px; line-height: 1.45; margin-top: 2px; font-weight: 500; }
+.sheet-health-dot { width: 7px; height: 7px; border-radius: 50%; background: currentColor; flex-shrink: 0; margin-left: 2px; }
+.sheet-health--success { color: #226445; background: #f0f8f3; border-color: #d9ebdf; }
+.sheet-health--error { color: #a33337; background: #fff2f1; border-color: #f1d5d2; }
+.sheet-health--conflict, .sheet-health--queued { color: #815811; background: #fff8e9; border-color: #eddfbf; }
+.sheet-health--running { color: #2354b2; background: #edf3ff; border-color: #d8e3fa; }
+.sheet-health--running .sheet-health-icon svg { animation: sheet-working 1.6s linear infinite; }
+@keyframes sheet-working { to { transform: rotate(360deg); } }
+#sheets-dialog { width: min(760px, calc(100vw - 28px)); }
+#sheets-dialog .sheet-dialog-intro { margin: 3px 0 18px; color: #526782; }
+.sheet-panel-tabs { display: flex; gap: 7px; padding: 5px; margin: 15px 0 18px; border: 1px solid #e0e8f2; border-radius: 12px; background: #f5f8fc; }
+.sheet-panel-tabs button { flex: 1; min-height: 44px; padding: 10px; color: #536982; background: transparent; border-radius: 8px; font-size: 13px; }
+.sheet-panel-tabs button.active { color: #1c4fb5; background: white; box-shadow: 0 2px 8px rgb(28 54 94 / 8%); }
+#sheets-message:empty { display: none; }
+#sheets-message:not(:empty) { padding: 11px 13px; margin: 8px 0 17px; background: #fff4f1; border: 1px solid #f2d8d1; border-radius: 10px; }
+.sheet-scope-cards { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 13px; margin: 0 0 18px; }
+.sheet-scope-card { min-width: 0; border: 1px solid #e0e7f0; background: #fbfcfe; border-radius: 13px; padding: 15px; }
+.sheet-scope-card--error { border-color: #f0d3d0; background: #fffafa; }
+.sheet-scope-card--conflict { border-color: #eddfbf; background: #fffdf7; }
+.sheet-scope-heading { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; justify-content: space-between; }
+.sheet-scope-heading h3 { margin: 0; color: #173254; font-size: 13px; }
+.sheet-state-badge { display: inline-flex; align-items: center; min-height: 25px; padding: 4px 7px; border-radius: 7px; color: #52657b; background: #edf1f6; font-size: 10px; font-weight: 700; line-height: 1.4; }
+.sheet-state-badge--success { color: #226445; background: #e8f5ed; }
+.sheet-state-badge--error { color: #a33337; background: #ffeded; }
+.sheet-state-badge--running { color: #2453aa; background: #eaf1ff; }
+.sheet-state-badge--conflict, .sheet-state-badge--queued { color: #815811; background: #fff3d6; }
+#sheets-dialog .sheet-last-success { font-size: 11px; line-height: 1.7; margin: 13px 0 0; }
+.sheet-last-success strong { display: inline-block; color: #253f60; font-size: 12px; margin-top: 2px; font-variant-numeric: tabular-nums; }
+#sheets-dialog .sheet-vault-paused { font-size: 11px; color: #526782; border-top: 1px solid #e3eaf3; padding-top: 10px; margin-top: 12px; }
+.sheet-open-link { display: inline-flex; align-items: center; min-height: 38px; }
+#sheets-dialog .sheet-auto-note { font-size: 12px; margin-top: 15px; color: #536983; }
+.sheet-connection-details { margin-top: 18px; padding-top: 10px; border-top: 1px solid #e3eaf3; }
+.sheet-history-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; margin-bottom: 18px; }
+.sheet-history-heading h3 { margin: 0 0 5px; color: #173254; font-size: 15px; }
+#sheets-dialog .sheet-history-heading p { margin: 0; font-size: 12px; }
+.sheet-history-heading button { flex: 0 0 auto; }
+.sheet-history-entry { border: 1px solid #e0e7f0; border-radius: 13px; padding: 15px 16px; margin-bottom: 12px; background: white; }
+.sheet-history-entry--error { border-left: 3px solid #cd6365; }
+.sheet-history-entry--conflict { border-left: 3px solid #c09b44; }
+.sheet-entry-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
+.sheet-entry-heading strong { display: block; color: #193553; font-size: 13px; }
+.sheet-entry-time { display: block; color: #516781; font-size: 11px; margin-top: 4px; font-variant-numeric: tabular-nums; }
+#sheets-dialog .sheet-entry-source { color: #596e86; font-size: 11px; margin: 7px 0 11px; }
+#sheets-dialog .sheet-entry-error { color: #a33337; font-size: 12px; margin: 10px 0 6px; overflow-wrap: anywhere; }
+#sheets-dialog .sheet-error-location { font-size: 12px; font-weight: 650; color: #8d3c32; overflow-wrap: anywhere; }
+.sheet-error-code { display: block; font-size: 10px; color: #685967; margin-top: 5px; overflow-wrap: anywhere; }
+#sheets-dialog .sheet-partial-note, #sheets-dialog .sheet-skipped-note { color: #805b1d; background: #fff9eb; border-radius: 7px; padding: 8px 9px; font-size: 11px; margin-top: 9px; }
+#sheets-dialog .sheet-no-change { color: #366449; font-size: 12px; margin-top: 10px; }
+.sheet-change-summary { margin: 8px 0 0; display: grid; gap: 8px; font-size: 12px; }
+.sheet-change-summary > div { display: flex; align-items: start; flex-wrap: wrap; gap: 5px 14px; }
+.sheet-change-summary dt { flex: 0 0 100px; color: #516781; }
+.sheet-change-summary dd { margin: 0; color: #213e61; font-variant-numeric: tabular-nums; }
+.sheet-entry-details { border-top: 1px solid #edf1f6; margin-top: 13px; padding-top: 3px; }
+.sheet-entry-details > summary { color: #315b93; font-weight: 650; }
+.sheet-direction { margin: 10px 0 15px; }
+.sheet-direction h4 { margin: 0 0 8px; color: #29496f; font-size: 12px; }
+.sheet-count-table { overflow-x: auto; border: 1px solid #e4ebf4; border-radius: 9px; }
+.sheet-count-table table { width: 100%; border-collapse: collapse; white-space: normal; font-size: 12px; }
+.sheet-count-table th, .sheet-count-table td { padding: 9px 10px; font-size: 11px; border-bottom: 1px solid #e9eef5; }
+.sheet-count-table thead th { background: #f4f7fb; font-weight: 650; color: #516781; letter-spacing: 0; }
+.sheet-count-table tbody th { color: #29496f; font-weight: 600; text-align: left; }
+.sheet-count-table td { text-align: right; color: #213e61; font-variant-numeric: tabular-nums; }
+#sheets-dialog .sheet-stage { font-size: 10px; color: #5e7087; }
+.sheet-history-pagination { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; padding-top: 9px; font-size: 12px; color: #516781; }
+.sheet-history-pagination > div { display: flex; gap: 7px; }
+.sheet-history-pagination button { min-height: 40px; }
+.sheet-history-empty { padding: 24px 15px; margin: 0 0 15px; text-align: center; background: #f6f9fd; border-radius: 12px; }
+.sheet-history-empty h4 { margin: 0 0 7px; color: #29496f; }
+#sheets-dialog .sheet-history-empty p, #sheets-dialog .sheet-history-loading { font-size: 12px; color: #516781; }
+@media (max-width: 1180px) and (min-width: 761px) {
+  .app-header { flex-wrap: wrap; gap: 11px; }
+  #sheet-health-slot { max-width: 245px; }
+}
+@media (max-width: 760px) {
+  .app-header { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 10px 12px; }
+  .header-tools-group { display: contents; }
+  .app-header .header-title { grid-column: 1; grid-row: 1; }
+  .app-header #header-actions { grid-column: 2; grid-row: 1; max-width: none; }
+  #sheet-health-slot { grid-column: 1 / -1; grid-row: 2; width: 100%; margin: 0; }
+  #sheet-health-slot:empty { display: none; }
+  .sheet-health { width: 100%; max-width: none; min-height: 46px; padding: 8px 11px; }
+  .sheet-health-copy { display: flex; flex: 1; flex-wrap: wrap; gap: 2px 10px; align-items: center; }
+  .sheet-health-copy strong { font-size: 12px; }
+  .sheet-health-copy small { font-size: 11px; margin: 0; }
+  .sheet-health-dot { margin-left: auto; }
+  .sheet-scope-cards { grid-template-columns: 1fr; gap: 10px; }
+  .sheet-scope-card { padding: 14px; }
+  .sheet-scope-heading h3 { font-size: 14px; }
+  .sheet-state-badge { font-size: 11px; }
+  #sheets-dialog .sheet-last-success, #sheets-dialog .sheet-vault-paused { font-size: 12px; }
+  .sheet-last-success strong { font-size: 13px; }
+  #sheets-dialog .sheet-dialog-intro, #sheets-dialog .sheet-auto-note, #sheets-dialog .sheet-history-heading p { font-size: 12px; }
+  .sheet-history-heading { gap: 10px; }
+  .sheet-history-heading button { min-height: 44px; }
+  .sheet-panel-tabs { margin-top: 13px; }
+  .sheet-history-entry { padding: 14px 12px; }
+  .sheet-entry-heading strong { font-size: 14px; }
+  .sheet-entry-time, #sheets-dialog .sheet-entry-source { font-size: 12px; }
+  .sheet-count-table th, .sheet-count-table td { font-size: 12px; }
+  .sheet-change-summary { font-size: 12px; }
+  .sheet-history-pagination { font-size: 12px; }
+  .sheet-history-pagination button, .sheet-entry-details > summary { min-height: 44px; }
+  .sheet-entry-details > summary { display: flex; align-items: center; }
+}
+@media (prefers-reduced-motion: reduce) { .sheet-health--running .sheet-health-icon svg { animation: none; } }

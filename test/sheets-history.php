@@ -1,0 +1,32 @@
+<?php
+declare(strict_types=1);
+foreach(['core','business','audit','vault','records','sheets'] as $file)require __DIR__."/$file.php";
+function historyCheck(bool $ok,string $message): void {if(!$ok)throw new RuntimeException($message);}
+$c=config();$db=db($c);$secret='FAKE_PRIVATE_HISTORY_PASSWORD_AND_TOKEN';
+beginAudit($db,'Dữ liệu kiểm tra');$family=saveFamilyRecord($db,null,['name'=>'History test','manager_email'=>'history-owner@example.com']);$member=saveMemberRecord($db,null,['family_id'=>$family['id'],'email'=>'history-guest@example.com','expires_at'=>'2027-01-01']);finishAudit();
+sheetsPut($db,'config',vaultSeal(json_encode(['url'=>'https://script.google.com/macros/s/test/exec','token'=>str_repeat('t',64)]),sheetsKey($c),'family-sheets-config-v1'));
+$cloud=['families'=>[],'members'=>[]];$rejectWrite=false;$checks=0;
+$send=function(array $request)use(&$cloud,&$rejectWrite,$db,$c,$secret,&$checks): array {
+    $health=sheetsHealth($db,$c)['core'];historyCheck($health['state']==='running','live health is running during Google I/O');historyCheck(sheetsHistoryPage($db,$c)['entries'][0]['state']==='running','running attempt visible in history');$checks++;
+    if($request['action']==='read')return ['ok'=>true,'data'=>$cloud,'revision'=>hash('sha256',json_encode($cloud)),'customer_layout'=>'grouped'];
+    if($rejectWrite)throw new FamilyError('A Google error with '.$secret.' [unavailable].',502);
+    historyCheck($request['revision']===hash('sha256',json_encode($cloud)),'revision matches frozen remote');$cloud=$request['data'];return ['ok'=>true,'customer_layout'=>'grouped'];
+};
+$sync=fn($options=[])=>sheetsSync($db,$c,'core',$options,null,$send);
+$r=$sync();$event=$r['sync_report'];historyCheck($event['state']==='success'&&$event['write_acknowledged'],'first export acknowledged');historyCheck($event['counts']['web_to_sheet']['families']['added']===1&&$event['counts']['web_to_sheet']['members']['added']===1,'first export counts');historyCheck(!$event['import_applied'],'first export reports no Sheet imports');historyCheck(sheetsHistoryPage($db,$c)['total']===1,'manual event kept');
+$last=sheetsHealth($db,$c)['core']['last_success'];$r=$sync(['source'=>'auto']);historyCheck($r['sync_report']['state']==='success'&&sheetsHistoryPage($db,$c)['total']===1,'idle automatic check omitted without losing health');
+$cloud['members'][0]['note']='Edited only on Sheet';$r=$sync(['source'=>'auto']);historyCheck($r['sync_report']['counts']['sheet_to_web']['members']['updated']===1&&$r['sync_report']['import_applied'],'Sheet import counted');historyCheck($r['sync_report']['counts']['web_to_sheet']['members']['updated']===0,'import does not claim an unrelated export');
+q($db,'UPDATE members SET note=? WHERE id=?',['Web conflict',$member['id']]);$cloud['members'][0]['note']='Sheet conflict';$r=$sync();historyCheck($r['sync_report']['state']==='conflict'&&$r['sync_report']['conflict_count']===1&&!$r['sync_report']['import_applied'],'conflict does not claim imports');historyCheck(sheetsHealth($db,$c)['core']['state']==='conflict','conflict persistent health');
+$r=$sync(['choice'=>'web','conflict_token'=>$r['conflict_token']]);historyCheck($r['sync_report']['counts']['web_to_sheet']['members']['updated']===1,'resolved conflict exports one member');
+$beforeFailure=sheetsMeta($db,'last_core');$cloud['members'][0]['contact']='Imported before remote failure';q($db,'UPDATE families SET name=? WHERE id=?',['Web edit awaiting remote write',$family['id']]);$rejectWrite=true;
+try{$sync();throw new RuntimeException('write rejection accepted');}catch(FamilyError $e){historyCheck($e->status===502,'write failure reported');}
+$event=sheetsHistoryPage($db,$c)['entries'][0];historyCheck($event['state']==='error'&&$event['error']['code']==='unavailable'&&$event['error']['stage']==='write_remote','safe write failure stage');historyCheck($event['import_applied']&&$event['counts']['sheet_to_web']['members']['updated']===1&&!$event['write_acknowledged'],'committed import retained while write unconfirmed');historyCheck($event['counts']['web_to_sheet']['families']['updated']===0,'failed export not counted as success');historyCheck(sheetsMeta($db,'last_core')===$beforeFailure,'failure never advances successful time');historyCheck(one($db,'SELECT contact FROM members WHERE id=?',[$member['id']])['contact']==='Imported before remote failure','committed input remains local');
+$rejectWrite=false;$r=$sync();historyCheck($r['sync_report']['counts']['web_to_sheet']['families']['updated']===1,'retry acknowledges outstanding export');
+$cloud['members']=[];$r=$sync();historyCheck($r['sync_report']['skipped']['sheet_deletions_ignored']===1,'removed Sheet row is explicitly reported as ignored');historyCheck($r['sync_report']['counts']['web_to_sheet']['members']['added']===1,'missing Sheet row restored');historyCheck(count(all($db,'SELECT id FROM members'))===1,'Sheet removal never deletes website');
+q($db,'DELETE FROM members WHERE id=?',[$member['id']]);$r=$sync();historyCheck($r['sync_report']['counts']['web_to_sheet']['members']['deleted']===1,'web deletion exported');
+$unsafe=new FamilyError($secret.' [vault_email]. FamilySync_Kho, dòng 50, cột 2.',409);$report=sheetsErrorReport($unsafe,'validate_remote');historyCheck($report['location']===['tab'=>'FamilySync_Kho','row'=>50,'column'=>2],'bounded safe diagnostic location');historyCheck(!str_contains(json_encode($report),$secret),'no raw error value in diagnostics');
+$event=$r['sync_report'];for($i=0;$i<105;$i++){$event['attempt_id']='bounded-'.$i;sheetsPut($db,'active_attempt',$event['attempt_id']);sheetsAttemptPersist($db,$event);}
+$page=sheetsHistoryPage($db,$c,['page'=>100000]);historyCheck($page['total']===100&&$page['page']===5&&count($page['entries'])===20,'bounded history and clamped pagination');historyCheck(sheetsHistoryPage($db,$c)['entries'][0]['attempt_id']==='bounded-104','newest history first');
+$event['attempt_id']='interrupted';$event['state']='running';$event['finished_at']=null;$event['error']=null;sheetsPut($db,'active_attempt',$event['attempt_id']);sheetsAttemptPersist($db,$event);historyCheck(sheetsHealth($db,$c)['core']['error']['code']==='interrupted','crashed attempt not permanently running');historyCheck(sheetsHistoryPage($db,$c)['entries'][0]['state']==='error','interrupted history projected safely');
+historyCheck(!str_contains(json_encode(all($db,'SELECT * FROM family_sheet_state')),$secret),'no plaintext secret persisted');
+echo 'Sheet health/history checks passed ('.$checks." transport assertions)\n";

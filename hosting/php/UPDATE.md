@@ -1,3 +1,57 @@
+# Bản 0.20.0 — Đồng bộ, thứ tự case và sản phẩm
+
+Xem DONG-BO-VA-SAN-PHAM.md: trạng thái/lịch sử đồng bộ, sắp xếp Fix lỗi, nhập Sheet sản phẩm và Nguồn mua. Cần upload hai thư mục; tự bổ sung cột database schema8, backup9 tương thích bản sao cũ.
+
+# Bản 0.19.0 — Giao diện dịch vụ số
+
+Làm mới giao diện cho desktop và điện thoại: hệ màu navy/xanh, biểu tượng thống nhất, Tổng quan với bốn nhóm việc hôm nay và bảng khách ưu tiên gọn. Menu chính gồm Tổng quan, Khách, Family, Kho; các mục khác nằm trong Thêm. Trên điện thoại dùng thanh điều hướng dưới cùng, danh sách dạng thẻ, nút dễ chạm. Tiện ích ở đầu trang được gom vào menu; ô ngày trong form được nhóm đúng với nhãn. Trang Thống kê giữ đầy đủ giải thích trong phần mở rộng.
+
+Gói **family-giao-dien-hien-dai.zip** giữ các sửa lỗi trước và quy tắc gia hạn, slot, thống kê, đồng bộ hiện có. Upload hai thư mục ứng dụng, giữ config.php/database rồi Ctrl+F5. Không đổi schema hoặc Apps Script. Xem **GIAO-DIEN-HIEN-DAI.md**.
+
+# Bản 0.18.1 — Ngày thực nhận tiền gia hạn
+
+Trạng thái Chờ thanh toán và các trạng thái chưa nhận tiền không lưu ngày nhận tiền. Khi chuyển sang Đã thanh toán hoặc Trả một phần, form lấy ngày hiện tại theo giờ Việt Nam; vẫn cho chọn lại ngày thực nhận. Bỏ qua ngày chờ bị lưu từ bản cũ. API PHP/Node chuẩn hóa cùng quy tắc. Kỳ mới vẫn nối từ hạn cũ, thống kê vẫn về tháng của hạn cũ khi hoàn tất.
+
+Gói **family-sua-ngay-nhan-tien.zip** gồm hai thư mục ứng dụng và hướng dẫn upload. Giữ config.php/database, Ctrl+F5. Không sửa hàng loạt ngày nhận tiền trong lịch sử đã hoàn tất, không đổi cấu trúc database hoặc Apps Script. Xem **NGAY-NHAN-TIEN-GIA-HAN.md**.
+
+# Bản 0.18.0 — Slot và chuyển Family vượt 5
+
+Hiển thị số khách chiếm slot theo mẫu x/5, kèm số khách **Đã mời, chưa vào**, ví dụ **3/5 (2 chưa vào)**. Bộ lọc Fam dư slot dùng cùng quy tắc. Cho phép chuyển khách vào Family đủ/vượt 5; vẫn giữ trạng thái, dữ liệu và kiểm tra trùng/stale. Hồ sơ đã vượt 5 tiếp tục sửa và đồng bộ bình thường khi không tăng thêm slot.
+
+Gói **family-slot-va-chuyen-family.zip** gồm hai thư mục ứng dụng cùng hướng dẫn. Upload giữ config.php/database, Ctrl+F5. Không có migration hoặc thay Apps Script. Xem **SLOT-VA-CHUYEN-FAMILY.md**.
+
+# Bản 0.17.1 — Nối lại MySQL khi chờ Google
+
+Sửa lỗi `[php_sync] [read_remote] [db_connection]`: nối lại MySQL khi Google I/O kết thúc, lấy lại khóa và đối chiếu cấu hình/ID/mốc đồng bộ trước khi dùng kết quả. Nếu trạng thái đã đổi, khởi động lại lượt đồng bộ một lần; nếu bị tranh khóa, dừng an toàn. Giữ phản hồi ghi Google đã được xác nhận và giữ lỗi Google khi việc dọn dẹp MySQL cũng lỗi. Có chẩn đoán PHP theo bước, không gửi lỗi thô hoặc thông tin tài khoản ra màn hình.
+
+Website đã cập nhật các bản Sheet trước có thể chỉ upload **family-private/sheets.php** từ gói **family-sheet-sua-mat-ket-noi.zip**. Giữ Code.gs v5.7, URL /exec, token, cấu hình và database; không có migration mới. Xem **HUONG-DAN.md** trong gói sửa.
+
+# Bản 0.17.0 — Cập nhật một chạm
+
+Gói **family-cap-nhat-mot-cham.zip** cài bộ cập nhật lần đầu. Sau đó website có thể lấy gói tương thích từ GitHub Releases **haitiano1/family** ngay trong nút **Cập nhật một chạm**: kiểm tra SHA-256, sao lưu dữ liệu/mã, tạm dừng yêu cầu ứng dụng, thay mã và kiểm tra khởi động ở tiến trình PHP mới. Có khôi phục mã khi thất bại hoặc gián đoạn; giữ config.php/database/kết nối Sheet.
+
+Nguồn cập nhật chỉ nhận các Release đã phát hành đúng chuẩn; code trong chat hoặc ở main chưa tự trở thành bản cập nhật. Workflow **Phát hành Family PHP** được chạy thủ công bởi người quản lý repository sau khi mã đã có trên main. Bộ cài không tự nâng cấp cấu trúc database, Apps Script hoặc bộ khôi phục nền. Hướng dẫn đầy đủ: **CAP-NHAT-MOT-CHAM.md**.
+
+# Bản 0.16.0 — khách mua mới và thống kê theo kỳ gia hạn
+
+Thêm trạng thái **Mua mới**, lưu lịch sử mua đầu theo Ngày mua và giữ khi khách gia hạn/đổi trạng thái. Trang Thống kê có bảng Khách mua mới dưới lịch sử gia hạn; phần 6 tháng gần nhất mặc định thu gọn. Bỏ thẻ Đã thu tiền, cần cập nhật hạn trên Tổng quan.
+
+Gia hạn hoàn tất được thống kê theo **tháng của hạn cũ**. Ví dụ hạn 10/09, nhận tiền 21/10, gia hạn 3 tháng: kỳ mới vẫn 10/09–10/12, thống kê vào tháng 9. Ngày nhận tiền/xác nhận được giữ để đối chiếu. Quy tắc này thay thế cách phân tháng theo thời điểm xác nhận mô tả ở các phiên bản cũ bên dưới.
+
+Cập nhật đầy đủ hai thư mục, gồm cả **family-private/schema.sql**, giữ config.php/database. Schema tự nâng cấp, sao lưu mới v8 có lịch sử mua mới; vẫn đọc sao lưu v1–v7. Không cần thay Apps Script hoặc liên kết Sheet. Xem **THONG-KE-MUA-MOI.md** trong gói cập nhật để biết các bước cài và quy tắc ghi nhận.
+
+# Bản 0.15.1 — sửa tranh chấp khóa khi đồng bộ Google Sheet
+
+Cập nhật core.php, sheets.php, public_html/sheets.js và style.css; giữ config.php/database. Chi tiết trong SUA-KHOA-DATABASE.md của gói sửa. Nếu cập nhật từ trước 0.15.0, dùng gói cập nhật đầy đủ hai thư mục. Không cần triển khai lại Apps Script cho bản sửa này.
+
+# Bản 0.15.0 — giao diện và đồng bộ Google Sheet
+
+Sao lưu trước, cập nhật **đầy đủ hai thư mục** family-private và public_html; giữ config.php/database. Có file mới records.php, sheets.php và public_html/sheets.js. Không chỉ thay app.js/style.css. Tính năng tự thêm bảng family_sheet_state riêng để lưu cấu hình mã hóa, ID và dấu đối chiếu; không thay lịch sử gia hạn hoặc định dạng sao lưu khách.
+
+Kết nối Sheet là bước riêng sau khi cập nhật website. Dùng Code.gs, appsscript.json và HUONG-DAN.md trong gói family-google-sheets.zip. Script tạo file Sheet mới trong Drive của bạn. Giữ nguyên quyền riêng tư Sheet; mã kết nối chỉ nhập trên website. Bản Node vẫn chạy chức năng quản lý hiện có, chưa có API đồng bộ Sheet.
+
+Các hướng dẫn phiên bản cũ bên dưới chỉ áp dụng cho phiên bản tương ứng.
+
 # Cập nhật YouTube Family 0.14.2
 
 Bản này gộp đầy đủ các thay đổi trước đây chưa đóng gói và các yêu cầu mới. Dùng **gói cập nhật** cho website Family đang chạy; giữ cấu hình và dữ liệu hiện có.

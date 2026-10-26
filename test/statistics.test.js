@@ -1,6 +1,6 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
-import {summarizeRenewals} from '../statistics.js';
+import {summarizeRenewals,summarizeNewPurchases} from '../statistics.js';
 const row=(id,created_at,email='guest@example.com',amount=100000)=>({id,created_at,email,amount,customer_name:'Nguyễn Ánh',family_name:'Family 1',note:'Note %_[]\\ literal',paid_at:'2025-01-01',new_purchase_at:'2025-01-05',new_expires_at:'2025-04-05'});
 
 test('six calendar months use Vietnam midnight boundaries, distinct emails and every completed payment',()=>{
@@ -16,4 +16,14 @@ test('history search and pagination do not change monthly totals or discard olde
  stats=summarizeRenewals(history,{search:'guest64@'},now);assert.equal(stats.total,1);assert.equal(stats.rows[0].id,65);assert.equal(stats.selected.amount,2145);
  assert.equal(summarizeRenewals(history,{search:'%_[]\\'},now).total,65);assert.equal(summarizeRenewals(history,{search:'absent'},now).total,0);
  for(const month of ['2026-00','2026-13','2026-1','2026-10-01','abc'])assert.throws(()=>summarizeRenewals(history,{month},now),{status:400});
+});
+test('a September expiry paid and confirmed in October belongs to September; receipt and completion dates remain intact',()=>{
+ const h={...row(1,'2026-10-21T02:00:00Z'),old_expires_at:'2026-09-10',new_purchase_at:'2026-09-10',new_expires_at:'2026-12-10',paid_at:'2026-10-21'},now=new Date('2026-10-21T06:00:00Z');
+ const september=summarizeRenewals([h],{month:'2026-09'},now);assert.equal(september.selected.renewals,1);assert.equal(september.selected.amount,100000);assert.equal(september.rows[0].paid_at,'2026-10-21');assert.equal(september.rows[0].new_expires_at,'2026-12-10');
+ assert.equal(summarizeRenewals([h],{month:'2026-10'},now).selected.renewals,0);
+ assert.equal(summarizeRenewals([h],{month:'2026-09'},new Date('2026-10-20T23:00:00Z')).selected.renewals,0,'no completed event before it actually occurred');
+});
+test('new-purchase snapshots report by purchase date with independent pagination and retain their original fields',()=>{
+ const now=new Date('2026-10-21T06:00:00Z'),history=Array.from({length:55},(_,i)=>({...row(i+1,'2026-10-21T02:00:00Z','new'+i+'@example.com'),joined_at:'2026-08-10',expires_at:'2026-09-10'}));
+ const original=structuredClone(history),result=summarizeNewPurchases(history,{month:'2026-08',page:2},now);assert.equal(result.selected.customers,55);assert.equal(result.selected.purchases,55);assert.equal(result.rows.length,5);assert.equal(result.rows[0].joined_at,'2026-08-10');assert.equal(summarizeNewPurchases(history,{month:'2026-10'},now).selected.purchases,0);assert.deepEqual(history,original);
 });

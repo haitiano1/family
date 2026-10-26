@@ -1,5 +1,7 @@
 # Cài Family PHP + MySQL trên website Hostinger riêng
 
+Bản 0.17.0 có **Cập nhật một chạm** từ GitHub Releases sau khi cài bộ kích hoạt. Xem **CAP-NHAT-MOT-CHAM.md** để biết cách cài lần đầu, phát hành và điều kiện PHP. Nút không tải code chưa được phát hành.
+
 Dành cho gói Premium có PHP/MySQL. Phiên bản PHP 8.3 phù hợp, hỗ trợ PHP8.2+. Có giao diện iPhone, mật khẩu truy cập chung dài hơn6ký tự (thiết bị nhớ30ngày), không có admin/role hay thao tác Google. Không cần Node.js, SSH, npm hoặc chạy máy Windows liên tục.
 
 ## 1. Website và database riêng
@@ -81,7 +83,7 @@ Bản0.7 thêm Ngày trial trong Family → Sửa, tự lưu Ngày lỗi khi bá
 
 Nhật ký chi tiết ghi từ lúc cập nhật, giữ log cũ dưới dạng nội dung. Ghi các thao tác thêm/sửa/xóa/nhập/gia hạn/lưu trữ/khôi phục và chuyển trạng thái/đổi mail khi fix; refresh/xem trang không ghi thêm. Xóa Family chuyển cả hồ sơ nhóm và khách vào lưu trữ; có Khôi phục Family và nhật ký. Có tìm kiếm/phân trang/Xem chi tiết trước-sau. Nhật ký hỗ trợ đối chiếu và giữ thông tin, chưa có nút hoàn tác tự động. Mã nguồn hiện tại sao lưuv7 có sản phẩm lưu trữ và kho đã mã hóa; nhận JSONv1–v6 từ bản cũ. GóiZIP đã bao gồm các thay đổi này.
 
-Để cập nhật website đã cài, xem [UPDATE.md](https://github.com/haitiano1/family/blob/main/hosting/php/UPDATE.md) và tải family-hostinger-update.zip. MySQL schema1/2/3/4 nâng cấp cộng thêm lên6 tự động; giữ database và config.php. SQLite phát triển lên14 có backup before-v14.
+Để cập nhật website đã cài, xem [UPDATE.md](https://github.com/haitiano1/family/blob/main/hosting/php/UPDATE.md) và tải family-hostinger-update.zip. MySQL schema1–6 nâng cấp cộng thêm lên7 tự động; giữ database và config.php. SQLite phát triển lên15 có backup before-v15.
 
 Dữ liệu nằm trong database MySQL riêng, không nằm trong thư mục file giao diện. Tải sao lưu JSON qua ứng dụng trước cập nhật và định kỳ. Cập nhật bằng gói PHP mới đúng website Family, giữ config.php và database; không xóa database.
 

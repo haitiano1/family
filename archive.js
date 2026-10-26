@@ -4,6 +4,7 @@ export function initArchive(db, { fail, log }) {
     const result=db.prepare('INSERT INTO archived_customers(original_member_id,email,customer_name,family_name,manager_email,snapshot,archived_at,reason,family_archive_id) VALUES (?,?,?,?,?,?,?,?,?)').run(m.id,m.email,m.customer_name,m.family_name,m.manager_email,JSON.stringify(m),new Date().toISOString(),reason,familyArchiveId);
     const archiveId=Number(result.lastInsertRowid);
     db.prepare('UPDATE renewal_history SET archive_id=? WHERE member_id=?').run(archiveId,m.id);
+      db.prepare('UPDATE new_purchase_history SET archive_id=? WHERE member_id=?').run(archiveId,m.id);
     db.prepare('DELETE FROM members WHERE id=?').run(m.id);
     log(`Chuyển khách #${m.id} vào lưu trữ #${archiveId}: ${reason}`);return archiveId;
   }
@@ -83,6 +84,7 @@ export function initArchive(db, { fail, log }) {
     if(data.expected_archived_at!==row.archived_at||data.expected_email!==row.email)fail('Hồ sơ lưu trữ đã thay đổi. Tải lại danh sách trước khi xóa.',409);
     db.exec('SAVEPOINT archive_delete');try{
       db.prepare('UPDATE renewal_history SET archive_id=NULL WHERE archive_id=?').run(id);
+      db.prepare('UPDATE new_purchase_history SET archive_id=NULL WHERE archive_id=?').run(id);
       db.prepare('DELETE FROM archived_customers WHERE id=?').run(id);
       log(`${user.username}: xóa khách lưu trữ #${id} (${row.email}); giữ lịch sử gia hạn và nhật ký trước xóa`);
       db.exec('RELEASE archive_delete');return {ok:true};
@@ -95,7 +97,7 @@ export function initArchive(db, { fail, log }) {
       if (!row) fail('Không tìm thấy khách lưu trữ.',404); if (row.restored_at) fail('Khách đã được khôi phục.',409);
       const m = JSON.parse(row.snapshot);
       if(m.record_type==='other_product'){
-        const restoredId=Number(db.prepare('INSERT INTO other_purchases(product,customer_name,email,contact,joined_at,expires_at,payment_status,amount,note,created_at,plan_months) VALUES (?,?,?,?,?,?,?,?,?,?,?)').run(m.product,m.customer_name,m.email,m.contact,m.joined_at,m.expires_at,m.payment_status,m.amount,m.note,m.created_at,m.plan_months||0).lastInsertRowid);
+        const restoredId=Number(db.prepare('INSERT INTO other_purchases(product,customer_name,email,contact,joined_at,expires_at,payment_status,amount,note,created_at,plan_months,purchase_source) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)').run(m.product,m.customer_name,m.email,m.contact,m.joined_at,m.expires_at,m.payment_status,m.amount,m.note,m.created_at,m.plan_months||0,m.purchase_source??'').lastInsertRowid);
         db.prepare('UPDATE archived_customers SET restored_at=?,restored_by=?,restored_member_id=? WHERE id=?').run(new Date().toISOString(),user.username,restoredId,id);
         log(`${user.username}: khôi phục sản phẩm lưu trữ #${id} vào Sản phẩm khác #${restoredId}`);
         db.exec('RELEASE archive_save');return {ok:true,product_id:restoredId};
@@ -110,6 +112,7 @@ export function initArchive(db, { fail, log }) {
       db.prepare("UPDATE issues SET family_id=?,family_name=?,target_id=?,revision=revision+1 WHERE family_id=? AND target_type='member' AND target_id=? AND subject_email=? AND created_at<=?").run(family.id,family.name,restoredId,m.family_id,m.id,m.email,row.archived_at);
       db.prepare('UPDATE archived_customers SET restored_at=?,restored_by=?,restored_member_id=? WHERE id=?').run(new Date().toISOString(),user.username,restoredId,id);
       db.prepare('UPDATE renewal_history SET member_id=? WHERE archive_id=?').run(restoredId,id);
+      db.prepare('UPDATE new_purchase_history SET member_id=? WHERE archive_id=?').run(restoredId,id);
       log(`${user.username}: khôi phục khách lưu trữ #${id} vào Family #${family.id}; giữ hồ sơ và lịch sử`);
       db.exec('RELEASE archive_save'); return { ok:true,member_id:restoredId };
     } catch (error) { db.exec('ROLLBACK TO archive_save; RELEASE archive_save'); throw error; }

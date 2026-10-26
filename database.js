@@ -7,9 +7,9 @@ const file = path.join(dir, 'family.sqlite');
 const existing = existsSync(file);
 const db = new DatabaseSync(file);
 const currentVersion = db.prepare('PRAGMA user_version').get().user_version;
-if (currentVersion > 14) throw new Error('Database is newer than this application. Use the latest application version.');
-if (existing && currentVersion < 14) {
-  const backup = path.join(dir, `before-v14-${Date.now()}.sqlite`);
+if (currentVersion > 16) throw new Error('Database is newer than this application. Use the latest application version.');
+if (existing && currentVersion < 16) {
+  const backup = path.join(dir, `before-v16-${Date.now()}.sqlite`);
   db.exec(`VACUUM INTO '${backup.replaceAll("'", "''")}'`);
   console.log('Saved pre-upgrade database backup in the data directory.');
 }
@@ -42,13 +42,15 @@ try {
   const issueColumns=new Set(db.prepare('PRAGMA table_info(issues)').all().map(c=>c.name));
   for(const name of ['trial_date','reported_on'])if(!issueColumns.has(name))db.exec(`ALTER TABLE issues ADD COLUMN ${name} TEXT NOT NULL DEFAULT ''`);
   if(!db.prepare('PRAGMA table_info(other_purchases)').all().some(c=>c.name==='plan_months'))db.exec('ALTER TABLE other_purchases ADD COLUMN plan_months INTEGER NOT NULL DEFAULT 0');
+  if(!db.prepare('PRAGMA table_info(other_purchases)').all().some(c=>c.name==='purchase_source'))db.exec("ALTER TABLE other_purchases ADD COLUMN purchase_source TEXT NOT NULL DEFAULT ''");
   if(!db.prepare('PRAGMA table_info(archived_customers)').all().some(c=>c.name==='family_archive_id'))db.exec('ALTER TABLE archived_customers ADD COLUMN family_archive_id INTEGER REFERENCES families(id)');
   db.exec(`CREATE TABLE IF NOT EXISTS vault_meta(name TEXT PRIMARY KEY,value TEXT NOT NULL);
   CREATE TABLE IF NOT EXISTS vault_items(id INTEGER PRIMARY KEY AUTOINCREMENT,payload TEXT NOT NULL,revision INTEGER NOT NULL DEFAULT 0,created_at TEXT NOT NULL,updated_at TEXT NOT NULL);
   CREATE TABLE IF NOT EXISTS vault_sessions(token_hash TEXT PRIMARY KEY,expires_at INTEGER NOT NULL);`);
   if(!db.prepare('PRAGMA table_info(vault_items)').all().some(c=>c.name==='family_id'))db.exec('ALTER TABLE vault_items ADD COLUMN family_id INTEGER REFERENCES families(id)');
   db.exec('CREATE UNIQUE INDEX IF NOT EXISTS vault_family_link ON vault_items(family_id)');
-  db.exec('PRAGMA user_version=14; COMMIT');
+  db.exec(`CREATE TABLE IF NOT EXISTS new_purchase_history(id INTEGER PRIMARY KEY,member_id INTEGER UNIQUE REFERENCES members(id) ON DELETE SET NULL,archive_id INTEGER,email TEXT NOT NULL,customer_name TEXT NOT NULL,contact TEXT NOT NULL,family_name TEXT NOT NULL,joined_at TEXT NOT NULL,expires_at TEXT NOT NULL,plan_months INTEGER NOT NULL,payment_status TEXT NOT NULL,amount INTEGER NOT NULL,note TEXT NOT NULL,created_at TEXT NOT NULL);`);
+  db.exec('PRAGMA user_version=16; COMMIT');
 } catch (error) { db.exec('ROLLBACK'); throw error; }
 return db;
 }

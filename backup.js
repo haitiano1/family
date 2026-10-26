@@ -1,12 +1,17 @@
 import {validateVaultBackup} from './vault-crypto.js';
 const baseTables=['accounts','families','members','archived_customers','renewal_history','other_purchases','logs'];
 const customerTables=[...baseTables,'issues','audit_events'];
-const tables=[...customerTables,'vault_meta','vault_items'];
+const legacyTables=[...customerTables,'vault_meta','vault_items'];
+const tables=[...legacyTables,'new_purchase_history'];
 export function customerBackup(db) {
-  return {format:'family-customer-backup',version:7,created_at:new Date().toISOString(),tables:Object.fromEntries(tables.map(name=>[name,db.prepare(`SELECT * FROM ${name} ORDER BY ${name==='vault_meta'?'name':'id'}`).all()]))};
+  const content=Object.fromEntries(tables.map(name=>[name,db.prepare(`SELECT * FROM ${name} ORDER BY ${name==='vault_meta'?'name':'id'}`).all()]));
+  content.archived_customers=content.archived_customers.map(row=>{const saved=JSON.parse(row.snapshot);if(saved?.record_type==='other_product'&&!Object.hasOwn(saved,'purchase_source'))return {...row,snapshot:JSON.stringify({...saved,purchase_source:''})};return row;});
+  return {format:'family-customer-backup',version:9,created_at:new Date().toISOString(),tables:content};
 }
 export function restoreCustomers(db,data,fail) {
-  if (data.format!=='family-customer-backup' || ![1,2,3,4,5,6,7].includes(data.version) || !data.tables || (data.version===1?baseTables:data.version<6?customerTables:tables).some(name=>!Array.isArray(data.tables[name]))) fail('File sao lưu khách hàng không hợp lệ.');
+  if (data.format!=='family-customer-backup' || ![1,2,3,4,5,6,7,8,9].includes(data.version) || !data.tables || (data.version===1?baseTables:data.version<6?customerTables:data.version<8?legacyTables:tables).some(name=>!Array.isArray(data.tables[name]))) fail('File sao lưu khách hàng không hợp lệ.');
+  if(data.version<8&&data.tables.new_purchase_history?.length)fail('Lịch sử mua mới cần sao lưu phiên bản 8.');
+  if(data.version<8)data={...data,tables:{...data.tables,new_purchase_history:[]}};
   if(data.version===1)data={...data,tables:{...data.tables,issues:data.tables.issues||[],audit_events:data.tables.audit_events||[]}};
   if(data.version<6&&(data.tables.vault_meta?.length||data.tables.vault_items?.length))fail('Sao lưu chứa kho mã hóa cần định dạng phiên bản 6.');
   if(data.version<6)data={...data,tables:{...data.tables,vault_meta:[],vault_items:[]}};
@@ -23,7 +28,17 @@ export function restoreCustomers(db,data,fail) {
       for (let row of data.tables[table]) {
         if(data.version<3&&row&&typeof row==='object')row={...(table==='families'?{trial_date:''}:table==='issues'?{trial_date:'',reported_on:''}:{}),...row};
         if(data.version<4&&row&&typeof row==='object')row={...(table==='families'?{archived_at:''}:table==='other_purchases'?{plan_months:0}:table==='archived_customers'?{family_archive_id:null}:{}),...row};
+        if(table==='other_purchases'&&data.version<9&&row&&typeof row==='object'&&!Object.hasOwn(row,'purchase_source'))row={...row,purchase_source:''};
         if (!row || typeof row!=='object' || columns.some(c=>!Object.hasOwn(row,c) || (row[c]!==null && !['string','number'].includes(typeof row[c])))) fail('Dữ liệu sao lưu thiếu trường hoặc sai định dạng.');
+        if(table==='other_purchases'&&(typeof row.purchase_source!=='string'||row.purchase_source.length>200))fail('Nguồn mua trong sao lưu không hợp lệ.');
+        if(table==='archived_customers'){
+          const saved=JSON.parse(row.snapshot);
+          if(!saved||typeof saved!=='object'||Array.isArray(saved))fail('Hồ sơ lưu trữ trong sao lưu không hợp lệ.');
+          if(saved.record_type==='other_product'){
+            if(!Object.hasOwn(saved,'purchase_source')){saved.purchase_source='';row={...row,snapshot:JSON.stringify(saved)};}
+            if(typeof saved.purchase_source!=='string'||saved.purchase_source.length>200)fail('Nguồn mua trong hồ sơ lưu trữ không hợp lệ.');
+          }
+        }
         insert.run(...columns.map(c=>row[c]));
       }
     }

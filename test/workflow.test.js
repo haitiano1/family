@@ -69,7 +69,7 @@ test('Customer CRUD, dates/payments, persistence and Family capacity', async () 
     await request('accounts/' + account.id, 'DELETE', undefined, 400);
     await request('members/' + member.id, 'DELETE'); await request('families/' + family.id, 'DELETE'); assert.equal((await request('state')).members.length, 0);
     await request('accounts/' + account.id, 'DELETE', undefined, 400);state=await request('state');assert.equal(state.archives.length,5);assert.equal(state.archived_families[0].manager_email,'newmanager@example.com');
-    for (const asset of ['/', '/app.js', '/statistics.js', '/style.css', '/contacts.js', '/domain.js']) assert.equal((await fetch(f.base + asset)).status, 200);
+    for (const asset of ['/', '/app.js', '/statistics.js', '/sheets.js', '/style.css', '/contacts.js', '/domain.js']) assert.equal((await fetch(f.base + asset)).status, 200);
     assert.equal((await fetch(f.base + '/../../server.js')).status, 404);
   } finally { await f.close(); }
 });
@@ -90,9 +90,9 @@ test('existing v1 database is backed up and migrated without losing customer rec
   });
   try {
     await f.setup(); let state = await f.admin('state'); assert.equal(state.accounts[0].note, 'Existing note'); assert.equal(state.members[0].email, 'legacyguest@example.com'); assert.equal(state.members[0].expiry_status, 'unknown'); assert.equal(state.families[0].service, 'youtube'); assert.equal('jobs' in state,false);
-    const backups = readdirSync(f.dir).filter(n => n.startsWith('before-v14-')); assert.equal(backups.length, 1);
+    const backups = readdirSync(f.dir).filter(n => n.startsWith('before-v16-')); assert.equal(backups.length, 1);
     const backup = new DatabaseSync(path.join(f.dir, backups[0])); assert.equal(backup.prepare('SELECT email FROM members').get().email, 'legacyguest@example.com'); assert.equal(backup.prepare('PRAGMA user_version').get().user_version, 0); backup.close();
-    await f.stop(); await f.start(); state = await f.admin('state'); assert.equal(state.members.length, 1); assert.equal(readdirSync(f.dir).filter(n => n.startsWith('before-v14-')).length, 1);
+    await f.stop(); await f.start(); state = await f.admin('state'); assert.equal(state.members.length, 1); assert.equal(readdirSync(f.dir).filter(n => n.startsWith('before-v16-')).length, 1);
   } finally { await f.close(); }
 });
 
@@ -148,7 +148,7 @@ test('upgrading v2 retains customer records while adding current fields', async 
     await f.stop();
     const old=new DatabaseSync(path.join(f.dir,'family.sqlite')); old.exec('ALTER TABLE members DROP COLUMN plan_months; PRAGMA user_version=2'); old.close();
     await f.start(); const state=await a('state'); assert.equal('user' in state,false); assert.equal(state.members[0].email,'guest@example.com'); assert.equal(state.members[0].contact,'Existing contact'); assert.equal(state.members[0].payment_status,'paid'); assert.equal(state.members[0].plan_months,0);
-    const backups=readdirSync(f.dir).filter(n=>n.startsWith('before-v14-')); assert.equal(backups.length,1);
+    const backups=readdirSync(f.dir).filter(n=>n.startsWith('before-v16-')); assert.equal(backups.length,1);
     const saved=new DatabaseSync(path.join(f.dir,backups[0])); assert.equal(saved.prepare('PRAGMA user_version').get().user_version,2); assert.equal(saved.prepare('SELECT email FROM members').get().email,'guest@example.com'); saved.close();
   } finally { await f.close(); }
 });
@@ -178,6 +178,16 @@ test('renewal payments are distinct from the current period; applying a paid ren
     await f.stop(); await f.start(); assert.equal((await a('members/'+member.id+'/renewal-history')).history.length,1);
     await a('members/'+member.id,'DELETE'); const db=new DatabaseSync(path.join(f.dir,'family.sqlite')); const saved=db.prepare('SELECT * FROM renewal_history').get(); assert.equal(saved.member_id,null); assert.equal(saved.email,'guest@example.com'); db.close();
   } finally { await f.close(); }
+});
+
+test('Node receipt dates are blank while waiting, default to actual payment day and retain the expiry-month statistics',async()=>{
+const f=await fixture();try{await f.setup();const a=f.admin;
+ const family=await a('families','POST',{name:'Receipt date test',manager_email:'receipt-owner@example.com'},201),member=await a('members','POST',{family_id:family.id,email:'receipt-guest@example.com',joined_at:'2026-08-10',expires_at:'2026-09-10'},201),current=(await a('state')).today;
+ await a('members/'+member.id+'/renewal','PATCH',{revision:0,status:'awaiting_payment',amount:165000,paid_at:'2026-10-15'});let row=(await a('state')).members.find(m=>m.id===member.id);assert.equal(row.renewal_paid_at,'');assert.equal(row.expires_at,'2026-09-10');assert.equal((await a('members/'+member.id+'/renewal-history')).history.length,0);
+ await a('members/'+member.id+'/renewal','PATCH',{revision:row.renewal_revision,status:'paid',amount:165000,plan_months:3,apply_now:true});const history=(await a('members/'+member.id+'/renewal-history')).history[0];assert.equal(history.paid_at,current);assert.equal(history.old_expires_at,'2026-09-10');assert.equal(history.new_expires_at,'2026-12-10');assert.equal((await a('statistics?month=2026-09')).selected.amount,165000);
+ const second=await a('members','POST',{family_id:family.id,email:'receipt-partial@example.com',expires_at:'2026-09-12'},201);await a('members/'+second.id+'/renewal','PATCH',{revision:0,status:'partial',amount:10000,paid_at:'2026-10-15'});row=(await a('state')).members.find(m=>m.id===second.id);assert.equal(row.renewal_paid_at,'2026-10-15');await a('members/'+second.id+'/renewal','PATCH',{revision:row.renewal_revision,status:'paid',amount:100000,plan_months:1,apply_now:true});assert.equal((await a('members/'+second.id+'/renewal-history')).history[0].paid_at,current);
+ const third=await a('members','POST',{family_id:family.id,email:'receipt-manual@example.com',expires_at:'2026-09-14'},201);await a('members/'+third.id+'/renewal','PATCH',{revision:0,status:'paid',amount:50000,paid_at:'2026-10-20',plan_months:1,apply_now:true});assert.equal((await a('members/'+third.id+'/renewal-history')).history[0].paid_at,'2026-10-20');
+}finally{await f.close();}
 });
 
 test('one renewal save updates cycle dates automatically and preserves the separate receipt date', async () => {
@@ -404,11 +414,11 @@ test('Family trial date snapshots stay fixed at report time; only done cases can
 test('v10 SQLite migration and legacy v1/v2 backups preserve customers and old issue report dates without guessing trial dates',async()=>{
  const f=await fixture();try{
   const a=f.admin,family=await a('families','POST',{name:'Old Family',manager_email:'old@example.com'},201);await a('members','POST',{family_id:family.id,email:'guest@example.com',contact:'Original Zalo'},201);await a('issues','POST',{family_id:family.id,title:'Old case'},201);
-  const backup=await a('backup');assert.equal(backup.version,7);
+  const backup=await a('backup');assert.equal(backup.version,9);
   for(const version of [1,2]){const legacy=structuredClone(backup);legacy.version=version;for(const row of legacy.tables.families)delete row.trial_date;for(const row of legacy.tables.issues){delete row.trial_date;delete row.reported_on;row.created_at='2026-08-14T23:30:00.000Z';}if(version===1){delete legacy.tables.issues;delete legacy.tables.audit_events;}
    const destination=await fixture();try{await destination.admin('restore','POST',legacy);const state=await destination.admin('state');assert.equal(state.members[0].contact,'Original Zalo');assert.equal(state.families[0].trial_date,'');if(version===2){assert.equal(state.issues[0].reported_on,'2026-08-15');assert.equal(state.issues[0].days_used,null);}}finally{await destination.close();}
   }
-  await f.stop();const db=new DatabaseSync(path.join(f.dir,'family.sqlite'));db.exec("ALTER TABLE families DROP COLUMN trial_date;ALTER TABLE issues DROP COLUMN trial_date;ALTER TABLE issues DROP COLUMN reported_on;UPDATE issues SET created_at='2026-08-14T23:30:00.000Z';PRAGMA user_version=10");db.close();await f.start();const state=await a('state');assert.equal(state.members[0].contact,'Original Zalo');assert.equal(state.issues[0].reported_on,'2026-08-15');assert.equal(state.issues[0].days_used,null);assert.equal(state.families[0].trial_date,'');assert.equal(readdirSync(f.dir).filter(n=>n.startsWith('before-v14-')).length,1);
+  await f.stop();const db=new DatabaseSync(path.join(f.dir,'family.sqlite'));db.exec("ALTER TABLE families DROP COLUMN trial_date;ALTER TABLE issues DROP COLUMN trial_date;ALTER TABLE issues DROP COLUMN reported_on;UPDATE issues SET created_at='2026-08-14T23:30:00.000Z';PRAGMA user_version=10");db.close();await f.start();const state=await a('state');assert.equal(state.members[0].contact,'Original Zalo');assert.equal(state.issues[0].reported_on,'2026-08-15');assert.equal(state.issues[0].days_used,null);assert.equal(state.families[0].trial_date,'');assert.equal(readdirSync(f.dir).filter(n=>n.startsWith('before-v16-')).length,1);
  }finally{await f.close();}
 });
 
@@ -458,19 +468,19 @@ test('Family archival is atomic when one customer cannot be archived; v11 migrat
   const a=f.admin,family=await a('families','POST',{name:'Safe Family',manager_email:'safe@example.com'},201);await a('members','POST',{family_id:family.id,email:'one@example.com',joined_at:'2026-10-13',expires_at:'2027-02-01',plan_months:3},201);await a('members','POST',{family_id:family.id,email:'two@example.com'},201);
   const journalCount=(await a('journal')).total,db=new DatabaseSync(path.join(f.dir,'family.sqlite'));db.exec("CREATE TRIGGER reject_second BEFORE INSERT ON archived_customers WHEN NEW.email='two@example.com' BEGIN SELECT RAISE(ABORT,'Injected failure'); END");await a('families/'+family.id,'DELETE',undefined,500);assert.equal(db.prepare('SELECT COUNT(*) AS n FROM members').get().n,2);assert.equal(db.prepare('SELECT archived_at FROM families').get().archived_at,'');assert.equal(db.prepare('SELECT COUNT(*) AS n FROM archived_customers').get().n,0);assert.equal((await a('journal')).total,journalCount);db.exec('DROP TRIGGER reject_second');db.close();
   const old=await a('backup');old.version=3;for(const row of old.tables.families)delete row.archived_at;for(const row of old.tables.archived_customers)delete row.family_archive_id;for(const row of old.tables.other_purchases)delete row.plan_months;await target.admin('restore','POST',old);assert.equal((await target.admin('state')).members.find(m=>m.email==='one@example.com').expires_at,'2027-02-01');
-  await f.stop();const oldDb=new DatabaseSync(path.join(f.dir,'family.sqlite'));oldDb.exec('ALTER TABLE families DROP COLUMN archived_at;ALTER TABLE archived_customers DROP COLUMN family_archive_id;ALTER TABLE other_purchases DROP COLUMN plan_months;PRAGMA user_version=11');oldDb.close();await f.start();const state=await a('state');assert.equal(state.members.length,2);assert.equal(state.members.find(m=>m.email==='one@example.com').expires_at,'2027-02-01');assert.equal(state.families[0].archived_at,'');assert.equal(readdirSync(f.dir).filter(n=>n.startsWith('before-v14-')).length,1);
+  await f.stop();const oldDb=new DatabaseSync(path.join(f.dir,'family.sqlite'));oldDb.exec('ALTER TABLE families DROP COLUMN archived_at;ALTER TABLE archived_customers DROP COLUMN family_archive_id;ALTER TABLE other_purchases DROP COLUMN plan_months;PRAGMA user_version=11');oldDb.close();await f.start();const state=await a('state');assert.equal(state.members.length,2);assert.equal(state.members.find(m=>m.email==='one@example.com').expires_at,'2027-02-01');assert.equal(state.families[0].archived_at,'');assert.equal(readdirSync(f.dir).filter(n=>n.startsWith('before-v16-')).length,1);
  }finally{await f.close();await target.close();}
 });
 
-test('monthly statistics count confirmed renewals by action time and retain old history across restart',async()=>{
+test('monthly statistics assign a late completed renewal to its old expiry month and preserve it across restart',async()=>{
  const f=await fixture();try{
-  const module=await fetch(f.base+'/statistics.js');assert.equal(module.status,200);assert.match(module.headers.get('content-type'),/javascript/);assert.match(await module.text(),/export function mountStatistics/);
-  const a=f.admin,family=await a('families','POST',{name:'Renewal review',manager_email:'recent@example.com'},201),member=await a('members','POST',{family_id:family.id,email:'late@example.com',contact:'Zalo recent',joined_at:'2025-10-05',expires_at:'2026-01-05',plan_months:3},201);
-  assert.equal((await a('statistics')).selected.renewals,0);await a('members/'+member.id+'/renewal','PATCH',{revision:0,status:'paid',amount:100000,paid_at:'2026-01-15',apply_now:false});assert.equal((await a('statistics')).selected.renewals,0);
-  await a('members/'+member.id+'/renewal/apply','POST',{revision:1,plan_months:3});let stats=await a('statistics');assert.equal(stats.selected.renewals,1);assert.equal(stats.selected.customers,1);assert.equal(stats.selected.amount,100000);const review=stats.rows[0];assert.equal(review.new_purchase_at,'2026-01-05');assert.equal(review.new_expires_at,'2026-04-05');assert.equal(review.paid_at,'2026-01-15');assert.ok(Math.abs(Date.now()-Date.parse(review.created_at))<5000);
-  const journal=(await a('journal')).total;await a('members/'+member.id+'/renewal/apply','POST',{revision:1,plan_months:3},409);assert.equal((await a('statistics')).selected.renewals,1);assert.equal((await a('journal')).total,journal);
-  await f.stop();await f.start();assert.equal((await a('statistics')).rows[0].created_at,review.created_at);
-  const db=new DatabaseSync(path.join(f.dir,'family.sqlite'));db.prepare('UPDATE renewal_history SET created_at=?').run('2024-02-29T16:59:59.999Z');db.close();stats=await a('statistics');assert.equal(stats.selected.renewals,0);assert.equal(stats.months.length,6);assert.equal((await a('statistics?month=all')).rows.length,1);assert.equal((await a('statistics?month=2024-02')).selected.amount,100000);const state=await a('state');assert.equal('recent_renewals' in state,false);assert.equal(state.members.length,1);assert.equal(state.archives.length,0);assert.equal(state.members[0].contact,'Zalo recent');assert.equal((await a('members/'+member.id+'/renewal-history')).history.length,1);assert.equal((await a('journal')).total,journal);
+  const a=f.admin,family=await a('families','POST',{name:'Renewal review',manager_email:'recent@example.com'},201),member=await a('members','POST',{family_id:family.id,email:'late@example.com',contact:'Zalo recent',joined_at:'2026-08-10',expires_at:'2026-09-10',plan_months:1},201);
+  await a('members/'+member.id+'/renewal','PATCH',{revision:0,status:'awaiting_payment',amount:0});assert.equal((await a('statistics?month=2026-09')).selected.renewals,0);
+  await a('members/'+member.id+'/renewal','PATCH',{revision:1,status:'paid',amount:150000,paid_at:'2026-10-21',plan_months:3,apply_now:true});
+  let stats=await a('statistics?month=2026-09');assert.equal(stats.selected.renewals,1);assert.equal(stats.selected.customers,1);assert.equal(stats.selected.amount,150000);const review=stats.rows[0];assert.equal(review.new_purchase_at,'2026-09-10');assert.equal(review.new_expires_at,'2026-12-10');assert.equal(review.paid_at,'2026-10-21');assert.equal((await a('statistics?month=2026-10')).selected.renewals,0);
+  await a('members/'+member.id+'/renewal','PATCH',{revision:1,status:'paid',amount:150000,paid_at:'2026-10-21',plan_months:3,apply_now:true},409);
+  const journal=(await a('journal')).total;await f.stop();await f.start();assert.equal((await a('statistics?month=2026-09')).selected.amount,150000);
+  const db=new DatabaseSync(path.join(f.dir,'family.sqlite'));db.prepare('UPDATE renewal_history SET created_at=?').run('2026-10-20T00:00:00Z');db.close();stats=await a('statistics?month=2026-09');assert.equal(stats.selected.renewals,1);assert.equal((await a('statistics?month=2026-10')).selected.renewals,0);assert.equal((await a('statistics?month=all')).rows.length,1);assert.equal((await a('state')).members[0].expires_at,'2026-12-10');assert.equal((await a('journal')).total,journal);
   await a('statistics?month=2026-13','GET',undefined,400);
  }finally{await f.close();}
 });
@@ -502,7 +512,7 @@ test('other-product deletion archives the full purchase, restores exact data aft
   const a=f.admin,family=await a('families','POST',{name:'Family',manager_email:'family@example.com'},201),member=await a('members','POST',{family_id:family.id,email:'member@example.com',contact:'Family contact',expires_at:'2026-01-05'},201);await a('members/'+member.id+'/renewal','PATCH',{revision:0,status:'paid',amount:100000,paid_at:'2026-01-15',plan_months:3,apply_now:true});
   const p=await a('other-products','POST',{product:'Netflix',customer_name:'Standalone buyer',email:'',contact:'https://zalo.me/example\nContact note',joined_at:'2026-10-13',expires_at:'2027-11-13',plan_months:13,payment_status:'partial',amount:50000,note:'Purchase note'},201);assert.equal(p.id,member.id);let row=(await a('state')).other_products[0];await a('other-products/'+p.id,'PATCH',{...row,expires_at:''});row=(await a('state')).other_products[0];const {expiry_status,days_left,...saved}=row;
   const db=new DatabaseSync(path.join(f.dir,'family.sqlite'));db.exec("CREATE TRIGGER reject_product_archive BEFORE INSERT ON archived_customers BEGIN SELECT RAISE(ABORT,'Injected archive failure'); END");const count=(await a('journal')).total;await a('other-products/'+p.id,'DELETE',undefined,500);assert.equal((await a('state')).other_products.length,1);assert.equal((await a('journal')).total,count);db.exec('DROP TRIGGER reject_product_archive');db.close();
-  await a('other-products/'+p.id,'DELETE');let state=await a('state');assert.equal(state.other_products.length,0);assert.equal(state.members[0].contact,'Family contact');const archive=state.archives[0];assert.equal(archive.record_type,'other_product');assert.deepEqual(archive.member,{...saved,record_type:'other_product'});const backup=await a('backup');assert.equal(backup.version,7);assert.equal(backup.tables.renewal_history[0].member_id,member.id);assert.equal(backup.tables.renewal_history[0].archive_id,null);
+  await a('other-products/'+p.id,'DELETE');let state=await a('state');assert.equal(state.other_products.length,0);assert.equal(state.members[0].contact,'Family contact');const archive=state.archives[0];assert.equal(archive.record_type,'other_product');assert.deepEqual(archive.member,{...saved,record_type:'other_product'});const backup=await a('backup');assert.equal(backup.version,9);assert.equal(backup.tables.renewal_history[0].member_id,member.id);assert.equal(backup.tables.renewal_history[0].archive_id,null);
   await target.admin('restore','POST',backup);const active=await target.admin('other-products','POST',{product:'Spotify',customer_name:'Active purchase'},201);const restored=await target.admin('archives/'+archive.id+'/restore','POST',{});state=await target.admin('state');const product=state.other_products.find(r=>r.id===restored.product_id);assert.deepEqual(Object.fromEntries(Object.keys(saved).map(k=>[k,product[k]])),{...saved,id:restored.product_id});assert.equal(product.expires_at,'');assert.equal(state.other_products.find(r=>r.id===active.id).product,'Spotify');assert.equal(state.members[0].email,'member@example.com');assert.equal(state.archives.length,0);await target.admin('archives/'+archive.id+'/restore','POST',{},409);
   const legacy=structuredClone(backup);legacy.version=4;legacy.tables.archived_customers=[];const empty=await fixture();try{await empty.admin('restore','POST',legacy);assert.equal((await empty.admin('state')).members[0].email,'member@example.com');}finally{await empty.close();}
   await a('archives/'+archive.id,'DELETE',{expected_archived_at:archive.archived_at,expected_email:archive.email});assert.equal((await a('state')).archives.length,0);assert.equal((await a('members/'+member.id+'/renewal-history')).history.length,1);
@@ -583,7 +593,7 @@ test('Node transfers preserve the full member, historical periods and audit whil
  }finally{await f.close();}
 });
 
-test('Node transfers reject stale/duplicate/archived/owner/full destinations and retain pending invite behavior',async()=>{
+test('Node transfers reject stale/duplicate/archived/owner destinations and accept full or oversized Families',async()=>{
  const f=await fixture();try{const a=f.admin;
 
  const source=await transferFamily(a,{name:'Source',manager_email:'source@example.com'}),target=await transferFamily(a,{name:'Destination',manager_email:'dest@example.com'}),full=await transferFamily(a,{name:'Full',manager_email:'full@example.com'}),archived=await transferFamily(a,{name:'Archived',manager_email:'archived@example.com'});await a('families/'+archived.id,'DELETE');
@@ -592,16 +602,23 @@ test('Node transfers reject stale/duplicate/archived/owner/full destinations and
  const duplicate=await a('members','POST',{family_id:target.id,email:profile.email},201),owner=await a('members','POST',{family_id:source.id,email:'dest@example.com'},201);const count=(await a('journal')).total;
  await a('members/'+member.id+'/transfer','POST',{},400);await a('members/'+member.id+'/transfer','POST',{...guard,revision:99},409);await a('members/'+member.id+'/transfer','POST',{...guard,expected_family_id:target.id},409);await a('members/'+member.id+'/transfer','POST',{...guard,expected_email:'other@example.com'},409);await a('members/'+member.id+'/transfer','POST',{...guard,expected_manager_email:'old-dest@example.com'},409);
  await a('members/'+member.id+'/transfer','POST',transferPayload(profile,source),400);await a('members/'+member.id+'/transfer','POST',transferPayload(profile,archived),400);await a('members/'+member.id+'/transfer','POST',{...guard,family_id:999999},400);await a('members/999999/transfer','POST',guard,404);
- await a('members/'+member.id+'/transfer','POST',guard,409);await a('members/'+member.id+'/transfer','POST',transferPayload(profile,full),400);await a('members/'+owner.id+'/transfer','POST',transferPayload((await a('state')).members.find(m=>m.id===owner.id),target),400);
+ await a('members/'+member.id+'/transfer','POST',guard,409);await a('members/'+owner.id+'/transfer','POST',transferPayload((await a('state')).members.find(m=>m.id===owner.id),target),400);
  assert.equal((await a('journal')).total,count);assert.equal((await a('state')).members.find(m=>m.id===member.id).family_id,source.id);
  const pending=await a('members','POST',{family_id:source.id,email:'pending@example.com',membership_status:'invited'},201),pendingProfile=(await a('state')).members.find(m=>m.id===pending.id);await a('members/'+pending.id+'/transfer','POST',transferPayload(pendingProfile,full));assert.equal((await a('state')).members.filter(m=>m.family_id===full.id).length,6);
  await a('members/'+member.id,'PATCH',{email:profile.email,contact:'Edited while modal open'});await a('members/'+member.id+'/transfer','POST',guard,409);profile=(await a('state')).members.find(m=>m.id===member.id);
  await a('families/'+target.id,'PATCH',{name:'Destination',manager_email:'dest-new@example.com'});await a('members/'+member.id+'/transfer','POST',transferPayload(profile,target),409);
+ await a('members/'+member.id+'/transfer','POST',transferPayload(profile,full));let moved=(await a('state')).members.find(m=>m.id===member.id);assert.equal(moved.family_id,full.id);
+ assert.equal((await a('state')).members.filter(m=>m.family_id===full.id&&m.membership_status!=='invited').length,6);
+ await a('members/'+member.id,'PATCH',{...moved,note:'Editable above five'});assert.equal((await a('state')).members.find(m=>m.id===member.id).note,'Editable above five');
+ const imported=await a('import/preview','POST',{csv:'Email,Manager,Note\n'+moved.email+',full@example.com,Import edit above five',mapping:{email:0,manager_email:1,note:2},duplicates:'update',create_groups:false});assert.equal(imported.summary.errors,0);assert.equal(imported.summary.update,1);
+
+ const ownerProfile=(await a('state')).members.find(m=>m.id===owner.id);await a('members/'+owner.id+'/transfer','POST',transferPayload(ownerProfile,full));assert.equal((await a('state')).members.filter(m=>m.family_id===full.id&&m.membership_status!=='invited').length,7);
+
 
  }finally{await f.close();}
 });
 
-test('Node transfers roll back member/case writes and serialize competing moves and last-slot allocation',async()=>{
+test('Node transfers roll back member/case writes and serialize competing moves while accepting concurrent arrivals above five',async()=>{
  const f=await fixture();try{const a=f.admin;
 
  const source=await transferFamily(a,{name:'From',manager_email:'from@example.com'}),target=await transferFamily(a,{name:'To',manager_email:'to@example.com'}),alternative=await transferFamily(a,{name:'Alternative',manager_email:'alt@example.com'});
@@ -619,7 +636,7 @@ test('Node transfers roll back member/case writes and serialize competing moves 
  const results=await Promise.all([race(member.id,guard),race(member.id,transferPayload(profile,alternative))]);assert.deepEqual(results.map(r=>r.status).sort(),[200,409]);state=await a('state');const moved=state.members.find(m=>m.id===member.id);assert.ok([target.id,alternative.id].includes(moved.family_id));assert.equal(state.issues.some(i=>i.id===incident.id||i.id===duplicate.id),false);assert.equal(state.issues.find(i=>i.id===destinationCase.id).family_id,target.id);assert.equal(state.issues.find(i=>i.id===destinationCase.id).status,'todo');assert.equal((await a('journal')).total,count+1);
  const last=await transferFamily(a,{name:'Last slot',manager_email:'last@example.com'});for(const n of [1,2,3,4])await a('members','POST',{family_id:last.id,email:'existing'+n+'@example.com'},201);
  const first=await a('members','POST',{family_id:source.id,email:'first@example.com'},201),second=await a('members','POST',{family_id:source.id,email:'second@example.com'},201);state=await a('state');const firstProfile=state.members.find(m=>m.id===first.id),secondProfile=state.members.find(m=>m.id===second.id);count=(await a('journal')).total;
- const lastResults=await Promise.all([race(first.id,transferPayload(firstProfile,last)),race(second.id,transferPayload(secondProfile,last))]);assert.deepEqual(lastResults.map(r=>r.status).sort(),[200,400]);state=await a('state');assert.equal(state.members.filter(m=>m.family_id===last.id).length,5);assert.equal(state.members.filter(m=>[first.id,second.id].includes(m.id)&&m.family_id===source.id).length,1);assert.equal((await a('journal')).total,count+1);
+ const lastResults=await Promise.all([race(first.id,transferPayload(firstProfile,last)),race(second.id,transferPayload(secondProfile,last))]);assert.deepEqual(lastResults.map(r=>r.status).sort(),[200,200]);state=await a('state');assert.equal(state.members.filter(m=>m.family_id===last.id).length,6);assert.equal(state.members.filter(m=>[first.id,second.id].includes(m.id)&&m.family_id===source.id).length,0);assert.equal((await a('journal')).total,count+2);
 
  }finally{await f.close();}
 });
@@ -645,7 +662,7 @@ test('Node vault enforces separate access, encrypts credentials and backups, rev
  const fields={email:'private-only@example.com',label:'Private family label',note:'Private note that must stay encrypted',password:secretPassword,totp:seed.toLowerCase().match(/.{1,4}/g).join(' '),recovery_email:'private-recovery@example.com'},item=await v('vault/items','POST',fields);
  const listing=await v('vault/items');assert.equal(listing.items.length,1);assert.match(listing.items[0].code,/^\d{6}$/);assert.ok(listing.items[0].expires_at>listing.server_time&&listing.items[0].expires_at<=listing.server_time+30000);assert.equal(listing.items[0].totp_key,seed);assert.equal('password' in listing.items[0],false);
  const details=await v('vault/items/'+item.id);assert.equal(details.password,secretPassword);assert.equal(details.totp,seed);assert.equal(details.recovery_email,fields.recovery_email);assert.equal(details.note,fields.note);assert.equal(listing.items[0].note,fields.note);
- const backup=await a('backup');assert.equal(backup.version,7);assert.equal(backup.tables.vault_items.length,1);assert.equal('vault_sessions' in backup.tables,false);const strings=[secretPassword,seed,privatePassword,fields.email,fields.recovery_email,fields.label,fields.note];
+ const backup=await a('backup');assert.equal(backup.version,9);assert.equal(backup.tables.vault_items.length,1);assert.equal('vault_sessions' in backup.tables,false);const strings=[secretPassword,seed,privatePassword,fields.email,fields.recovery_email,fields.label,fields.note];
  for(const endpoint of ['state','journal']){const publicData=JSON.stringify(await a(endpoint));for(const value of strings)assert.equal(publicData.includes(value),false,endpoint+' leaked a private field');}for(const value of strings)assert.equal(JSON.stringify(backup).includes(value),false,'Backup leaked a private field');
  const oldCookie=client.cookie();await v('vault/lock','POST',{});await v('vault/items','GET',undefined,423);await v('vault/items/'+item.id,'GET',undefined,423,{Cookie:oldCookie});
  await v('vault/unlock','POST',{password:'wrong'},403);await v('vault/unlock','POST',{password:privatePassword});assert.equal((await v('vault/items/'+item.id)).password,secretPassword);
@@ -744,6 +761,7 @@ test('Node issue replacement clears only the owner vault while locked, rolls bac
  const options={family_only:true,update_existing:true,keep_empty:true,preserve_fields:['recovery_email','note','label']},sheetRow={email:'reset-owner@example.com',password:'New fake Sheet password',totp:'JBSWY3DPEHPK3PXP',recovery_email:'',note:'',label:''},preview=await v('vault/import/preview','POST',{...options,items:[sheetRow]}),proof=p=>({expected_id:p.expected_id,expected_revision:p.expected_revision,expected_created_at:p.expected_created_at,expected_family_id:p.expected_family_id});
  await v('vault/lock','POST',{});
  const keep=await a('issues','POST',{family_id:fa.id,title:'Keep original'},201);await a('issues/'+keep.id,'PATCH',{status:'done',revision:0,resolution:'keep'});assert.deepEqual((await a('backup')).tables.vault_items,initialRows);assert.equal((await a('state')).families.find(x=>x.id===fa.id).trial_date,'2026-08-10');
+ await a('issues','POST',{family_id:fb.id,title:'Existing case prevents reusing this Family'},201);
  const incident=await a('issues','POST',{family_id:fa.id,title:'Replace owner and clear old secrets'},201),completion={status:'done',revision:0,resolution:'replace',replacement_email:'new-owner@example.com'},before=await a('backup');
  const fault=new DatabaseSync(path.join(f.dir,'family.sqlite'));fault.exec("CREATE TRIGGER reject_vault_reset BEFORE UPDATE ON issues BEGIN SELECT RAISE(ABORT, 'Injected completion failure'); END");
  await a('issues/'+incident.id,'PATCH',completion,500);assert.deepEqual((await a('backup')).tables,before.tables);
@@ -776,5 +794,29 @@ test('permanent archived Family deletion keeps customers, vault ciphertext and r
    const restored=await a('archives/'+state.archives[0].id+'/restore','POST',{family_id:target.id});assert.equal((await a('members/'+restored.member_id+'/renewal-history')).history.length,1);assert.equal((await a('state')).members[0].contact,'Keep contact');await a('archived-families/'+family.id,'DELETE',guard,404);
   }finally{db.close();}
   const empty=await a('families','POST',{name:'Empty',manager_email:'empty@example.com'},201);await a('families/'+empty.id,'DELETE');const row=(await a('state')).archived_families[0],g={expected_archived_at:row.archived_at,expected_created_at:row.created_at,expected_manager_email:row.manager_email};await a('archived-families/'+empty.id+'/restore','POST',{});await a('archived-families/'+empty.id,'DELETE',g,409);
+ }finally{await f.close();}
+});
+
+test('new-purchase snapshots survive status changes, renewals, archive restore/deletion and backup roundtrip',async()=>{
+ const f=await fixture(),target=await fixture();try{
+  const a=f.admin,family=await a('families','POST',{name:'New customers',manager_email:'new-owner@example.com'},201);
+  await a('members','POST',{family_id:family.id,email:'missing-date@example.com',membership_status:'new'},400);
+  const created=await a('members','POST',{family_id:family.id,email:'new@example.com',customer_name:'Khách mua mới',contact:'Zalo',joined_at:'2026-08-10',expires_at:'2026-09-10',plan_months:1,payment_status:'paid',amount:100000,membership_status:'new'},201);
+  let stats=await a('statistics?month=2026-08');assert.equal(stats.new_purchases.selected.customers,1);assert.equal(stats.new_purchases.selected.purchases,1);assert.equal(stats.new_purchases.selected.amount,100000);assert.equal(stats.selected.renewals,0);
+  let m=(await a('state')).members.find(m=>m.id===created.id);await a('members/'+m.id,'PATCH',{...m,membership_status:'active'});
+  m=(await a('state')).members.find(m=>m.id===created.id);await a('members/'+m.id+'/renewal','PATCH',{revision:m.renewal_revision,status:'paid',amount:150000,paid_at:'2026-10-21',plan_months:3,apply_now:true});
+  assert.equal((await a('statistics?month=2026-09')).selected.amount,150000);stats=await a('statistics?month=2026-08');assert.equal(stats.new_purchases.selected.amount,100000);assert.equal(stats.new_purchases.rows[0].joined_at,'2026-08-10');assert.equal(stats.new_purchases.rows[0].expires_at,'2026-09-10');
+  m=(await a('state')).members.find(m=>m.id===created.id);await a('members/'+m.id,'PATCH',{...m,membership_status:'new'});assert.equal((await a('statistics?month=all')).new_purchases.selected.purchases,1);
+  let archived=await a('members/'+m.id,'DELETE');const restored=await a('archives/'+archived.archive_id+'/restore','POST',{family_id:family.id});m=(await a('state')).members.find(m=>m.id===restored.member_id);await a('members/'+m.id,'PATCH',{...m,membership_status:'new'});assert.equal((await a('statistics?month=all')).new_purchases.selected.purchases,1);
+  archived=await a('members/'+m.id,'DELETE');const archive=(await a('state')).archives.find(r=>r.id===archived.archive_id);await a('archives/'+archive.id,'DELETE',{expected_archived_at:archive.archived_at,expected_email:archive.email});
+  stats=await a('statistics?month=2026-08');assert.equal(stats.new_purchases.selected.purchases,1);const snapshot=(await a('backup')).tables.new_purchase_history[0];assert.equal(snapshot.member_id,null);assert.equal(snapshot.archive_id,null);assert.equal(snapshot.amount,100000);
+  const backup=await a('backup');await target.admin('restore','POST',backup);assert.deepEqual((await target.admin('statistics?month=2026-08')).new_purchases,stats.new_purchases);
+ }finally{await f.close();await target.close();}
+});
+
+test('a failed purchase snapshot rolls back the customer and audit together',async()=>{
+ const f=await fixture();try{
+  const a=f.admin,family=await a('families','POST',{name:'Rollback',manager_email:'rollback-owner@example.com'},201),before=(await a('journal')).total,db=new DatabaseSync(path.join(f.dir,'family.sqlite'));
+  try{db.exec("CREATE TRIGGER reject_new_purchase BEFORE INSERT ON new_purchase_history BEGIN SELECT RAISE(ABORT,'Injected snapshot failure'); END");await a('members','POST',{family_id:family.id,email:'reject@example.com',joined_at:'2026-10-01',membership_status:'new'},500);assert.equal((await a('state')).members.length,0);assert.equal((await a('statistics?month=all')).new_purchases.total,0);assert.equal((await a('journal')).total,before);}finally{db.exec('DROP TRIGGER reject_new_purchase');db.close();}
  }finally{await f.close();}
 });

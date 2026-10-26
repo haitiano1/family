@@ -13,7 +13,8 @@ export function initRenewals(db, { fail, text, calendarDate, log }) {
       let payment = { status:m.renewal_status, amount:m.renewal_amount, paid_at:m.renewal_paid_at, note:m.renewal_note };
       if (!apply) {
         if (!renewalStatuses.includes(data.status)) fail('Trạng thái gia hạn không hợp lệ.');
-        const amount = Number(data.amount || 0), paid = calendarDate(data.paid_at), note = text(data.note);
+        const received=['paid','partial'].includes(data.status);
+        const amount = Number(data.amount || 0), paid = received?calendarDate(data.paid_at==null||data.paid_at===''?today():data.paid_at):'', note = text(data.note);
         if (!Number.isSafeInteger(amount) || amount < 0 || amount > 1000000000) fail('Số tiền gia hạn phải từ 0 đến 1 tỷ VND.');
         if (['paid','partial'].includes(data.status) && (!paid || amount <= 0)) fail('Cần số tiền đã nhận lớn hơn 0 và ngày nhận tiền.');
         if (paid && paid > today()) fail('Ngày đã nhận tiền không được ở tương lai.');
