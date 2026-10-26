@@ -1,3 +1,7 @@
+# Bản 0.20.2 — Sửa email Family
+
+Đổi email quản lý từ Sửa Family sẽ ngắt liên kết Kho cũ; mail mới không kế thừa mật khẩu/2FA của mail cũ. Giữ hồ sơ mã hóa cũ riêng để tránh mất dữ liệu. Không đổi luồng Fix lỗi hoặc schema. Xem SUA-MAIL-FAMILY.md.
+
 # Bản 0.20.0 — Đồng bộ, thứ tự case và sản phẩm
 
 Xem DONG-BO-VA-SAN-PHAM.md: trạng thái/lịch sử đồng bộ, sắp xếp Fix lỗi, nhập Sheet sản phẩm và Nguồn mua. Cần upload hai thư mục; tự bổ sung cột database schema8, backup9 tương thích bản sao cũ.

@@ -68,6 +68,10 @@ with zipfile.ZipFile(ROOT/'downloads'/'family-fix-doi-mail-tu-kho.zip','w',zipfi
     for name,content in update_contents+[('HUONG-DAN.md',(ROOT/'hosting/php/DOI-MAIL-TU-KHO.md').read_bytes())]:
         info=zipfile.ZipInfo(name);info.external_attr=0o100644<<16;info.compress_type=zipfile.ZIP_DEFLATED;z.writestr(info,content)
 print('Created downloads/family-fix-doi-mail-tu-kho.zip.')
+with zipfile.ZipFile(ROOT/'downloads'/'family-sua-mail-family.zip','w',zipfile.ZIP_DEFLATED) as z:
+    for name,content in update_contents+[('HUONG-DAN.md',(ROOT/'hosting/php/SUA-MAIL-FAMILY.md').read_bytes())]:
+        info=zipfile.ZipInfo(name);info.external_attr=0o100644<<16;info.compress_type=zipfile.ZIP_DEFLATED;z.writestr(info,content)
+print('Created downloads/family-sua-mail-family.zip.')
 # A named update for the existing Hostinger installation; retain prior fixes.
 with zipfile.ZipFile(ROOT/'downloads'/'family-thong-ke-mua-moi.zip','w',zipfile.ZIP_DEFLATED) as z:
     for name,content in update_contents+[('HUONG-DAN.md',(ROOT/'hosting/php/THONG-KE-MUA-MOI.md').read_bytes()),('THONG-KE-MUA-MOI.md',(ROOT/'hosting/php/THONG-KE-MUA-MOI.md').read_bytes()),('UPDATE.md',(ROOT/'hosting/php/UPDATE.md').read_bytes())]:

@@ -168,7 +168,7 @@ async function handle(req, res) {
           if (!manager) fail('Nhập email quản lý Family hợp lệ.');
           if (one('SELECT id FROM members WHERE family_id=? AND email=?',id,manager.email)) fail('Email quản lý trùng một khách trong nhóm.');
           run('UPDATE families SET name=?,manager_id=?,service=?,note=?,trial_date=? WHERE id=?',name,manager.id,product,note,calendarDate(data.trial_date??old.trial_date),id);
-          const oldMail=one('SELECT email FROM accounts WHERE id=?',old.manager_id)?.email;if(oldMail&&oldMail!==manager.email)log(`${actor.username}: đổi mail Family #${id} từ ${oldMail} sang ${manager.email}`);log(`${actor.username}: sửa Family #${id}`);db.exec('RELEASE family_save');return send(res,200,{ok:true});
+          const oldMail=one('SELECT email FROM accounts WHERE id=?',old.manager_id)?.email;if(oldMail&&oldMail!==manager.email)run('UPDATE vault_items SET family_id=NULL,revision=revision+1,updated_at=? WHERE family_id=?',now(),id);if(oldMail&&oldMail!==manager.email)log(`${actor.username}: đổi mail Family #${id} từ ${oldMail} sang ${manager.email}`);log(`${actor.username}: sửa Family #${id}`);db.exec('RELEASE family_save');return send(res,200,{ok:true});
         } catch(error) {db.exec('ROLLBACK TO family_save; RELEASE family_save');throw error;}
       }
     }

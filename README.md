@@ -1,4 +1,6 @@
-# YouTube Family — Quản lý khách hàng 0.20.1
+# YouTube Family — Quản lý khách hàng 0.20.2
+
+Bản 0.20.2 sửa thao tác đổi email trong Sửa Family: mail mới không kế thừa thông tin Kho của mail cũ. [Hướng dẫn](hosting/php/SUA-MAIL-FAMILY.md).
 
 Bản 0.20.1 cho phép hoàn tất Fix lỗi bằng mail đã nhập vào Kho từ Sheet, giữ thông tin tài khoản mới và lưu trữ mail cũ. Xem [đổi mail từ Kho](hosting/php/DOI-MAIL-TU-KHO.md).
 
