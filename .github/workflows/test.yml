@@ -1,0 +1,38 @@
+name: Kiểm thử Family
+# Chỉ kiểm thử: không đóng gói lên GitHub, không phát hành, không deploy.
+on:
+  push:
+    branches: ['claude/**']
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: test-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  node:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Test Node
+        run: node --test test/*.test.js
+  php:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        database: ['mysql:8.4', 'mariadb:10.11', 'mariadb:11.4']
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Test PHP + ${{ matrix.database }}
+        env:
+          FAMILY_PHP_DATABASE_IMAGE: ${{ matrix.database }}
+        run: node --test hosting/php/verify.mjs
