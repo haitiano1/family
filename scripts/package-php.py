@@ -77,6 +77,11 @@ with zipfile.ZipFile(ROOT/'downloads'/'family-tra-cuu-chuyen-nhom.zip','w',zipfi
     for name,content in update_contents+[('HUONG-DAN.md',(ROOT/'hosting/php/TRA-CUU-CHUYEN-NHOM.md').read_bytes()),('UPDATE.md',(ROOT/'hosting/php/UPDATE.md').read_bytes())]:
         info=zipfile.ZipInfo(name);info.external_attr=0o100644<<16;info.compress_type=zipfile.ZIP_DEFLATED;z.writestr(info,content)
 print('Created downloads/family-tra-cuu-chuyen-nhom.zip (customer lookup page and bulk Family moves).')
+with zipfile.ZipFile(ROOT/'downloads'/'family-ma-tra-cuu-gmail.zip','w',zipfile.ZIP_DEFLATED) as z:
+    sheets_dir=ROOT/'integrations'/'google-sheets'
+    for name,content in update_contents+[('HUONG-DAN.md',(sheets_dir/'MA-TRA-CUU-VA-GMAIL.md').read_bytes()),('UPDATE.md',(ROOT/'hosting/php/UPDATE.md').read_bytes()),('apps-script/Code.gs',(sheets_dir/'Code.gs').read_bytes()),('apps-script/appsscript.json',(sheets_dir/'appsscript.json').read_bytes())]:
+        info=zipfile.ZipInfo(name);info.external_attr=0o100644<<16;info.compress_type=zipfile.ZIP_DEFLATED;z.writestr(info,content)
+print('Created downloads/family-ma-tra-cuu-gmail.zip (lookup codes on the web and Sheet, invite links from Gmail).')
 # A named update for the existing Hostinger installation; retain prior fixes.
 with zipfile.ZipFile(ROOT/'downloads'/'family-thong-ke-mua-moi.zip','w',zipfile.ZIP_DEFLATED) as z:
     for name,content in update_contents+[('HUONG-DAN.md',(ROOT/'hosting/php/THONG-KE-MUA-MOI.md').read_bytes()),('THONG-KE-MUA-MOI.md',(ROOT/'hosting/php/THONG-KE-MUA-MOI.md').read_bytes()),('UPDATE.md',(ROOT/'hosting/php/UPDATE.md').read_bytes())]:
@@ -91,7 +96,7 @@ def add_vault_entry_update(z):
             info=zipfile.ZipInfo(name);info.external_attr=0o100644<<16;info.compress_type=zipfile.ZIP_DEFLATED
             z.writestr(info,source.read_bytes())
 with zipfile.ZipFile(ROOT/'downloads'/'family-google-sheets.zip','w',zipfile.ZIP_DEFLATED) as z:
-    for name in ['Code.gs','appsscript.json','HUONG-DAN.md','CAP-NHAT-BO-CUC.md','SUA-KET-NOI.md','SUA-KHOA-DATABASE.md','CHAY-DOI-BO-CUC.md','GON-COT-VA-CON-NGAY.md','SUA-DONG-KHO-TRONG.md','SUA-MAT-KET-NOI-MYSQL.md','SUA-GHI-FAMILY-TABLE.md']:
+    for name in ['Code.gs','appsscript.json','HUONG-DAN.md','MA-TRA-CUU-VA-GMAIL.md','CAP-NHAT-BO-CUC.md','SUA-KET-NOI.md','SUA-KHOA-DATABASE.md','CHAY-DOI-BO-CUC.md','GON-COT-VA-CON-NGAY.md','SUA-DONG-KHO-TRONG.md','SUA-MAT-KET-NOI-MYSQL.md','SUA-GHI-FAMILY-TABLE.md']:
         info=zipfile.ZipInfo(name);info.external_attr=0o100644<<16;info.compress_type=zipfile.ZIP_DEFLATED
         z.writestr(info,(connector/name).read_bytes())
     info=zipfile.ZipInfo('family-hostinger-update.zip');info.external_attr=0o100644<<16;info.compress_type=zipfile.ZIP_DEFLATED

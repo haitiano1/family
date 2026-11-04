@@ -162,6 +162,8 @@ tbody tr:hover td { background-color: #fbfcff; }
 .customer-name { font-size: 14px; line-height: 1.5; color: var(--ink-strong); }
 .customer-info .info-line.subtext { color: #3c5a7d; }
 .customer-note, .contact-content { white-space: pre-wrap; overflow-wrap: anywhere; }
+.customer-info .lookup-code-line { color: var(--muted); }
+.lookup-code { color: var(--ink-strong); font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-weight: 700; letter-spacing: .08em; margin-left: 2px; }
 .info-line { display: flex; align-items: center; gap: 6px; }
 .info-text { min-width: 0; overflow-wrap: anywhere; }
 .copy-info { display: inline-grid; place-items: center; flex: 0 0 auto; color: #617b9f; background: transparent; padding: 4px; width: 28px; height: 28px; min-height: 28px; border-radius: 7px; }

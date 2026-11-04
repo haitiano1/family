@@ -12,7 +12,7 @@ Khi mail chủ Family gặp sự cố (bị quét, bị vô hiệu hoá…), kh�
 
 Địa chỉ: `https://tên-miền-của-bạn/tra-cuu.html`. Trang này không cần mật khẩu truy cập website. Khách chỉ thấy thông tin của chính mình: tên Family, trạng thái, lời nhắn của shop, hạn dùng và link vào nhóm mới. Trang không hiện mail chủ Family hay mail của khách khác.
 
-Mỗi Gmail khách có một **mã tra cứu 6 ký tự** cố định. Lấy mã ở menu **…** của khách → **Copy link tra cứu**. Nội dung copy gồm link riêng có sẵn mã (`/tra-cuu.html#ma=…`), Gmail và mã. Nên gửi cho khách lúc bán hoặc gia hạn, để khi nhóm lỗi khách tự vào xem.
+Mỗi Gmail khách có một **mã tra cứu 6 ký tự** cố định. Từ 0.22.0, mã hiện ngay dưới Gmail của khách, kèm nút copy. Tab Google Sheet `FamilySync_MaTraCuu` liệt kê mã của từng khách và đồng bộ hai chiều (xem integrations/google-sheets/MA-TRA-CUU-VA-GMAIL.md). Menu **…** của khách → **Copy link tra cứu** vẫn copy tin nhắn đầy đủ. Nội dung copy gồm link riêng có sẵn mã (`/tra-cuu.html#ma=…`), Gmail và mã. Nên gửi cho khách lúc bán hoặc gia hạn, để khi nhóm lỗi khách tự vào xem.
 
 - Nhập sai 8 lần trong 15 phút thì Gmail đó bị khóa tra cứu 15 phút. Một địa chỉ IP sai quá 40 lần cũng bị khóa.
 - Mã bị lộ hoặc gửi nhầm: menu **…** của khách → **Đổi mã tra cứu**. Mã và link cũ hết tác dụng, phiên đang mở bị đăng xuất; copy link tra cứu mới để gửi lại.
@@ -43,7 +43,7 @@ Google đổi link khi để lâu: bấm **Sửa** trên dòng link và dán lin
 
 ## Lưu ý
 
-- Link mời hiện được dán tay; phần tự lấy link từ Gmail sẽ làm sau.
+- Từ 0.22.0, nút **Lấy link từ Gmail** tự lấy link từ thư mời gửi tới Gmail có dấu + và xếp vào đúng Family (cần kết nối Google Sheet và Apps Script v5.8). Vẫn dán tay được như trước.
 - Messenger và Zalo mở link bằng trình duyệt trong ứng dụng, nơi Google không cho đăng nhập. Trang tra cứu nhận ra trường hợp này và hướng dẫn khách mở bằng Chrome/Safari.
 - Khách gửi ảnh chụp lỗi qua link liên hệ của shop; trang chưa có chỗ tải ảnh lên.
 - Trên bản Windows, trang tra cứu chỉ mở được trên chính máy đó. Khách dùng được khi website chạy trên Hostinger hoặc chế độ hosting của Node.

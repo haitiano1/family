@@ -1,3 +1,7 @@
+# 0.22.0 — Mã tra cứu và lấy link mời từ Gmail
+
+Dùng **Cập nhật một chạm**; không cần chạy SQL, sửa config.php hay .htaccess. Nếu upload tay: sao lưu dữ liệu, upload nội dung hai thư mục family-private và public_html của gói family-ma-tra-cuu-gmail.zip, giữ config.php và database, rồi Ctrl+F5. Sau đó cập nhật Apps Script: dán Code.gs và appsscript.json mới, chạy hàm capQuyenGmail để cấp quyền chỉ đọc Gmail, rồi Deploy → Manage deployments → Edit → New version. Xem MA-TRA-CUU-VA-GMAIL.md.
+
 # 0.21.0 — Tra cứu khách & chuyển nhóm
 
 Dùng **Cập nhật một chạm**; không cần chạy SQL, sửa config.php hay .htaccess. Nếu upload tay: sao lưu dữ liệu, upload nội dung hai thư mục family-private và public_html của gói family-tra-cuu-chuyen-nhom.zip vào đúng thư mục đang dùng, giữ config.php và database, rồi Ctrl+F5. Schema 8 giữ nguyên; các bảng tra cứu được tạo một lần khi website mở. Xem TRA-CUU-CHUYEN-NHOM.md.

@@ -126,6 +126,40 @@ function lookupSaveInvite(PDO $db,?int $familyId,?int $id,array $d): array {
     logEntry($db,'Cá nhân: thêm link mời '.($label?:'#'.$new)." cho {$f['name']}");
     return ['ok'=>true,'id'=>$new];
 }
+// Invite mails read from Gmail by Apps Script. Each link is filed under the active Family whose
+// owner Gmail appears in the mail, labelled with the Gmail that received it. The newest mail per
+// address wins: a link already in a pool is left alone, and a newer link replaces one nobody has used.
+function lookupImportInvites(PDO $db,array $items): array {
+    $owners=[];foreach(all($db,"SELECT f.id,f.name,a.email FROM families f JOIN accounts a ON a.id=f.manager_id WHERE f.archived_at=''") as $f)$owners[$f['email']]=$f;
+    $mails=[];
+    foreach($items as $item){
+        if(!is_array($item))continue;
+        $url=is_string($item['url']??null)?trim($item['url']):'';$to=is_string($item['to']??null)?strtolower(trim($item['to'])):'';$date=is_string($item['date']??null)?$item['date']:'';
+        if($url===''||strlen($url)>2000||!lookupGoogleUrl($url)||strlen($to)>200||!preg_match('/^[^\s@]+@[^\s@]+\.[^\s@]+$/uD',$to)||!preg_match('/^(\d{4})-(\d{2})-(\d{2})$/D',$date,$p)||!checkdate((int)$p[2],(int)$p[3],(int)$p[1]))continue;
+        $family=null;foreach(is_array($item['emails']??null)?array_slice($item['emails'],0,20):[] as $address)if(is_string($address)&&isset($owners[strtolower(trim($address))])){$family=$owners[strtolower(trim($address))];break;}
+        $at=is_string($item['sent_at']??null)&&strlen($item['sent_at'])<=40?$item['sent_at']:$date;
+        $mails[]=['url'=>$url,'to'=>$to,'date'=>$date,'at'=>$at,'family'=>$family];
+    }
+    usort($mails,fn($a,$b)=>strcmp($b['at'],$a['at']));
+    $out=['found'=>count($mails),'added'=>0,'updated'=>0,'unchanged'=>0];$unmatched=[];$families=[];$seen=[];
+    foreach($mails as $m){
+        $f=$m['family'];if(!$f){$unmatched[$m['to']]=true;continue;}
+        $key=$f['id']."\0".$m['to'];if(isset($seen[$key]))continue;$seen[$key]=true;
+        if(one($db,'SELECT id FROM family_invites WHERE url=?',[$m['url']])){$out['unchanged']++;continue;}
+        $old=one($db,'SELECT * FROM family_invites WHERE family_id=? AND label=? ORDER BY id DESC LIMIT 1',[$f['id'],$m['to']]);
+        if($old&&lookupInviteHolder(lookupInviteRefs($db,(int)$old['id']))['state']!=='used'){
+            if($old['sent_on']!==''&&$old['sent_on']>$m['date']){$out['unchanged']++;continue;}
+            q($db,'UPDATE family_invites SET url=?,sent_on=?,revision=revision+1,updated_at=? WHERE id=?',[$m['url'],$m['date'],lookupNow(),$old['id']]);
+            logEntry($db,"Cá nhân: đổi link mời {$m['to']} của {$f['name']} theo thư mới trong Gmail");$out['updated']++;
+        }else{
+            q($db,'INSERT INTO family_invites(family_id,label,url,sent_on,revision,created_at,updated_at) VALUES (?,?,?,?,0,?,?)',[$f['id'],$m['to'],$m['url'],$m['date'],lookupNow(),lookupNow()]);
+            logEntry($db,"Cá nhân: thêm link mời {$m['to']} cho {$f['name']} từ Gmail");$out['added']++;
+        }
+        $families[$f['name']]=true;
+    }
+    foreach($seen as $key=>$_)unset($unmatched[explode("\0",$key,2)[1]]);
+    return [...$out,'families'=>array_keys($families),'unmatched'=>array_slice(array_keys($unmatched),0,20),'unmatched_count'=>count($unmatched)];
+}
 function lookupDeleteInvite(PDO $db,int $id,array $d): array {
     $old=one($db,'SELECT i.*,f.name AS family_name FROM family_invites i JOIN families f ON f.id=i.family_id WHERE i.id=?',[$id]);if(!$old)fail('Không tìm thấy link mời.',404);
     if(lookupRevision($d['revision']??null)!==(int)$old['revision'])fail('Link mời vừa được sửa ở nơi khác. Tải lại rồi thử lại.',409);
@@ -216,7 +250,9 @@ function lookupAdminState(PDO $db): array {
     $invites=array_map(function($i)use($byInvite){$h=lookupInviteHolder($byInvite[(int)$i['id']]??[]);return [...$i,'expires_on'=>lookupInviteExpiry($i['sent_on']),'holder_state'=>$h['state'],'holder_move_id'=>$h['move']?(int)$h['move']['id']:null,'holder_email'=>$h['move']['email']??'','holder_name'=>$h['move']['customer_name']??''];},all($db,'SELECT * FROM family_invites ORDER BY family_id,id'));
     $moves=array_map(function($mv){$live=$mv['member_family_id']!==null&&$mv['to_family_id']!==null&&(int)$mv['member_family_id']===(int)$mv['to_family_id'];return [...$mv,'live'=>$live,'effective_state'=>in_array($mv['state'],LOOKUP_OPEN_STATES,true)&&!$live?'stale':$mv['state']];},all($db,"SELECT mv.*,m.family_id AS member_family_id FROM member_moves mv LEFT JOIN members m ON m.id=mv.member_id WHERE mv.dismissed_at='' ORDER BY mv.id DESC LIMIT 500"));
     $codes=[];foreach(all($db,'SELECT DISTINCT email FROM members') as $r)$codes[$r['email']]=lookupCodeFor($db,$r['email'],$salt);
-    return ['lookup_supported'=>true,'lookup_settings'=>lookupSettings($db),'family_statuses'=>all($db,'SELECT family_id,status,note,updated_at,revision FROM family_statuses'),'invites'=>$invites,'moves'=>$moves,'lookup_codes'=>(object)$codes];
+    // Gmail import needs the Google Sheet connection (same Apps Script). Plain query: no DDL inside the state audit.
+    $gmail=false;try{$gmail=(bool)one($db,"SELECT name FROM family_sheet_state WHERE name='config'");}catch(PDOException $e){}
+    return ['lookup_supported'=>true,'gmail_import'=>$gmail,'lookup_settings'=>lookupSettings($db),'family_statuses'=>all($db,'SELECT family_id,status,note,updated_at,revision FROM family_statuses'),'invites'=>$invites,'moves'=>$moves,'lookup_codes'=>(object)$codes];
 }
 
 // ---- Public lookup (customer) ----

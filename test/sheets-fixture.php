@@ -1,6 +1,6 @@
 <?php
 declare(strict_types=1);
-foreach(['core','business','audit','vault','records','issues','sheets'] as $file)require __DIR__."/$file.php";
+foreach(['core','business','audit','vault','records','issues','sheets','lookup'] as $file)require __DIR__."/$file.php";
 ini_set('display_errors','1');
 function check(bool $value,string $name): void {if(!$value)throw new RuntimeException($name);}
 $c=config();$db=db($c);$GLOBALS['vault_db']=$db;
@@ -153,4 +153,21 @@ for($n=1;$n<=5;$n++)saveMemberRecord($db,null,['family_id'=>$crowded['id'],'emai
 $moving=saveMemberRecord($db,null,['family_id'=>$family['id'],'email'=>'moving-to-crowded@example.com']);$profile=one($db,'SELECT * FROM members WHERE id=?',[$moving['id']]);transferMember($db,$moving['id'],['revision'=>$profile['renewal_revision'],'expected_family_id'=>$family['id'],'expected_email'=>$profile['email'],'family_id'=>$crowded['id'],'expected_manager_email'=>'crowded-owner@example.com']);finishAudit();
 check($sync()['ok'],'export over-capacity transfer');$idx=array_search('moving-to-crowded@example.com',array_column($cloud['core']['members'],'email'));check($idx!==false,'transferred customer reaches Sheet');$cloud['core']['members'][$idx]['note']='Sheet edit above five';
 check($sync()['ok'],'Sheet can edit an existing transferred customer above five');check(one($db,'SELECT note FROM members WHERE id=?',[$moving['id']])['note']==='Sheet edit above five','over-capacity Sheet edit retained');
+// Apps Script v5.8 adds the Mã tra cứu tab: web codes go out, a typed code comes back.
+$codeCloud=$cloud['core'];$codeSend=function($request)use(&$codeCloud){
+    $revision=hash('sha256',json_encode($codeCloud));
+    if($request['action']==='read')return ['ok'=>true,'data'=>$codeCloud,'revision'=>$revision,'script_version'=>'family-ma-tra-cuu-v5.8','customer_layout'=>'grouped','lookup_codes'=>'v1'];
+    check($request['revision']===$revision,'codes CAS revision');$codeCloud=$request['data'];return ['ok'=>true,'script_version'=>'family-ma-tra-cuu-v5.8','customer_layout'=>'grouped','lookup_codes'=>'v1'];
+};
+check(sheetsSync($db,$c,'core',[],null,$codeSend)['ok'],'codes tab export');$emails=array_column(all($db,"SELECT DISTINCT m.email FROM members m JOIN families f ON f.id=m.family_id WHERE f.archived_at=''"),'email');
+check(count($codeCloud['codes'])===count($emails)&&!array_diff($emails,array_column($codeCloud['codes'],'email')),'one codes row per active Gmail');
+foreach($codeCloud['codes'] as $r)check($r['code']===lookupCodeFor($db,$r['email']),'web code exported');
+$codeCloud['codes'][0]['code']='hx4n 9t';check(sheetsSync($db,$c,'core',[],null,$codeSend)['ok'],'typed code imported');check(lookupCodeFor($db,$codeCloud['codes'][0]['email'])==='HX4N9T'&&$codeCloud['codes'][0]['code']==='HX4N9T','typed code saved on MySQL');
+$codeCloud['codes'][0]['code']='OOOOOO';try{sheetsSync($db,$c,'core',[],null,$codeSend);throw new RuntimeException('invalid code accepted');}catch(FamilyError $e){check($e->status===409,'invalid code refused');}check(lookupCodeFor($db,$codeCloud['codes'][0]['email'])==='HX4N9T','invalid code rolled back');
+// Gmail invite links are filed by the receiving address under the Family whose owner sent them.
+$owner=one($db,"SELECT a.email,f.name FROM families f JOIN accounts a ON a.id=f.manager_id WHERE f.archived_at='' ORDER BY f.id LIMIT 1");
+$gmailSend=fn($request)=>['ok'=>true,'gmail_invites'=>'v1','invites'=>[['id'=>'m1','to'=>'Hai+1@gmail.com','date'=>'2026-11-03','sent_at'=>'2026-11-03T09:00:00.000Z','url'=>'https://families.google.com/join/promo/mysql1','emails'=>[$owner['email']]],['id'=>'m2','to'=>'hai+2@gmail.com','date'=>'2026-11-03','sent_at'=>'2026-11-03T09:05:00.000Z','url'=>'https://families.google.com/join/promo/mysql2','emails'=>['nobody@example.com']]]];
+$r=sheetsGmailInvites($db,$c,$gmailSend);check($r['added']===1&&$r['unmatched']===['hai+2@gmail.com'],'Gmail invite filed on MySQL');
+$filed=one($db,'SELECT i.label,f.name FROM family_invites i JOIN families f ON f.id=i.family_id WHERE i.url=?',['https://families.google.com/join/promo/mysql1']);check($filed['label']==='hai+1@gmail.com'&&$filed['name']===$owner['name'],'labelled by the receiving Gmail under the inviting owner');
+$r=sheetsGmailInvites($db,$c,$gmailSend);check($r['unchanged']===1&&$r['added']===0,'repeat Gmail import changes nothing');
 echo "Sheet PHP/MySQL integration checks passed\n";

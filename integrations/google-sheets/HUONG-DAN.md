@@ -2,6 +2,8 @@
 
 Chức năng mới gồm tạo Sheet từ dữ liệu website, sửa Family/khách/hạn/thanh toán ở cả hai nơi, và đồng bộ kho mật khẩu/khóa 2FA khi mở Kho. Gói giao diện cũ chưa có chức năng này.
 
+Từ 0.22.0 có thêm tab **FamilySync_MaTraCuu** (Tên khách · Mail khách · Mã tra cứu) và nút **Lấy link từ Gmail** (quyền chỉ đọc Gmail). Đã kết nối rồi thì xem **MA-TRA-CUU-VA-GMAIL.md**: dán Code.gs và appsscript.json mới, chạy capQuyenGmail rồi triển khai New version.
+
 Nếu đã kết nối và chỉ cập nhật bố cục Khách theo Family, làm theo **CAP-NHAT-BO-CUC.md**; không cần upload website hoặc tạo Sheet mới.
 
 Để áp dụng bố cục trực tiếp trên Sheet đã có, xem **CHAY-DOI-BO-CUC.md**.
@@ -19,8 +21,8 @@ Nếu đã kết nối và chỉ cập nhật bố cục Khách theo Family, là
 1. Đăng nhập tài khoản Google sở hữu Sheet, mở https://script.google.com/ và chọn **New project / Dự án mới**.
 2. Đặt tên `Family Sync`. Xóa mã mẫu trong `Code.gs` và dán toàn bộ nội dung **Code.gs trong gói kết nối này**. Không dùng script khác hoặc nhập mật khẩu tài khoản vào mã.
 3. Mở **Project Settings / Cài đặt dự án**, bật **Show appsscript.json manifest file in editor**. Quay lại Editor, mở `appsscript.json` và thay bằng tệp cùng tên trong gói. Lưu dự án.
-4. Chọn hàm **setupFamilySync** trên thanh chạy, bấm **Run / Chạy**. Google yêu cầu cấp quyền tạo/đọc/ghi Sheet: xem tên tài khoản và quyền, rồi cấp quyền cho script do chính bạn tạo. Nếu Google hiển thị cảnh báo ứng dụng chưa xác minh, chỉ tiếp tục với dự án của bạn và mã nguồn đã kiểm tra. Nếu tài khoản Workspace chặn triển khai, cần quản trị viên cho phép; không thay đổi chia sẻ Sheet thành công khai để xử lý.
-5. Mở **Execution log / Nhật ký thực thi** và bấm URL Sheet vừa tạo. File này nằm trong Google Drive của bạn, có các tab `FamilySync_Family`, `FamilySync_Khach`, `FamilySync_Kho`. Chưa có dữ liệu website cho đến bước 4 bên dưới.
+4. Chọn hàm **setupFamilySync** trên thanh chạy, bấm **Run / Chạy**. Google yêu cầu cấp quyền tạo/đọc/ghi Sheet và quyền chỉ đọc Gmail (để lấy link mời Family): xem tên tài khoản và quyền, rồi cấp quyền cho script do chính bạn tạo. Nếu Google hiển thị cảnh báo ứng dụng chưa xác minh, chỉ tiếp tục với dự án của bạn và mã nguồn đã kiểm tra. Nếu tài khoản Workspace chặn triển khai, cần quản trị viên cho phép; không thay đổi chia sẻ Sheet thành công khai để xử lý.
+5. Mở **Execution log / Nhật ký thực thi** và bấm URL Sheet vừa tạo. File này nằm trong Google Drive của bạn, có các tab `FamilySync_Family`, `FamilySync_Khach`, `FamilySync_Kho`; tab `FamilySync_MaTraCuu` được website tạo ở lượt đồng bộ đầu tiên. Chưa có dữ liệu website cho đến bước 4 bên dưới.
 6. Có thể chạy lại setupFamilySync; script dùng lại file đã tạo. Không đổi tên tab/tiêu đề cột. Không cần chia sẻ Sheet công khai. Script không sửa tab cũ của bạn.
 
 ## 3. Triển khai script và lấy mã kết nối

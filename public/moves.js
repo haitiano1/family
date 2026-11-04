@@ -30,6 +30,16 @@ function moveMessage(state, move) {
   const code = codeOf(state, move.email); if (!code) return '';
   return `Chào ${move.customer_name || 'bạn'}, ${move.from_family_name} đang gặp sự cố nên shop đã chuyển bạn sang nhóm mới, hạn dùng giữ nguyên. Mở link này bằng Chrome hoặc Safari, nhập Gmail ${move.email} để lấy link vào nhóm: ${personalLink(code)}\nMã tra cứu: ${code}`;
 }
+// Result of Lấy link từ Gmail (button and the 10-minute check in sheets.js).
+export function gmailSummary(result) {
+  const parts = [];
+  if (result.added) parts.push(`thêm ${result.added} link`);
+  if (result.updated) parts.push(`cập nhật ${result.updated} link`);
+  let text = parts.length ? `Đã ${parts.join(', ')} từ Gmail${result.families?.length ? ' cho ' + result.families.join(', ') : ''}.` : result.found ? 'Link mời trong Gmail đã có đủ trên web.' : 'Không thấy thư mời Family nào trong 14 ngày qua.';
+  if (result.unmatched_count) text += ` ${result.unmatched_count} thư chưa khớp mail chủ Family nào (${result.unmatched.slice(0, 3).join(', ')}${result.unmatched_count > 3 ? '…' : ''}).`;
+  return text;
+}
+const gmailButton = ctx => ctx.state.gmail_import ? ctx.btn('invites-gmail', 'Lấy link từ Gmail', 'secondary', 'title="Đọc thư mời Family trong Gmail 14 ngày qua và thêm link vào đúng Family"') : '';
 export function familyStatusBadge(ctx, familyId) {
   const status = familyStatus(ctx.state, familyId).status;
   return problem(status) ? `<span class="badge ${statusColors[status]} lookup-family-badge">${ctx.escape(familyStatusLabels[status])}</span>` : '';
@@ -84,7 +94,7 @@ export function familyLookupSections(ctx, family) {
   const incoming = (state.moves || []).filter(m => m.to_family_id === family.id);
   const callout = problem(status.status) && members.length ? `<div class="notice lookup-callout"><div><strong>Nhóm đang có sự cố.</strong> ${movable} khách còn hạn có thể chuyển sang nhóm mới${expired ? `, ${expired} khách đã quá hạn sẽ thấy lời nhắc gia hạn` : ''}.</div>${btn('move-open', 'Chuyển khách sang nhóm mới', 'primary', `data-id="${family.id}"`)}</div>` : '';
   return `<section class="card lookup-card"><div class="section-heading"><div><h2>Trạng thái cho khách</h2><p>Khách thấy trạng thái và lời nhắn này trên trang tra cứu.</p></div><div class="row-actions">${btn('family-status', 'Đổi trạng thái', 'secondary', `data-id="${family.id}"`)}</div></div><div class="lookup-status"><span class="badge ${statusColors[status.status]}">${escape(familyStatusLabels[status.status])}</span>${status.updated_at ? `<span class="subtext">Cập nhật ${ctx.date(status.updated_at)}</span>` : ''}<p>${escape(status.note || 'Chưa có lời nhắn cho khách.')}</p></div>${callout}</section>`
-    + (problem(status.status) && !invites.length ? '' : `<section class="card lookup-card"><div class="section-heading"><div><h2>Link mời vào Family này <span class="section-count">${ready}/${invites.length}</span></h2><p>Mỗi link chỉ giao cho một khách khi chuyển nhóm. Google đổi link thì bấm Sửa và dán link mới.</p></div><div class="row-actions">${btn('invite-add', '+ Thêm link mời', 'secondary', `data-id="${family.id}"`)}</div></div>${inviteTable(ctx, invites)}</section>`)
+    + (problem(status.status) && !invites.length ? '' : `<section class="card lookup-card"><div class="section-heading"><div><h2>Link mời vào Family này <span class="section-count">${ready}/${invites.length}</span></h2><p>Mỗi link chỉ giao cho một khách khi chuyển nhóm. ${state.gmail_import ? 'Google gửi thư mời mới thì bấm Lấy link từ Gmail; web tự thay link của đúng Gmail nhận thư.' : 'Google đổi link thì bấm Sửa và dán link mới.'}</p></div><div class="row-actions">${gmailButton(ctx)}${btn('invite-add', '+ Thêm link mời', 'secondary', `data-id="${family.id}"`)}</div></div>${inviteTable(ctx, invites)}</section>`)
     + (incoming.length ? `<section class="card lookup-card"><div class="section-heading"><div><h2>Khách chuyển đến Family này</h2><p>Khách bấm "Tôi đã vào được" hoặc bạn bấm Đã vào để chuyển khách sang đang ở nhóm.</p></div></div>${moveTable(ctx, incoming)}</section>` : '');
 }
 
@@ -94,12 +104,12 @@ export function lookupPage(ctx) {
   const settings = state.lookup_settings || {}, incidents = state.families.filter(f => problem(familyStatus(state, f.id).status));
   const moves = state.moves || [], waiting = moves.filter(m => ['assigned', 'opened', 'failed'].includes(m.effective_state)), failed = moves.filter(m => m.effective_state === 'failed');
   const link = lookupPageUrl();
-  return ctx.hero('TRA CỨU KHÁCH', 'Tra cứu & chuyển nhóm', 'Khách nhập Gmail và mã tra cứu để xem tình trạng nhóm và lấy link vào nhóm mới.', ctx.copyButton(link, 'link trang tra cứu', 'Copy link trang') + ` <a class="secondary link-button" href="/tra-cuu.html" target="_blank" rel="noopener">Mở trang khách</a>`)
+  return ctx.hero('TRA CỨU KHÁCH', 'Tra cứu & chuyển nhóm', 'Khách nhập Gmail và mã tra cứu để xem tình trạng nhóm và lấy link vào nhóm mới.', ctx.copyButton(link, 'link trang tra cứu', 'Copy link trang') + ` <a class="secondary link-button" href="/tra-cuu.html" target="_blank" rel="noopener">Mở trang khách</a>` + (state.gmail_import ? ' ' + gmailButton(ctx) : ''))
     + `<div class="dashboard-summary stats"><div class="card stat"><h2>Family có sự cố</h2><strong>${incidents.length}</strong></div><div class="card stat"><h2>Khách chờ vào nhóm</h2><strong>${waiting.length}</strong></div><div class="card stat"><h2>Khách báo không vào được</h2><strong>${failed.length}</strong></div></div>`
     + `<section class="card"><div class="section-heading"><div><h2>Family có sự cố</h2><p>Đặt trạng thái trong trang chi tiết Family.</p></div></div>${incidents.length ? `<div class="table-wrap"><table class="lookup-table"><thead><tr><th scope="col">FAMILY</th><th scope="col">TRẠNG THÁI</th><th scope="col">KHÁCH</th><th scope="col"></th></tr></thead><tbody>${incidents.map(f => { const s = familyStatus(state, f.id); return `<tr><td data-column="family"><a class="email-link" href="#family/${f.id}">${escape(f.name)}</a><span class="subtext">${escape(f.manager_email)}</span></td><td data-column="state"><span class="badge ${statusColors[s.status]}">${escape(familyStatusLabels[s.status])}</span><span class="subtext">${escape(s.note)}</span></td><td data-column="members">${familyOccupancy(state.members, f.id).label}</td><td data-column="actions"><a class="primary link-button tiny" href="#family/${f.id}">Mở Family</a></td></tr>`; }).join('')}</tbody></table></div>` : '<p class="muted">Tất cả Family đang hoạt động bình thường.</p>'}</section>`
     + `<section class="card"><div class="section-heading"><div><h2>Khách đang chuyển nhóm</h2><p>Thứ tự mới nhất trước. Ẩn các lượt đã xong để danh sách gọn.</p></div></div>${moveTable(ctx, moves, true)}</section>`
     + `<section class="card"><div class="section-heading"><div><h2>Thông tin hiển thị cho khách</h2><p>Tên shop và link liên hệ xuất hiện trên trang tra cứu.</p></div><div class="row-actions">${btn('lookup-settings', 'Sửa thông tin', 'secondary')}</div></div><div class="list-item"><strong>Tên shop</strong><p>${escape(settings.shop_name || 'Chưa đặt')}</p></div><div class="list-item"><strong>Link liên hệ</strong><p>${settings.contact_url ? `<a class="contact-link" href="${escape(settings.contact_url)}" target="_blank" rel="noopener noreferrer">${escape(settings.contact_label || settings.contact_url)}</a>` : 'Chưa đặt'}</p></div><div class="list-item"><strong>Ghi chú cho khách</strong><p>${escape(settings.help_text || 'Chưa có')}</p></div></section>`
-    + `<section class="card"><h2>Cách dùng</h2><ol class="lookup-steps"><li>Gửi mỗi khách link tra cứu riêng (menu … của khách → <strong>Copy link tra cứu</strong>), ví dụ lúc bán hoặc gia hạn.</li><li>Khi Family gặp sự cố: mở Family → <strong>Đổi trạng thái</strong> và viết lời nhắn cho khách.</li><li>Ở Family mới: gửi lời mời từ tài khoản chủ tới mail của bạn, rồi <strong>+ Thêm link mời</strong> cho từng link.</li><li>Quay lại Family cũ → <strong>Chuyển khách sang nhóm mới</strong>. Mỗi khách nhận đúng một link.</li><li>Khách mở link tra cứu, nhập Gmail để thấy link vào nhóm mới; theo dõi tiến độ tại đây.</li></ol></section>`;
+    + `<section class="card"><h2>Cách dùng</h2><ol class="lookup-steps"><li>Gửi mỗi khách link tra cứu riêng (menu … của khách → <strong>Copy link tra cứu</strong>), ví dụ lúc bán hoặc gia hạn.</li><li>Khi Family gặp sự cố: mở Family → <strong>Đổi trạng thái</strong> và viết lời nhắn cho khách.</li><li>Ở Family mới: gửi lời mời từ tài khoản chủ tới mail của bạn (ví dụ tenban+f09s1@gmail.com), rồi bấm <strong>Lấy link từ Gmail</strong>${state.gmail_import ? '' : ' (cần kết nối Google Sheet)'} hoặc <strong>+ Thêm link mời</strong> để dán tay.</li><li>Quay lại Family cũ → <strong>Chuyển khách sang nhóm mới</strong>. Mỗi khách nhận đúng một link.</li><li>Khách mở link tra cứu, nhập Gmail để thấy link vào nhóm mới; theo dõi tiến độ tại đây.</li></ol></section>`;
 }
 
 function statusFields(ctx, family, status) {
@@ -185,6 +195,13 @@ export async function handleLookupAction(ctx, action, button) {
     return true;
   }
   if (action === 'move-open') { openBulkMove(ctx, id); return true; }
+  if (action === 'invites-gmail') {
+    button.disabled = true;
+    try { const result = await ctx.post('sheets/gmail-invites', {}); ctx.toast(gmailSummary(result), 9000); await ctx.refresh(); }
+    catch (error) { ctx.toast(error.message, 12000); }
+    finally { if (button.isConnected) button.disabled = false; }
+    return true;
+  }
   const move = (state.moves || []).find(m => m.id === id);
   if (['move-joined', 'move-release', 'move-reassign', 'move-dismiss'].includes(action) && !move) return ctx.toast('Lượt chuyển nhóm đã thay đổi. Tải lại trang.'), true;
   if (action === 'move-joined') {

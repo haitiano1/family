@@ -2,7 +2,11 @@
  * Script Properties holds FAMILY_TOKEN and FAMILY_SPREADSHEET_ID privately.
  * No account credentials, tokens or cell values are written to execution logs.
  */
-const FAMILY_SYNC_VERSION='family-groups-compact-v5.7';
+const FAMILY_SYNC_VERSION='family-ma-tra-cuu-v5.8';
+// Websites from 0.22.0 look for these flags before sending the Mã tra cứu tab
+// or asking for invite links from Gmail.
+const FAMILY_LOOKUP_CODES='v1';
+const FAMILY_GMAIL_INVITES='v1';
 function doGet(){return ContentService.createTextOutput(JSON.stringify({ok:true,service:'family-sync',script_version:FAMILY_SYNC_VERSION})).setMimeType(ContentService.MimeType.JSON);}
 const FAMILY_TABS = {
   families: {name:'FamilySync_Family', fields:['id','name','manager_email','trial_date','service','note'], headers:['ID (không sửa)','Tên Family','Email quản lý','Ngày trial (yyyy-mm-dd)','Dịch vụ','Ghi chú']},
@@ -127,6 +131,102 @@ function familyWriteGroups(tab,families,members,onStage=()=>{}){
   tab.getRange(1,1).setNote('Chỉ dùng A:G. H:K chứa ID và dữ liệu giữ thanh toán/gia hạn, không xóa/sửa. Sắp xếp toàn bộ dòng cùng các cột ẩn.');
 }
 
+// Mã tra cứu: one row per customer Gmail, written by the website. Only the code
+// cell is read back; name and Gmail are matched to the website by the hidden ID.
+const FAMILY_CODE_TAB='FamilySync_MaTraCuu';
+const FAMILY_CODE_COLUMNS=['customer_name','email','code','id'];
+const FAMILY_CODE_WIRE=['id','customer_name','email','code'];
+const FAMILY_CODE_HEADERS=['Tên khách','Mail khách','Mã tra cứu','ID (không sửa)'];
+function familyCodesTab(book,create){
+  let tab=book.getSheetByName(FAMILY_CODE_TAB);
+  if(!tab){if(!create)return null;tab=book.insertSheet(FAMILY_CODE_TAB);familyWriteCodes(tab,[]);return tab;}
+  if(tab.getLastColumn()>FAMILY_CODE_HEADERS.length)throw Error('schema');
+  const header=tab.getRange(1,1,1,FAMILY_CODE_HEADERS.length).getDisplayValues()[0];
+  if(header.some((value,i)=>value!==FAMILY_CODE_HEADERS[i]))throw Error('schema');
+  return tab;
+}
+// A missing tab returns null, so the read reply carries no codes and the website writes the tab.
+function familyReadCodes(book){
+  const tab=familyCodesTab(book,false);if(!tab)return null;
+  const count=Math.max(0,tab.getLastRow()-1);if(count>10000)throw Error('limit');if(!count)return [];
+  const range=tab.getRange(2,1,count,4),values=range.getDisplayValues(),formulas=range.getFormulas(),seen={},rows=[];
+  values.forEach((cells,index)=>{
+    if(formulas[index].some(Boolean))throw Error('formula');
+    // Rows come from the website. A row without its hidden ID, or with every visible
+    // cell cleared, is skipped here and rewritten from the website on the next sync.
+    const id=cells[3];if(!id||cells.slice(0,3).every(value=>value===''))return;
+    if(!/^[A-Za-z0-9_:-]{1,140}$/.test(id)||seen[id])throw Error('id');seen[id]=true;
+    rows.push({id:id,customer_name:String(cells[0]),email:String(cells[1]),code:String(cells[2])});
+  });
+  if(rows.length>10000)throw Error('limit');return rows.sort((a,b)=>a.id.localeCompare(b.id));
+}
+function familyWriteCodes(tab,rows){
+  const output=[FAMILY_CODE_HEADERS.slice()].concat(rows.map(row=>FAMILY_CODE_COLUMNS.map(field=>"'"+row[field]))),old=tab.getLastRow();
+  if(output.length>10001)throw Error('limit');
+  if(tab.getMaxColumns()<4)tab.insertColumnsAfter(tab.getMaxColumns(),4-tab.getMaxColumns());
+  if(tab.getMaxColumns()>4)tab.deleteColumns(5,tab.getMaxColumns()-4);
+  if(tab.getMaxRows()<output.length)tab.insertRowsAfter(tab.getMaxRows(),output.length-tab.getMaxRows());
+  tab.getRange(1,1,output.length,4).setNumberFormat('@').setValues(output);
+  if(old>output.length)tab.getRange(output.length+1,1,old-output.length,4).clearContent();
+  // Commit the codes before presentation. Formatting is optional and never fails the sync.
+  SpreadsheetApp.flush();
+  try{
+    tab.getRange(1,1,1,3).setFontWeight('bold').setBackground('#eff5ff');tab.setFrozenRows(1);
+    tab.setColumnWidth(1,220);tab.setColumnWidth(2,280);tab.setColumnWidth(3,130);
+    if(output.length>1)tab.getRange(2,3,output.length-1,1).setFontWeight('bold');
+    tab.hideColumns(4,1);
+    tab.getRange(1,1).setNote('Website tự ghi tab này: mỗi Gmail khách một dòng. Chỉ sửa ô Mã tra cứu (6 ký tự, chữ A–Z trừ I, L, O và số 2–9); để trống thì giữ mã cũ. Sửa tên/Gmail ở tab FamilySync_Khach. Không sửa/xóa cột ID ẩn.');
+    SpreadsheetApp.flush();
+  }catch(error){/* Presentation only; the codes above are already saved. */}
+}
+
+// Lời mời Family trong Gmail. Uses the Gmail API advanced service with the read-only
+// scope: the script reads invitation mails of the last 14 days and returns the link of
+// the Chấp nhận lời mời button. It never opens the link or changes any mail.
+const FAMILY_INVITE_QUERY='from:families-noreply@google.com newer_than:14d';
+const FAMILY_JOIN_LINK=/https:\/\/families\.google\.com\/join\/[A-Za-z0-9_\-\/]+/;
+function familyHeader(message,name){const header=((message.payload||{}).headers||[]).find(item=>String(item.name).toLowerCase()===name);return header?String(header.value):'';}
+function familyMessageText(part,out){
+  if(!part)return out;
+  if(part.body&&part.body.data&&/^text\/(html|plain)/i.test(part.mimeType||''))out.push(Utilities.newBlob(Utilities.base64DecodeWebSafe(part.body.data)).getDataAsString('UTF-8'));
+  (part.parts||[]).forEach(child=>familyMessageText(child,out));return out;
+}
+function familyInviteLink(text){
+  const html=text.replace(/&amp;/g,'&'),direct=FAMILY_JOIN_LINK.exec(html);if(direct)return direct[0];
+  // A Google redirect around the button still carries the join page in its query.
+  for(const link of html.match(/https:\/\/[A-Za-z0-9.-]+\/[^\s"'<>]+/g)||[]){let decoded='';try{decoded=decodeURIComponent(link);}catch(error){continue;}const inner=FAMILY_JOIN_LINK.exec(decoded);if(inner)return inner[0];}
+  const button=/<a\b[^>]*href="(https:\/\/[^"]+)"[^>]*>(?:(?!<\/a>)[\s\S]){0,400}?(?:accept invitation|chấp nhận lời mời)/i.exec(html);
+  return button&&/^https:\/\/([a-z0-9-]+\.)*(google|googleapis)\.com\//i.test(button[1])?button[1]:'';
+}
+function familyGmailInvites(){
+  if(typeof Gmail==='undefined')throw Error('gmail_service');
+  const list=Gmail.Users.Messages.list('me',{q:FAMILY_INVITE_QUERY,maxResults:100}),out=[];
+  (list.messages||[]).forEach(item=>{
+    const message=Gmail.Users.Messages.get('me',item.id,{format:'full'}),text=familyMessageText(message.payload,[]).join('\n'),url=familyInviteLink(text);
+    // The link belongs to the exact address that received this mail (hai+1@… keeps the +1 link).
+    const address=value=>((/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/.exec(value)||[''])[0]).toLowerCase();
+    const to=address(familyHeader(message,'to'))||address(familyHeader(message,'delivered-to'));if(!url||!to)return;
+    // The inviter's Gmail is in the text (or Reply-To); the website matches it with the Family owner.
+    const found=(familyHeader(message,'reply-to')+'\n'+text).match(/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/g)||[];
+    const emails=[...new Set(found.map(value=>value.toLowerCase()))].filter(value=>value!==to&&!/@([a-z0-9-]+\.)*google\.com$/.test(value)).slice(0,20);
+    const sent=new Date(Number(message.internalDate)||0);
+    out.push({id:String(item.id),to:to,date:Utilities.formatDate(sent,'Asia/Ho_Chi_Minh','yyyy-MM-dd'),sent_at:sent.toISOString(),url:url,emails:emails});
+  });
+  return out;
+}
+function familyGmailError(error){
+  const text=String(error&&error.message||'');
+  if(text==='gmail_service'||/is not defined|has not been used|is disabled|not enabled/i.test(text))return 'gmail_service';
+  if(/permission|insufficient|scope|authoriz|quyền/i.test(text))return 'gmail_permission';
+  return 'gmail_unavailable';
+}
+// Run once from the editor after pasting this version: Google asks for read-only Gmail access.
+function capQuyenGmail(){
+  const invites=familyGmailInvites();
+  console.log('ĐÃ CÓ QUYỀN ĐỌC GMAIL (chỉ đọc). Thư mời Family có link trong 14 ngày: '+invites.length+'. Tiếp theo: Deploy → Manage deployments → Edit → New version → Deploy.');
+  return {ok:true,invites:invites.length};
+}
+
 function setupFamilySync() {
   const props=PropertiesService.getScriptProperties();
   let id=props.getProperty('FAMILY_SPREADSHEET_ID');
@@ -164,6 +264,7 @@ function familyRead(book,scope,onStage=()=>{}) {
     });
     result[key].sort((a,b)=>a.id.localeCompare(b.id));
   });
+  if(scope==='core'){onStage('read_codes');const codes=familyReadCodes(book);if(codes)result.codes=codes;}
   return result;
 }
 function familyRevision(data) {
@@ -178,11 +279,17 @@ function familySameRows(left,right,fields){
 function familyWrite(book,scope,data,onStage=()=>{},current=null) {
   onStage('validate_output');
   const layoutWarnings=[];const keys=scope==='core'?['families','members']:['vault'];
+  // Websites before 0.22.0 send no codes; their writes leave the Mã tra cứu tab untouched.
+  if(scope==='core'&&data&&data.codes!==undefined)keys.push('codes');
   keys.forEach(key=>{
-    const spec=FAMILY_TABS[key],rows=data[key],fields=key==='vault'?FAMILY_VAULT_WIRE:spec.fields;if(!Array.isArray(rows)||rows.length>10000)throw Error('limit');const seen={};
+    const rows=data[key],fields=key==='vault'?FAMILY_VAULT_WIRE:key==='codes'?FAMILY_CODE_WIRE:FAMILY_TABS[key].fields;if(!Array.isArray(rows)||rows.length>10000)throw Error('limit');const seen={};
     rows.forEach(row=>{if(!row||Object.keys(row).length!==fields.length||fields.some(f=>typeof row[f]!=='string'||row[f].length>12000)||!/^[A-Za-z0-9_:-]{1,140}$/.test(row.id)||seen[row.id])throw Error('data');seen[row.id]=true;});
   });
   keys.forEach(key=>{
+    if(key==='codes'){
+      if(current&&current.codes&&familySameRows(current.codes,data.codes,FAMILY_CODE_WIRE))return;
+      onStage('write_codes');familyWriteCodes(familyCodesTab(book,true),data.codes);return;
+    }
     // A customer renewal must not reformat or rewrite an unchanged Family tab.
     // Sheets can defer a failure here until a later read of the customer tab.
     if(key==='families'&&current&&familySameRows(current.families,data.families,FAMILY_TABS.families.fields))return;
@@ -199,7 +306,7 @@ function familyWrite(book,scope,data,onStage=()=>{},current=null) {
 // Return only finite diagnostic labels and a line number. Google's raw error
 // text/stack can contain cell values and must never reach responses or logs.
 function familySyncDiagnostic(error,stage){
-  const stages=['wait_lock','open_book','read_families','read_members','read_vault','revision','validate_output','write_families','write_members','write_vault','prepare_members','resize_members','write_member_cells','style_members','freeze_members','style_member_rows','resize_member_columns','flush_write','verify_vault','response_metadata'];
+  const stages=['wait_lock','open_book','read_families','read_members','read_codes','read_vault','revision','validate_output','write_families','write_members','write_codes','write_vault','prepare_members','resize_members','write_member_cells','style_members','freeze_members','style_member_rows','resize_member_columns','flush_write','verify_vault','response_metadata'];
   const text=String(error&&error.message||''),stack=String(error&&error.stack||'');
   let reason='unknown';
   if(/typed column|column type|bảng.*kiểu|cột.*kiểu/i.test(text))reason='table_column';
@@ -219,16 +326,20 @@ function doPost(event) {
     const request=JSON.parse(event.postData.contents),props=PropertiesService.getScriptProperties(),token=props.getProperty('FAMILY_TOKEN');
     if(!token||typeof request.token!=='string'||request.token!==token)return reply({ok:false,code:'auth'});
     authenticated=true;
+    if(request.scope==='invites'&&request.action==='read'){
+      // Gmail only: no Sheet lock is taken and nothing in Gmail is changed.
+      stage='read_gmail';return reply({ok:true,script_version:FAMILY_SYNC_VERSION,gmail_invites:FAMILY_GMAIL_INVITES,invites:familyGmailInvites()});
+    }
     if(!['core','vault'].includes(request.scope)||!['read','write'].includes(request.action))return reply({ok:false,code:'request'});
     onStage('wait_lock');lock.waitLock(20000);
     onStage('open_book');const book=SpreadsheetApp.openById(props.getProperty('FAMILY_SPREADSHEET_ID')),current=familyRead(book,request.scope,onStage);onStage('revision');const revision=familyRevision(current);
     if(request.action==='write'){
       if(request.revision!==revision)return reply({ok:false,code:'stale'});
       const layoutWarnings=familyWrite(book,request.scope,request.data,onStage,current);onStage('response_metadata');
-      return reply({ok:true,...(layoutWarnings.length?{layout_warnings:layoutWarnings}:{}),script_version:FAMILY_SYNC_VERSION,vault_schema:'trial-date-v1',vault_layout:familyVaultEntry(book.getSheetByName(FAMILY_TABS.vault.name))?'entry':'legacy',customer_layout:familyGrouped(familyTab(book,'members'))?'grouped':'flat'});
+      return reply({ok:true,...(layoutWarnings.length?{layout_warnings:layoutWarnings}:{}),script_version:FAMILY_SYNC_VERSION,lookup_codes:FAMILY_LOOKUP_CODES,gmail_invites:FAMILY_GMAIL_INVITES,vault_schema:'trial-date-v1',vault_layout:familyVaultEntry(book.getSheetByName(FAMILY_TABS.vault.name))?'entry':'legacy',customer_layout:familyGrouped(familyTab(book,'members'))?'grouped':'flat'});
     }
-    onStage('response_metadata');return reply({ok:true,script_version:FAMILY_SYNC_VERSION,vault_schema:'trial-date-v1',vault_layout:familyVaultEntry(book.getSheetByName(FAMILY_TABS.vault.name))?'entry':'legacy',customer_layout:familyGrouped(familyTab(book,'members'))?'grouped':'flat',data:current,...(request.scope==='vault'?{row_locations:FAMILY_VAULT_LOCATIONS}:{}),revision:revision,sheet_url:'https://docs.google.com/spreadsheets/d/'+book.getId()+'/edit'});
-  }catch(error){const code=['schema','formula','id','limit','vault_id','vault_date','vault_email','data'].includes(error.message)?error.message:'unavailable';const diagnostic=authenticated&&code==='unavailable'?familySyncDiagnostic(error,stage):null;if(diagnostic)console.log('FAMILY_SYNC_DIAGNOSTIC '+JSON.stringify(diagnostic));return reply({ok:false,script_version:FAMILY_SYNC_VERSION,code,...(diagnostic?{diagnostic}:{}),...(error.location?{location:error.location}:{})});}
+    onStage('response_metadata');return reply({ok:true,script_version:FAMILY_SYNC_VERSION,lookup_codes:FAMILY_LOOKUP_CODES,gmail_invites:FAMILY_GMAIL_INVITES,vault_schema:'trial-date-v1',vault_layout:familyVaultEntry(book.getSheetByName(FAMILY_TABS.vault.name))?'entry':'legacy',customer_layout:familyGrouped(familyTab(book,'members'))?'grouped':'flat',data:current,...(request.scope==='vault'?{row_locations:FAMILY_VAULT_LOCATIONS}:{}),revision:revision,sheet_url:'https://docs.google.com/spreadsheets/d/'+book.getId()+'/edit'});
+  }catch(error){if(stage==='read_gmail')return reply({ok:false,script_version:FAMILY_SYNC_VERSION,code:familyGmailError(error)});const code=['schema','formula','id','limit','vault_id','vault_date','vault_email','data'].includes(error.message)?error.message:'unavailable';const diagnostic=authenticated&&code==='unavailable'?familySyncDiagnostic(error,stage):null;if(diagnostic)console.log('FAMILY_SYNC_DIAGNOSTIC '+JSON.stringify(diagnostic));return reply({ok:false,script_version:FAMILY_SYNC_VERSION,code,...(diagnostic?{diagnostic}:{}),...(error.location?{location:error.location}:{})});}
   finally{if(lock.hasLock())lock.releaseLock();}
 }
 
