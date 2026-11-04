@@ -18,6 +18,7 @@ import { initTransfers } from './transfer.js';
 import { initVault } from './vault.js';
 import { hosting } from './hosting.js';
 import { customerBackup, restoreCustomers } from './backup.js';
+import { initLookup } from './lookup.js';
 
 const root = path.dirname(fileURLToPath(import.meta.url));
 const access = hosting();
@@ -37,6 +38,7 @@ const issues=initIssues(db,{fail,text,email,log});
 const transferMember=initTransfers(db,{fail,email,log});
 const vaultRoute=initVault(db,{fail,email,text,commonPassword:process.env.ACCESS_PASSWORD||'',secure:access.enabled});
 const archive = initArchive(db, { fail,log });
+const lookup=initLookup(db,{fail,email,text,calendarDate,log});
 await withAudit(db,'Tự động lưu trữ',()=>archive.sweep(),'Hệ thống');
 let requestQueue=Promise.resolve();
 const housekeeper = setInterval(() => { requestQueue=requestQueue.then(()=>withAudit(db,'Tự động lưu trữ',()=>archive.sweep(),'Hệ thống')).catch(()=>console.error('Archive sweep failed. Retry on the next interval.')); },60000); housekeeper.unref();
@@ -50,6 +52,22 @@ async function body(req, limit = 16384) {
   try { const parsed = JSON.parse(Buffer.concat(chunks).toString('utf8') || '{}'); if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) fail('Dữ liệu cần là một đối tượng.'); return parsed; }
   catch { fail('JSON không hợp lệ.'); }
 }
+const lookupToken=req=>(req.headers.cookie||'').split(';').map(s=>s.trim()).find(s=>s.startsWith('fam_lookup='))?.slice(11)||'';
+const lookupCookie=(res,token,age)=>res.setHeader('Set-Cookie',`fam_lookup=${token}; HttpOnly; SameSite=Strict; Path=/api/lookup; Max-Age=${age}${access.enabled?'; Secure':''}`);
+// Public customer lookup: no access password; a verified Gmail + code opens a one-hour session cookie.
+async function lookupRequest(req,res,url){
+  const route=url.pathname;
+  if(req.method==='GET'&&route==='/api/lookup/info')return send(res,200,{shop:lookup.settings()});
+  if(req.method==='POST'&&route==='/api/lookup/verify'){const result=lookup.verify(await body(req),req.socket.remoteAddress);lookupCookie(res,result.token,3600);return send(res,200,result.result);}
+  if(req.method==='POST'&&route==='/api/lookup/logout'){lookup.logout(lookupToken(req));lookupCookie(res,'',0);return send(res,200,{ok:true});}
+  const address=lookup.sessionEmail(lookupToken(req));
+  if(req.method==='GET'&&route==='/api/lookup/me')return send(res,200,address?lookup.result(address):{signed_in:false});
+  if(!address)fail('Phiên tra cứu đã hết. Nhập lại Gmail và mã tra cứu.',401);
+  if(req.method==='POST'&&route==='/api/lookup/open')return send(res,200,lookup.customerOpen(address,await body(req)));
+  if(req.method==='POST'&&route==='/api/lookup/joined')return send(res,200,lookup.customerJoined(address,await body(req)));
+  if(req.method==='POST'&&route==='/api/lookup/report')return send(res,200,lookup.customerReport(address,await body(req)));
+  fail('Không tìm thấy.',404);
+}
 function send(res, status, value) { if(res.famCapture){res.famPending={status,value};return;}  res.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' }); res.end(JSON.stringify(value)); }
 async function handle(req, res) {
   try {
@@ -62,6 +80,7 @@ async function handle(req, res) {
     const writing = !['GET', 'HEAD'].includes(req.method);
     if (writing && req.headers.origin && !access.allowedOrigin(req.headers.origin,host)) fail('Nguồn yêu cầu không hợp lệ.', 403);
     if (writing && url.pathname.startsWith('/api/') && req.headers['x-fam-request'] !== '1') fail('Yêu cầu thay đổi không hợp lệ.',403);
+    if (url.pathname.startsWith('/api/lookup/')) return await lookupRequest(req,res,url);
     if (access.enabled && req.method==='POST' && url.pathname==='/api/access') {
       const result=access.login((await body(req)).password);
       if (result.error) return send(res,result.status,{error:result.error});
@@ -74,6 +93,13 @@ async function handle(req, res) {
     if (access.enabled && req.method==='POST' && url.pathname==='/api/access/close') {
       res.setHeader('Set-Cookie','fam_access=; HttpOnly; Secure; SameSite=Strict; Path=/; Max-Age=0');return send(res,200,{ok:true});
     }
+    if(req.method==='PATCH'&&/^\/api\/families\/\d+\/status$/.test(url.pathname))return send(res,200,lookup.saveStatus(Number(url.pathname.split('/')[3]),await body(req)));
+    if(req.method==='POST'&&/^\/api\/families\/\d+\/invites$/.test(url.pathname))return send(res,201,lookup.saveInvite(Number(url.pathname.split('/')[3]),null,await body(req)));
+    if(['PATCH','DELETE'].includes(req.method)&&/^\/api\/invites\/\d+$/.test(url.pathname)){const id=Number(url.pathname.split('/')[3]);return send(res,200,req.method==='PATCH'?lookup.saveInvite(null,id,await body(req)):lookup.deleteInvite(id,await body(req)));}
+    if(req.method==='POST'&&url.pathname==='/api/moves')return send(res,200,lookup.bulkMove(await body(req)));
+    if(req.method==='PATCH'&&/^\/api\/moves\/\d+$/.test(url.pathname))return send(res,200,lookup.updateMove(Number(url.pathname.split('/')[3]),await body(req)));
+    if(req.method==='PATCH'&&url.pathname==='/api/lookup-settings')return send(res,200,lookup.saveSettings(await body(req)));
+    if(req.method==='POST'&&url.pathname==='/api/lookup-codes')return send(res,200,lookup.rotateCode(await body(req)));
     if(url.pathname.startsWith('/api/vault/'))return send(res,200,await vaultRoute(req,res,url.pathname,['GET','HEAD'].includes(req.method)?{}:await body(req)));
     if(req.method==='GET'&&url.pathname==='/api/statistics')return send(res,200,renewalStatistics(db,Object.fromEntries(url.searchParams)));
     if(req.method==='GET'&&url.pathname==='/api/journal')return send(res,200,journal(db,url.searchParams));
@@ -124,7 +150,7 @@ async function handle(req, res) {
       const other_products=all('SELECT * FROM other_purchases ORDER BY id DESC').map(p=>({...p,...expiry(p.expires_at)}));
       const archives=archive.list();
       return send(res, 200, {
-        hosted:access.enabled,issues:issues.list(),
+        hosted:access.enabled,issues:issues.list(),...lookup.adminState(),
         other_products,other_reminders:{due_soon:other_products.filter(p=>p.expiry_status==='due_soon').length,expired:other_products.filter(p=>p.expiry_status==='expired').length},
         accounts: all("SELECT a.*, f.id AS family_id, f.name AS family_name, f.service FROM accounts a LEFT JOIN families f ON f.manager_id=a.id AND f.archived_at='' ORDER BY a.id DESC"),
         families: sortFamilies(all("SELECT f.*, a.email AS manager_email FROM families f JOIN accounts a ON a.id=f.manager_id WHERE f.archived_at=''"),members), archived_families:archive.familyList(),
@@ -200,7 +226,7 @@ async function handle(req, res) {
       run(`DELETE FROM ${table} WHERE id=?`, id); log(`${actor.username}: xóa hồ sơ nội bộ ${table} #${id}`); return send(res, 200, { ok: true });
     }
     if (req.method === 'GET') {
-      const assets = { '/': ['index.html','text/html'], '/access':['access.html','text/html'], '/access.js':['access.js','text/javascript'], '/app.js': ['app.js','text/javascript'], '/product-import.js':['product-import.js','text/javascript'], '/sync-status.css':['sync-status.css','text/css'], '/sheets.js':['sheets.js','text/javascript'], '/updater.js':['updater.js','text/javascript'], '/statistics.js':['statistics.js','text/javascript'], '/vault.js': ['vault.js','text/javascript'], '/vault-sheet.js':['vault-sheet.js','text/javascript'], '/vault-families.js':['../vault-families.js','text/javascript'], '/style.css': ['style.css','text/css'], '/csv.js': ['csv.js','text/javascript'], '/contacts.js':['contacts.js','text/javascript'], '/domain.js': ['../domain.js','text/javascript'], '/manifest.webmanifest':['manifest.webmanifest','application/manifest+json'], '/icon-180.png':['icon-180.png','image/png'], '/icon-192.png':['icon-192.png','image/png'], '/icon-512.png':['icon-512.png','image/png'] };
+      const assets = { '/': ['index.html','text/html'], '/access':['access.html','text/html'], '/access.js':['access.js','text/javascript'], '/app.js': ['app.js','text/javascript'], '/product-import.js':['product-import.js','text/javascript'], '/sync-status.css':['sync-status.css','text/css'], '/sheets.js':['sheets.js','text/javascript'], '/updater.js':['updater.js','text/javascript'], '/statistics.js':['statistics.js','text/javascript'], '/vault.js': ['vault.js','text/javascript'], '/moves.js':['moves.js','text/javascript'], '/tra-cuu':['tra-cuu.html','text/html'], '/tra-cuu.html':['tra-cuu.html','text/html'], '/tra-cuu.js':['tra-cuu.js','text/javascript'], '/tra-cuu.css':['tra-cuu.css','text/css'], '/vault-sheet.js':['vault-sheet.js','text/javascript'], '/vault-families.js':['../vault-families.js','text/javascript'], '/style.css': ['style.css','text/css'], '/csv.js': ['csv.js','text/javascript'], '/contacts.js':['contacts.js','text/javascript'], '/domain.js': ['../domain.js','text/javascript'], '/manifest.webmanifest':['manifest.webmanifest','application/manifest+json'], '/icon-180.png':['icon-180.png','image/png'], '/icon-192.png':['icon-192.png','image/png'], '/icon-512.png':['icon-512.png','image/png'] };
       const asset = assets[url.pathname]; if (!asset) return send(res, 404, { error: 'Không tìm thấy.' });
       res.writeHead(200, { 'Content-Type': asset[1] + '; charset=utf-8', 'Cache-Control': 'no-store', 'Content-Security-Policy': "default-src 'self'; style-src 'self'; script-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'" });
       return res.end(readFileSync(path.join(root, 'public', asset[0])));
@@ -216,9 +242,10 @@ const server=http.createServer(async(req,res)=>{
   try{path=new URL(req.url,'http://localhost').pathname;if(!['GET','HEAD'].includes(req.method)&&path.startsWith('/api/'))req.famBody=await body(req,path==='/api/restore'?32000000:path==='/api/issues/order'?262144:path.startsWith('/api/import/')||path.startsWith('/api/other-products/import/')||path.startsWith('/api/vault/import')?2000000:path.startsWith('/api/vault/')?32768:16384);}
   catch(error){return send(res,error.status||400,{error:error.message});}
   requestQueue=requestQueue.then(async()=>{
-    const audited=path==='/api/state'||(!['GET','HEAD'].includes(req.method)&&path.startsWith('/api/')&&!path.startsWith('/api/access')&&!path.startsWith('/api/vault/'));
+    // Lookup sign-in keeps its attempt counter even when the answer is an error, so it is not rolled back by the audit scope.
+    const audited=path==='/api/state'||(!['GET','HEAD'].includes(req.method)&&path.startsWith('/api/')&&!path.startsWith('/api/access')&&!path.startsWith('/api/vault/')&&!['/api/lookup/verify','/api/lookup/logout'].includes(path));
     if(!audited)return handle(req,res);
-    beginAudit(db,auditAction(req.method,path),path==='/api/state'?'Hệ thống':'Cá nhân');res.famCapture=true;
+    beginAudit(db,auditAction(req.method,path),path==='/api/state'?'Hệ thống':path.startsWith('/api/lookup/')?'Khách tra cứu':'Cá nhân');res.famCapture=true;
     try{await handle(req,res);const pending=res.famPending;if(!pending)throw Error('Missing response');if(pending.status>=400)cancelAudit(db);else finishAudit(db);res.famCapture=false;send(res,pending.status,pending.value);}
     catch(error){try{cancelAudit(db);}catch{}res.famCapture=false;send(res,500,{error:'Không thể lưu thao tác và nhật ký. Dữ liệu chưa thay đổi.'});}
   }).catch(()=>{if(!res.writableEnded)send(res,500,{error:'Lỗi hệ thống.'});});

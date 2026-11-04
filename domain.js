@@ -9,6 +9,13 @@ export function expiry(value, current = today()) {
   return { expiry_status: days < 0 ? 'expired' : days <= 2 ? 'due_soon' : 'active', days_left: days };
 }
 export const services = ['google_one', 'google_ai', 'youtube', 'other'];
+export const familyStatusLabels = { active:'Đang hoạt động', checking:'Đang kiểm tra', scanned:'Bị quét', disabled:'Bị vô hiệu hoá' };
+// Google family invitations expire two weeks after they are sent.
+export function inviteExpiry(sentOn) {
+  if (typeof sentOn !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(sentOn)) return '';
+  const date = new Date(sentOn + 'T00:00:00Z'); if (!Number.isFinite(date.getTime())) return '';
+  date.setUTCDate(date.getUTCDate() + 14); return date.toISOString().slice(0, 10);
+}
 export function isPendingPayment(member) {
   return !['paid','declined'].includes(member.renewal_status) && (['awaiting_payment','partial'].includes(member.renewal_status) || member.expiry_status==='expired');
 }

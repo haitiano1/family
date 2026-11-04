@@ -1,6 +1,6 @@
 <?php
 declare(strict_types=1);
-const TRACKED_TABLES=['accounts','families','members','archived_customers','renewal_history','other_purchases','issues','new_purchase_history'];
+const TRACKED_TABLES=['accounts','families','members','archived_customers','renewal_history','other_purchases','issues','new_purchase_history','family_statuses','family_invites','member_moves'];
 function snapshot(PDO $db): array {return array_combine(TRACKED_TABLES,array_map(fn($t)=>all($db,"SELECT * FROM `$t` ORDER BY id"),TRACKED_TABLES));}
 function beginAudit(PDO $db,string $action,string $actor='Cá nhân'): void {
     $db->beginTransaction();$GLOBALS['audit_scope']=['db'=>$db,'action'=>$action,'actor'=>$actor,'before'=>snapshot($db),'messages'=>[]];
@@ -16,6 +16,7 @@ function finishAudit(bool $success=true): void {
     }catch(Throwable $e){if($db->inTransaction())$db->rollBack();throw $e;}
 }
 function auditAction(string $method,string $route): string {
+    if(function_exists('lookupAuditAction')&&($lookup=lookupAuditAction($method,$route))!=='')return $lookup;
     $part=explode('/',$route)[2]??'';$label=['families'=>'Family','members'=>'khách','accounts'=>'email quản lý','other-products'=>'sản phẩm','issues'=>'lỗi','restore'=>'dữ liệu','archives'=>'khách lưu trữ','import'=>'CSV'][$part]??'dữ liệu';
     if($route==='/api/issues/order')return 'Sửa thứ tự lỗi';if(str_starts_with($route,'/api/other-products/import/'))return str_ends_with($route,'/confirm')?'Nhập sản phẩm từ Sheet':'Xem trước CSV sản phẩm';
     if(preg_match('~^/api/members/\d+/transfer$~D',$route))return 'Chuyển Family';if($part==='archived-families')return $method==='DELETE'?'Xóa Family lưu trữ':'Khôi phục Family';if(str_contains($route,'/renewal'))return 'Gia hạn khách';if($part==='import')return str_ends_with($route,'commit')?'Nhập CSV':'Xem trước CSV';if($part==='restore')return 'Khôi phục dữ liệu';if($part==='archives')return $method==='DELETE'?'Xóa hồ sơ lưu trữ':'Khôi phục hồ sơ lưu trữ';if($part==='other-products'&&$method==='DELETE')return 'Lưu trữ sản phẩm';return (['POST'=>'Thêm','PATCH'=>'Sửa','DELETE'=>'Xóa'][$method]??'Tự động lưu trữ').' '.$label;

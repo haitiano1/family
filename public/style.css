@@ -687,3 +687,19 @@ code { background: #f0f4fa; color: #3c5679; padding: 3px 6px; border-radius: 5px
 }
 .product-source-cell { min-width:130px; max-width:210px; white-space:normal; overflow-wrap:anywhere; }
 @media (max-width:760px) { .product-source-cell { min-width:0; max-width:none; } }
+
+/* Tra cứu & chuyển nhóm */
+.lookup-status { display: grid; justify-items: start; gap: 6px; }
+.lookup-status p { margin: 4px 0 0; white-space: pre-line; overflow-wrap: anywhere; }
+.lookup-callout { display: flex; align-items: center; justify-content: space-between; gap: 14px; margin: 16px 0 0; flex-wrap: wrap; font-size: 13px; }
+.lookup-callout > div { flex: 1 1 260px; }
+.lookup-table td[data-column="invite"] { min-width: 220px; max-width: 360px; white-space: normal; }
+.lookup-url { max-width: 340px; white-space: normal; word-break: break-all; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 11px; }
+.lookup-table td[data-column="state"] .subtext { white-space: normal; max-width: 260px; }
+.lookup-family-badge { display: inline-flex; margin-left: 8px; vertical-align: middle; }
+.lookup-warning { color: var(--red); }
+.lookup-steps { margin: 10px 0 0; padding-left: 20px; line-height: 1.85; font-size: 13px; }
+#move-mapping select { min-width: 220px; }
+#move-summary { font-weight: 650; margin: 12px 0 6px; }
+#move-mapping .error-box { margin-top: 12px; padding: 14px; font-size: 13px; }
+#modal.lookup-wide { width: min(880px, calc(100vw - 32px)); }

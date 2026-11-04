@@ -132,14 +132,17 @@ function restoreArchive(PDO $db,int $id,array $d,bool $wholeFamily=false): array
     });
 }
 const BASE_BACKUP_TABLES=['accounts','families','members','archived_customers','renewal_history','other_purchases','logs'];
-const BACKUP_TABLES=[...BASE_BACKUP_TABLES,'issues','audit_events','vault_meta','vault_items','new_purchase_history'];
+const PURCHASE_BACKUP_TABLES=[...BASE_BACKUP_TABLES,'issues','audit_events','vault_meta','vault_items','new_purchase_history'];
+const BACKUP_TABLES=[...PURCHASE_BACKUP_TABLES,'family_statuses','family_invites','member_moves','lookup_codes','lookup_settings'];
 function backup(PDO $db): array {
     $tables=array_combine(BACKUP_TABLES,array_map(fn($t)=>all($db,"SELECT * FROM `$t` ORDER BY ".($t==='vault_meta'?'name':'id')),BACKUP_TABLES));
     foreach($tables['archived_customers'] as &$row){$saved=json_decode($row['snapshot'],true,512,JSON_THROW_ON_ERROR);if(is_array($saved)&&($saved['record_type']??'')==='other_product'&&!array_key_exists('purchase_source',$saved)){$saved['purchase_source']='';$row['snapshot']=json_encode($saved,JSON_UNESCAPED_UNICODE|JSON_THROW_ON_ERROR);}}unset($row);
-    return ['format'=>'family-customer-backup','version'=>9,'created_at'=>stamp(),'tables'=>$tables];
+    return ['format'=>'family-customer-backup','version'=>10,'created_at'=>stamp(),'tables'=>$tables];
 }
 function restoreBackup(PDO $db,array $d): array {
-    if (($d['format']??'')!=='family-customer-backup' || !in_array($d['version']??null,[1,2,3,4,5,6,7,8,9],true) || !is_array($d['tables']??null)) fail('File sao lưu khách hàng không hợp lệ.');
+    if (($d['format']??'')!=='family-customer-backup' || !in_array($d['version']??null,[1,2,3,4,5,6,7,8,9,10],true) || !is_array($d['tables']??null)) fail('File sao lưu khách hàng không hợp lệ.');
+    // Lookup tables (statuses, invites, moves, codes, page settings) exist from backup v10.
+    if($d['version']<10)foreach(['family_statuses','family_invites','member_moves','lookup_codes','lookup_settings'] as $t)$d['tables'][$t]=[];
     if($d['version']<8&&!empty($d['tables']['new_purchase_history']))fail('Lịch sử mua mới cần sao lưu phiên bản 8.');
     if($d['version']<8)$d['tables']['new_purchase_history']=[];
     if($d['version']===1){$d['tables']['issues']=$d['tables']['issues']??[];$d['tables']['audit_events']=$d['tables']['audit_events']??[];}
@@ -147,8 +150,9 @@ function restoreBackup(PDO $db,array $d): array {
     if($d['version']<6){$d['tables']['vault_meta']=[];$d['tables']['vault_items']=[];}
     if($d['version']<7)$d['tables']['vault_items']=array_map(fn($row)=>[...$row,'family_id'=>null],$d['tables']['vault_items']);
     try{vaultValidateBackup($d['tables']['vault_meta']??[], $d['tables']['vault_items']??[]);}catch(Throwable $e){fail('Phần kho mã hóa trong sao lưu không hợp lệ.');}
-    foreach(BACKUP_TABLES as $t) {if (!is_array($d['tables'][$t]??null) || !array_is_list($d['tables'][$t])) fail('File sao lưu thiếu bảng dữ liệu.');if (!in_array($t,['logs','audit_events'],true) && one($db,"SELECT COUNT(*) AS n FROM `$t`")['n']) fail('Chỉ khôi phục vào ứng dụng đang trống để không ghi đè dữ liệu hiện có.',409);}
+    foreach(BACKUP_TABLES as $t) {if (!is_array($d['tables'][$t]??null) || !array_is_list($d['tables'][$t])) fail('File sao lưu thiếu bảng dữ liệu.');if (!in_array($t,['logs','audit_events','lookup_codes','lookup_settings'],true) && one($db,"SELECT COUNT(*) AS n FROM `$t`")['n']) fail('Chỉ khôi phục vào ứng dụng đang trống để không ghi đè dữ liệu hiện có.',409);}
     try {return transaction($db,function()use($db,$d){
+        foreach(['lookup_codes','lookup_settings','lookup_sessions','lookup_attempts'] as $t)q($db,"DELETE FROM `$t`");
 
         foreach(BACKUP_TABLES as $t) {
             $columns=array_column(all($db,"SHOW COLUMNS FROM `$t`"),'Field');if(in_array($t,['logs','audit_events'],true)&&one($db,"SELECT COUNT(*) AS n FROM `$t`")['n'])$columns=array_values(array_filter($columns,fn($c)=>$c!=='id'));$sql="INSERT INTO `$t` (`".implode('`,`',$columns).'`) VALUES ('.implode(',',array_fill(0,count($columns),'?')).')';
@@ -165,6 +169,7 @@ function restoreBackup(PDO $db,array $d): array {
             }
         }
         q($db,'DELETE FROM vault_sessions');
+        q($db,"INSERT IGNORE INTO lookup_settings(name,value) VALUES ('code_salt',?)",[bin2hex(random_bytes(32))]);
         return ['ok'=>true,'customers'=>count($d['tables']['members']),'families'=>count($d['tables']['families']),'other_products'=>count($d['tables']['other_purchases'])];
     });}catch(FamilyError $e){throw $e;}catch(Throwable $e){fail('Không thể khôi phục file này. Dữ liệu hiện có được giữ nguyên.');}
 }

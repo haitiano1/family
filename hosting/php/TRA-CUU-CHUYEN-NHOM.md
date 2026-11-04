@@ -1,0 +1,49 @@
+# 0.21.0 — Tra cứu khách & chuyển nhóm
+
+Khi mail chủ Family gặp sự cố (bị quét, bị vô hiệu hoá…), khách tự mở trang tra cứu, nhập Gmail và mã tra cứu để xem tình trạng nhóm và lấy link vào nhóm mới. Bạn không cần gửi link cho từng khách.
+
+## Cập nhật
+
+- **Hostinger:** dùng **Cập nhật một chạm** như bình thường. Bản này giữ schema 8. Các bảng mới (trạng thái nhóm, kho link mời, lượt chuyển nhóm, mã tra cứu) tự tạo khi website mở lần đầu sau cập nhật, không cần chạy SQL hay sửa `.htaccess`/`config.php`. Nếu upload tay, dùng gói `family-tra-cuu-chuyen-nhom.zip`: upload hai thư mục `family-private` và `public_html`, giữ `config.php` và database rồi Ctrl+F5.
+- **Windows/Node:** thay mã như các bản trước. Bảng mới được thêm vào `data/family.sqlite`, không đổi `user_version`.
+- Sao lưu mới là **phiên bản 10**, chứa thêm trạng thái nhóm, link mời, lượt chuyển nhóm và mã tra cứu. Vẫn khôi phục được bản sao lưu 1–9.
+
+## Trang cho khách
+
+Địa chỉ: `https://tên-miền-của-bạn/tra-cuu.html`. Trang này không cần mật khẩu truy cập website. Khách chỉ thấy thông tin của chính mình: tên Family, trạng thái, lời nhắn của shop, hạn dùng và link vào nhóm mới. Trang không hiện mail chủ Family hay mail của khách khác.
+
+Mỗi Gmail khách có một **mã tra cứu 6 ký tự** cố định. Lấy mã ở menu **…** của khách → **Copy link tra cứu**. Nội dung copy gồm link riêng có sẵn mã (`/tra-cuu.html#ma=…`), Gmail và mã. Nên gửi cho khách lúc bán hoặc gia hạn, để khi nhóm lỗi khách tự vào xem.
+
+- Nhập sai 8 lần trong 15 phút thì Gmail đó bị khóa tra cứu 15 phút. Một địa chỉ IP sai quá 40 lần cũng bị khóa.
+- Mã bị lộ hoặc gửi nhầm: menu **…** của khách → **Đổi mã tra cứu**. Mã và link cũ hết tác dụng, phiên đang mở bị đăng xuất; copy link tra cứu mới để gửi lại.
+- Mã được tính từ Gmail và một khóa bí mật nằm trong database và file sao lưu. Chuyển dữ liệu giữa Windows và Hostinger bằng file sao lưu thì mã của khách giữ nguyên.
+
+Vào **Thêm → Tra cứu khách → Sửa thông tin** để đặt tên shop, link liên hệ (Messenger, Zalo…) và ghi chú hiển thị cho khách.
+
+## Khi Family gặp sự cố
+
+1. Mở Family lỗi → **Đổi trạng thái**: chọn *Đang kiểm tra*, *Bị quét* hoặc *Bị vô hiệu hoá* và viết lời nhắn cho khách. Ô lời nhắn có sẵn câu mẫu khi còn trống.
+2. Ở Family mới: gửi lời mời từ tài khoản chủ tới các mail của bạn (ví dụ `mail+1@gmail.com`, `mail+2@gmail.com`…). Trong email của Google, chuột phải nút **Chấp nhận lời mời** → sao chép link, rồi bấm **+ Thêm link mời** và dán link vào. Nhập ngày gửi để web nhắc khi lời mời sắp hết hạn (Google cho 2 tuần).
+3. Quay lại Family lỗi → **Chuyển khách sang nhóm mới**. Chọn Family mới; web tự ghép mỗi khách còn hạn với một link sẵn sàng. Khách quá hạn mặc định *Không chuyển* và trên trang tra cứu chỉ thấy lời nhắc gia hạn. Có thể đổi link hoặc bỏ chuyển từng khách trước khi xác nhận.
+4. Khách được chuyển ở trạng thái **Đã mời, chưa vào**. Gói, ngày mua, hạn, Contact, thanh toán và lịch sử giữ nguyên. Case Fix lỗi gắn với mail khách được xóa như khi Chuyển Family. Nhật ký ghi thao tác vào nhóm **Chuyển Family**.
+
+## Theo dõi tiến độ
+
+Family mới có mục **Khách chuyển đến Family này**. Mục **Tra cứu khách** gom tất cả lượt chuyển và các Family có sự cố.
+
+- **Đã giao link · chưa mở → Khách đã mở link**: web ghi nhận khi khách bấm *Vào nhóm mới*.
+- **Không vào được**: khách đã chọn lỗi Google báo (chỉ được đổi nhóm 1 lần trong 12 tháng, lời mời đã dùng/hết hạn, đang ở nhóm khác, lỗi khác) và ghi chú. Tổng quan hiện số khách báo lỗi.
+- **Đã vào nhóm**: khách bấm *Tôi đã vào được* hoặc bạn bấm **Đã vào**. Khách chuyển sang đang ở nhóm, link được đánh dấu *Đã dùng*.
+- **Copy tin nhắn**: tin gửi khách có link tra cứu riêng, dùng khi khách chưa có link.
+- **Đổi link**: giao link khác của Family mới; link cũ trở lại kho. Nếu link cũ đã bị dùng, xóa nó khỏi kho.
+- **Thu hồi link**: link trở lại kho; khách vẫn ở Family mới với trạng thái Đã mời, chưa vào để bạn sửa hoặc chuyển tiếp.
+- **Ẩn**: bỏ lượt đã xong khỏi danh sách; dữ liệu vẫn còn trong sao lưu và nhật ký.
+
+Google đổi link khi để lâu: bấm **Sửa** trên dòng link và dán link mới. Khách đang giữ link đó thấy link mới ngay khi tra cứu lại.
+
+## Lưu ý
+
+- Link mời hiện được dán tay; phần tự lấy link từ Gmail sẽ làm sau.
+- Messenger và Zalo mở link bằng trình duyệt trong ứng dụng, nơi Google không cho đăng nhập. Trang tra cứu nhận ra trường hợp này và hướng dẫn khách mở bằng Chrome/Safari.
+- Khách gửi ảnh chụp lỗi qua link liên hệ của shop; trang chưa có chỗ tải ảnh lên.
+- Trên bản Windows, trang tra cứu chỉ mở được trên chính máy đó. Khách dùng được khi website chạy trên Hostinger hoặc chế độ hosting của Node.

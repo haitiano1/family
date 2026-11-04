@@ -25,7 +25,12 @@ function exportBackup(databaseFile, outputFile) {
       audit_events:{id:null,action:'',actor:'',message:'',details:'',created_at:''},
       vault_meta:{name:'',value:''},
       vault_items:{id:null,payload:'',revision:0,created_at:'',updated_at:'',family_id:null},
-      new_purchase_history:{id:null,member_id:null,archive_id:null,email:'',customer_name:'',contact:'',family_name:'',joined_at:'',expires_at:'',plan_months:0,payment_status:'unpaid',amount:0,note:'',created_at:''}
+      new_purchase_history:{id:null,member_id:null,archive_id:null,email:'',customer_name:'',contact:'',family_name:'',joined_at:'',expires_at:'',plan_months:0,payment_status:'unpaid',amount:0,note:'',created_at:''},
+      family_statuses:{id:null,family_id:null,status:'active',note:'',updated_at:'',revision:0},
+      family_invites:{id:null,family_id:null,label:'',url:'',sent_on:'',revision:0,created_at:'',updated_at:''},
+      member_moves:{id:null,member_id:null,email:'',customer_name:'',from_family_id:null,from_family_name:'',from_status:'active',from_note:'',to_family_id:null,to_family_name:'',invite_id:null,invite_label:'',state:'assigned',report_reason:'',report_note:'',created_at:'',updated_at:'',opened_at:'',joined_at:'',reported_at:'',dismissed_at:'',revision:0},
+      lookup_codes:{id:null,email:'',code:'',created_at:''},
+      lookup_settings:{id:null,name:'',value:''}
     };
     const tables={};
     for (const [table,base] of Object.entries(defaults)) {
@@ -40,7 +45,7 @@ function exportBackup(databaseFile, outputFile) {
       for (const [field,value] of Object.entries(m.record_type==='other_product'?defaults.other_purchases:defaults.members)) if (!Object.hasOwn(m,field)) {m[field]=value;changed=true;}
       if (changed) row.snapshot=JSON.stringify(m);
     }
-    const result={format:'family-customer-backup',version:9,created_at:new Date().toISOString(),tables};
+    const result={format:'family-customer-backup',version:10,created_at:new Date().toISOString(),tables};
     db.exec('COMMIT');
     writeFileSync(outputFile,JSON.stringify(result),{flag:'wx',mode:0o600});
     return result;
