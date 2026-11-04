@@ -371,7 +371,7 @@ test('Gmail invites: read-only search of the last 14 days returns the Accept inv
   {...inviteMail('m5','','<a href="https://families.google.com/join/promo/R5">Chấp nhận lời mời</a>'),payload:{...inviteMail('m5','','<a href="https://families.google.com/join/promo/R5">Chấp nhận lời mời</a>').payload,headers:[{name:'Delivered-To',value:'Hai+2@gmail.com'},{name:'Reply-To',value:'Chủ nhóm <owner11@gmail.com>'}]}},
  ]);
  const reply=s.request({action:'read',scope:'invites'});assert.equal(reply.ok,true,JSON.stringify(reply));assert.equal(reply.gmail_invites,'v1');
- assert.deepEqual(JSON.parse(JSON.stringify(calls[0])),['list','me',{q:'from:families-noreply@google.com newer_than:14d',maxResults:100}]);assert.ok(calls.slice(1).every(call=>call[0]==='get'&&call[3]==='full'));
+ assert.deepEqual(JSON.parse(JSON.stringify(calls[0])),['list','me',{q:'from:families-noreply@google.com newer_than:14d',maxResults:100,includeSpamTrash:true}]);assert.ok(calls.slice(1).every(call=>call[0]==='get'&&call[3]==='full'));
  assert.deepEqual(reply.invites,[
   {id:'m1',to:'shopcuaban+f09s1@gmail.com',date:'2026-11-03',sent_at:'2026-11-03T09:00:00.000Z',url:'https://families.google.com/join/promo/AbC_12-x',emails:['owner09@gmail.com']},
   {id:'m2',to:'shopcuaban+f09s2@gmail.com',date:'2026-11-03',sent_at:'2026-11-03T09:00:00.000Z',url:'https://families.google.com/join/promo/Zz9',emails:['owner09@gmail.com']},
@@ -389,4 +389,31 @@ test('Gmail invites report a missing Gmail API or missing permission without lea
  assert.equal(s.request({action:'write',scope:'invites'}).code,'request','invites are read-only');assert.equal(s.request({action:'read',scope:'invites',token:'bad'}).code,'auth');
  gmail(s,[inviteMail('m1','a+1@gmail.com','<a href="https://families.google.com/join/promo/k1">Accept invitation</a> owner@gmail.com')]);
  assert.deepEqual(JSON.parse(JSON.stringify(s.run('capQuyenGmail()'))),{ok:true,invites:1});assert.match(s.logs.at(-1),/ĐÃ CÓ QUYỀN ĐỌC GMAIL/);assert.doesNotMatch(s.logs.at(-1),/owner@gmail|k1/);
+});
+
+test('Gmail invites accept byte bodies and reuse cached mails on the next check',()=>{
+ const s=script(),bytes=[...Buffer.from('<a href="https://families.google.com/join/promo/Bytes1">Chấp nhận lời mời</a> owner12@gmail.com')];
+ const mail=inviteMail('b1','hai+1@gmail.com','');mail.payload.parts=[{mimeType:'text/html',body:{data:bytes}},{mimeType:'image/png',body:{data:'AAAA'}}];
+ const store=new Map();s.context.CacheService={getScriptCache:()=>({get:key=>store.get(key)??null,put:(key,value,seconds)=>{assert.equal(seconds,21600);store.set(key,value);}})};
+ const calls=gmail(s,[mail,inviteMail('n1','hai+2@gmail.com','<p>Không có nút</p>')]);
+ const first=s.request({action:'read',scope:'invites'});assert.deepEqual(first.invites.map(i=>[i.to,i.url,i.emails]),[['hai+1@gmail.com','https://families.google.com/join/promo/Bytes1',['owner12@gmail.com']]]);
+ const reads=calls.filter(c=>c[0]==='get').length;assert.equal(reads,2);
+ assert.deepEqual(s.request({action:'read',scope:'invites'}).invites,first.invites,'same result from cache');assert.equal(calls.filter(c=>c[0]==='get').length,reads,'cached mails are not opened again');
+ s.context.CacheService={getScriptCache:()=>{throw Error('cache down');}};assert.equal(s.request({action:'read',scope:'invites'}).invites.length,1,'works without cache');
+});
+
+test('Gmail invites: the real "Join Karl\'s family group?" mail gives the button link, the +1 address and the owner',()=>{
+ const s=script();
+ const body=(href,to)=>`<div style="font-family:Google Sans,Roboto,Arial"><h1>Karl Vica wants you to join her family group</h1><table><tr><td><img src="https://www.gstatic.com/x.png"> ${to}</td></tr></table><p>Hi null,</p><p>You can join Karl's (vicakarl2@gmail.com) family group to connect with your family on Google and share the apps and services that are right for you.</p><p>Anyone who joins a family group can see the name, email, and profile picture of current group members.</p><table role="presentation"><tr><td align="center" style="${'padding:0;'.repeat(40)}"><a href="${href}" style="background-color:#1a73e8;border-radius:4px;color:#ffffff;display:inline-block;font-size:14px;padding:10px 24px;text-decoration:none" target="_blank"><span style="color:#ffffff">Accept invitation</span></a></td></tr></table><a href="https://g.co/YourFamily">Learn more</a></div>`;
+ gmail(s,[
+  inviteMail('k1','haihoangrr+1@gmail.com',body('https://families.google.com/join/promo/kArL_tOkEn-1?utm_source=gmail&amp;utm_medium=email','haihoangrr+1@gmail.com')),
+  inviteMail('k2','haihoangrr+2@gmail.com',body('https://notifications.googleapis.com/email/redirect?t=AFG8qyU&amp;r=https%3A%2F%2Ffamilies.google.com%2Fjoin%2Fpromo%2FkArL_tOkEn-2%3Futm_source%3Dgmail&amp;s=ALHZ2r','haihoangrr+2@gmail.com')),
+  inviteMail('k3','haihoangrr+3@gmail.com',body('https://www.google.com/url?q=https://accounts.google.com/AccountChooser?continue%3Dfamily&amp;sa=D','haihoangrr+3@gmail.com')),
+ ]);
+ const reply=s.request({action:'read',scope:'invites'});assert.equal(reply.ok,true);
+ assert.deepEqual(reply.invites.map(i=>[i.to,i.url,i.emails]),[
+  ['haihoangrr+1@gmail.com','https://families.google.com/join/promo/kArL_tOkEn-1',['vicakarl2@gmail.com']],
+  ['haihoangrr+2@gmail.com','https://families.google.com/join/promo/kArL_tOkEn-2',['vicakarl2@gmail.com']],
+  ['haihoangrr+3@gmail.com','https://www.google.com/url?q=https://accounts.google.com/AccountChooser?continue%3Dfamily&sa=D',['vicakarl2@gmail.com']],
+ ],'direct link, Google redirect and plain button href; recipient shown in the mail is not the owner');
 });

@@ -184,36 +184,55 @@ function familyWriteCodes(tab,rows){
 // scope: the script reads invitation mails of the last 14 days and returns the link of
 // the Chấp nhận lời mời button. It never opens the link or changes any mail.
 const FAMILY_INVITE_QUERY='from:families-noreply@google.com newer_than:14d';
-const FAMILY_JOIN_LINK=/https:\/\/families\.google\.com\/join\/[A-Za-z0-9_\-\/]+/;
+const FAMILY_INVITE_CACHE_SECONDS=21600;
+const FAMILY_JOIN_LINK=/https:\/\/(?:families\.google\.com\/join|myaccount\.google\.com\/family\/join)\/[A-Za-z0-9_\-\/]+/;
 function familyHeader(message,name){const header=((message.payload||{}).headers||[]).find(item=>String(item.name).toLowerCase()===name);return header?String(header.value):'';}
 function familyMessageText(part,out){
   if(!part)return out;
-  if(part.body&&part.body.data&&/^text\/(html|plain)/i.test(part.mimeType||''))out.push(Utilities.newBlob(Utilities.base64DecodeWebSafe(part.body.data)).getDataAsString('UTF-8'));
+  if(part.body&&part.body.data&&/^text\/(html|plain)/i.test(part.mimeType||'')){
+    // The advanced service may return the body as base64url text or as bytes.
+    const raw=part.body.data,bytes=typeof raw==='string'?Utilities.base64DecodeWebSafe(raw+'='.repeat((4-raw.length%4)%4)):raw;
+    out.push(Utilities.newBlob(bytes).getDataAsString('UTF-8'));
+  }
   (part.parts||[]).forEach(child=>familyMessageText(child,out));return out;
 }
 function familyInviteLink(text){
   const html=text.replace(/&amp;/g,'&'),direct=FAMILY_JOIN_LINK.exec(html);if(direct)return direct[0];
   // A Google redirect around the button still carries the join page in its query.
   for(const link of html.match(/https:\/\/[A-Za-z0-9.-]+\/[^\s"'<>]+/g)||[]){let decoded='';try{decoded=decodeURIComponent(link);}catch(error){continue;}const inner=FAMILY_JOIN_LINK.exec(decoded);if(inner)return inner[0];}
-  const button=/<a\b[^>]*href="(https:\/\/[^"]+)"[^>]*>(?:(?!<\/a>)[\s\S]){0,400}?(?:accept invitation|chấp nhận lời mời)/i.exec(html);
+  // Otherwise take the Google link of the button itself (Accept invitation / Chấp nhận lời mời).
+  const button=/<a\b[^>]*href=["'](https:\/\/[^"']+)["'][^>]*>(?:(?!<\/a>)[\s\S]){0,2000}?(?:accept invitation|chấp nhận lời mời)/i.exec(html);
   return button&&/^https:\/\/([a-z0-9-]+\.)*(google|googleapis)\.com\//i.test(button[1])?button[1]:'';
 }
 function familyGmailInvites(){
   if(typeof Gmail==='undefined')throw Error('gmail_service');
-  const list=Gmail.Users.Messages.list('me',{q:FAMILY_INVITE_QUERY,maxResults:100}),out=[];
+  // Invitations that landed in Spam still work, so they are included. Parsed mails are cached
+  // for 6 hours, so the website's 10-minute check only opens new mails.
+  const list=Gmail.Users.Messages.list('me',{q:FAMILY_INVITE_QUERY,maxResults:100,includeSpamTrash:true}),out=[];
+  const cache=familyInviteCache();
   (list.messages||[]).forEach(item=>{
-    const message=Gmail.Users.Messages.get('me',item.id,{format:'full'}),text=familyMessageText(message.payload,[]).join('\n'),url=familyInviteLink(text);
-    // The link belongs to the exact address that received this mail (hai+1@… keeps the +1 link).
-    const address=value=>((/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/.exec(value)||[''])[0]).toLowerCase();
-    const to=address(familyHeader(message,'to'))||address(familyHeader(message,'delivered-to'));if(!url||!to)return;
-    // The inviter's Gmail is in the text (or Reply-To); the website matches it with the Family owner.
-    const found=(familyHeader(message,'reply-to')+'\n'+text).match(/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/g)||[];
-    const emails=[...new Set(found.map(value=>value.toLowerCase()))].filter(value=>value!==to&&!/@([a-z0-9-]+\.)*google\.com$/.test(value)).slice(0,20);
-    const sent=new Date(Number(message.internalDate)||0);
-    out.push({id:String(item.id),to:to,date:Utilities.formatDate(sent,'Asia/Ho_Chi_Minh','yyyy-MM-dd'),sent_at:sent.toISOString(),url:url,emails:emails});
+    const key='family-invite:'+item.id,saved=familyCacheGet(cache,key);
+    if(saved){const parsed=JSON.parse(saved);if(parsed)out.push(parsed);return;}
+    const parsed=familyParseInvite(item.id,Gmail.Users.Messages.get('me',item.id,{format:'full'}));
+    familyCachePut(cache,key,JSON.stringify(parsed));if(parsed)out.push(parsed);
   });
   return out;
 }
+function familyParseInvite(id,message){
+  const text=familyMessageText(message.payload,[]).join('\n'),url=familyInviteLink(text);
+  // The link belongs to the exact address that received this mail (hai+1@… keeps the +1 link).
+  const address=value=>((/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/.exec(value)||[''])[0]).toLowerCase();
+  const to=address(familyHeader(message,'to'))||address(familyHeader(message,'delivered-to'));if(!url||!to)return null;
+  // The inviter's Gmail is in the text (or Reply-To); the website matches it with the Family owner.
+  const found=(familyHeader(message,'reply-to')+'\n'+text).match(/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/g)||[];
+  const emails=[...new Set(found.map(value=>value.toLowerCase()))].filter(value=>value!==to&&!/@([a-z0-9-]+\.)*google\.com$/.test(value)).slice(0,20);
+  const sent=new Date(Number(message.internalDate)||0);
+  return {id:String(id),to:to,date:Utilities.formatDate(sent,'Asia/Ho_Chi_Minh','yyyy-MM-dd'),sent_at:sent.toISOString(),url:url,emails:emails};
+}
+// The cache only saves Gmail reads; any cache failure falls back to reading the mail again.
+function familyInviteCache(){try{return typeof CacheService==='undefined'?null:CacheService.getScriptCache();}catch(error){return null;}}
+function familyCacheGet(cache,key){try{return cache?cache.get(key):null;}catch(error){return null;}}
+function familyCachePut(cache,key,value){try{if(cache)cache.put(key,value,FAMILY_INVITE_CACHE_SECONDS);}catch(error){/* optional */}}
 function familyGmailError(error){
   const text=String(error&&error.message||'');
   if(text==='gmail_service'||/is not defined|has not been used|is disabled|not enabled/i.test(text))return 'gmail_service';

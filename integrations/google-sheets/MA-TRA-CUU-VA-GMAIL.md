@@ -14,6 +14,8 @@
    2. Mở `appsscript.json` và thay bằng tệp mới. Nếu chưa thấy tệp này: **Project Settings / Cài đặt dự án** → bật **Show appsscript.json manifest file in editor**. Bấm Lưu. Tệp mới thêm quyền chỉ đọc Gmail và dịch vụ Gmail API.
    3. Trên thanh chạy, chọn hàm **capQuyenGmail** → **Run / Chạy**. Google sẽ hỏi quyền. Chọn đúng tài khoản Gmail nhận lời mời. Gặp màn hình "Google chưa xác minh ứng dụng này" thì bấm **Nâng cao**, rồi chọn dòng truy cập dự án của bạn. Cuối cùng bấm **Cho phép**. Quyền mới là **xem email của bạn** (chỉ đọc). Execution log hiện **ĐÃ CÓ QUYỀN ĐỌC GMAIL** là xong.
    4. **Deploy → Manage deployments**, bấm biểu tượng bút chì, chọn **Version: New version** → **Deploy**. URL `/exec` giữ nguyên, trên web không cần đổi gì.
+
+   Làm bước 2.3 trước bước 2.4. Nếu triển khai khi chưa cấp quyền, đồng bộ Sheet sẽ báo "Google trả về trang đăng nhập". Khi đó chạy capQuyenGmail, cho phép rồi đồng bộ lại.
 3. **Trên web**: mở **Đồng bộ Sheet** → **Đồng bộ ngay**. Trong Sheet sẽ có tab `FamilySync_MaTraCuu`. Mục **Thông tin kết nối** hiện:
    - Phiên bản Google: `family-ma-tra-cuu-v5.8`
    - Lấy link từ Gmail: Có
@@ -29,6 +31,7 @@ Nếu bước 2.3 báo lỗi Gmail: ở cột trái của Apps Script bấm **Se
   - Mã gồm đúng 6 ký tự: chữ A–Z trừ I, L, O và số 2–9. Gõ chữ thường hoặc có dấu cách cũng được, web tự viết hoa.
   - Mã sai mẫu thì lượt đồng bộ dừng và báo Gmail của dòng đó. Sửa lại ô đó là đồng bộ tiếp.
 - Để trống ô mã thì mã cũ được giữ và web ghi lại. Sửa Tên khách hoặc Mail khách ở tab này không có tác dụng; sửa ở tab Khách hoặc trên web. Xóa dòng thì web ghi lại dòng đó. Dòng bạn tự thêm (không có ID ẩn) bị bỏ qua.
+- Không thêm cột hoặc công thức vào tab này. Muốn ghi chú, dùng tab khác.
 - Muốn đổi sang một mã ngẫu nhiên, bấm **Đổi mã tra cứu** trên web.
 - Nếu web và Sheet cùng đổi mã của một khách, web hỏi bạn giữ **bản web** hay **bản Sheet**, giống các tab khác.
 - Ai đọc được Sheet cũng thấy mã của khách. Chỉ chia sẻ file cho người bạn tin.
@@ -40,7 +43,7 @@ Nếu bước 2.3 báo lỗi Gmail: ở cột trái của Apps Script bấm **Se
 
 Cách web xử lý thư mời:
 
-- Web đọc thư từ `families-noreply@google.com` trong 14 ngày gần nhất và lấy link nút **Chấp nhận lời mời**.
+- Web đọc thư từ `families-noreply@google.com` trong 14 ngày gần nhất, kể cả thư bị vào Spam, và lấy link nút **Chấp nhận lời mời**.
 - Mỗi link mang đúng Gmail đã nhận thư: thư gửi tới `hai+1@gmail.com` cho dòng **hai+1@gmail.com**, thư gửi tới `+2` cho dòng **hai+2@gmail.com**. Ngày gửi lấy theo ngày thư; web nhắc khi lời mời sắp hết hạn 14 ngày.
 - Web biết thư thuộc Family nào bằng cách so Gmail người mời có trong thư với mail chủ Family trên web. Thư không khớp Family nào thì web chỉ báo "chưa khớp", không tự gán, để không giao nhầm link sang Family khác. Khi đó bạn dán link tay như trước.
 - Google gửi thư mời mới cho cùng một Gmail:
