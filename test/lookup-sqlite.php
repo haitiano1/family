@@ -1,0 +1,93 @@
+<?php
+declare(strict_types=1);
+// Logic check for family-private/lookup.php on SQLite (MySQL DDL translated), run by test/lookup-php.test.js.
+// The MySQL/HTTP path is covered by hosting/php/verify.mjs; this keeps PHP and Node rules in step without Docker.
+$root=dirname(__DIR__).'/hosting/php/family-private';
+require $root.'/core.php';require $root.'/business.php';require $root.'/lookup.php';
+function check(bool $ok,string $message): void {if(!$ok){fwrite(STDERR,"FAIL: $message\n");exit(1);}}
+function fails(callable $f,int $status,string $message): void {try{$f();}catch(FamilyError $e){check($e->status===$status,"$message (status {$e->status}: {$e->getMessage()})");return;}check(false,"$message (no error)");}
+function sqlite(string $sql): string {
+    $sql=preg_replace('/\)\s*ENGINE=.*$/s',')',$sql);$sql=preg_replace('/,KEY [a-z_]+\([a-z_]+\)/','',$sql);
+    return str_replace('INT PRIMARY KEY AUTO_INCREMENT','INTEGER PRIMARY KEY AUTOINCREMENT',$sql);
+}
+$db=new PDO('sqlite::memory:',null,null,[PDO::ATTR_ERRMODE=>PDO::ERRMODE_EXCEPTION,PDO::ATTR_DEFAULT_FETCH_MODE=>PDO::FETCH_ASSOC]);$db->exec('PRAGMA foreign_keys=ON');
+foreach([$root.'/schema.sql',$root.'/features.sql',$root.'/vault.sql',$root.'/lookup.sql'] as $file)foreach(explode(';',file_get_contents($file)) as $sql)if(trim($sql))$db->exec(sqlite($sql));
+$db->exec("ALTER TABLE families ADD COLUMN trial_date VARCHAR(10) NOT NULL DEFAULT ''");$db->exec("ALTER TABLE families ADD COLUMN archived_at VARCHAR(32) NOT NULL DEFAULT ''");$db->exec('ALTER TABLE vault_items ADD COLUMN family_id INT NULL');
+$salt=$argv[1]??str_repeat('a',64);q($db,"INSERT INTO lookup_settings(name,value) VALUES ('code_salt',?)",[$salt]);
+$day=fn(int $n)=>(new DateTimeImmutable(today(),new DateTimeZone('UTC')))->modify("$n days")->format('Y-m-d');
+$family=function(string $name,string $mail)use($db){q($db,'INSERT INTO accounts(email,note,created_at) VALUES (?,?,?)',[$mail,'',stamp()]);q($db,'INSERT INTO families(name,manager_id,created_at) VALUES (?,?,?)',[$name,(int)$db->lastInsertId(),stamp()]);return (int)$db->lastInsertId();};
+$member=function(int $f,string $mail,string $name,string $expires)use($db){q($db,"INSERT INTO members(family_id,email,customer_name,expires_at,plan_months,membership_status) VALUES (?,?,?,?,6,'active')",[$f,$mail,$name,$expires]);return (int)$db->lastInsertId();};
+$old=$family('Family 04','owner04@example.com');$new=$family('Family 09','owner09@example.com');
+$minh=$member($old,'minhanh@example.com','Minh Anh',$day(38));$huy=$member($old,'giahuy@example.com','Gia Huy',$day(62));$bao=$member($old,'quocbao@example.com','Quốc Bảo',$day(-53));
+q($db,"INSERT INTO issues(family_id,family_name,target_type,target_id,subject_email,original_email,title,created_at,updated_at) VALUES (?,?,'member',?,?,?,'Lỗi',?,?)",[$old,'Family 04',$minh,'minhanh@example.com','minhanh@example.com',stamp(),stamp()]);
+
+check(lookupNormalizeCode(' k7p-2qx ')==='K7P2QX'&&lookupNormalizeCode('K7P2Q0')==='','code normalization');
+check(lookupGoogleUrl('https://notifications.googleapis.com/email/redirect?t=1')&&!lookupGoogleUrl('https://google.com.evil.example/x')&&!lookupGoogleUrl('http://myaccount.google.com/x')&&!lookupGoogleUrl('javascript:alert(1)'),'invite URL allowlist');
+check(lookupInviteExpiry($day(-3))===$day(11)&&lookupInviteExpiry('')==='','invite expiry');
+
+fails(fn()=>lookupSaveStatus($db,$old,['status'=>'broken','revision'=>0]),400,'unknown status');
+lookupSaveStatus($db,$old,['status'=>'disabled','note'=>'Tài khoản chủ bị khoá.','revision'=>0]);
+fails(fn()=>lookupSaveStatus($db,$old,['status'=>'scanned','revision'=>0]),409,'stale status revision');
+fails(fn()=>lookupSaveInvite($db,$new,null,['url'=>'https://example.com/x']),400,'non-Google invite');
+$inv=[];for($i=1;$i<=3;$i++)$inv[$i]=lookupSaveInvite($db,$new,null,['label'=>"shop+$i@gmail.com",'url'=>"https://myaccount.google.com/family/join/t$i",'sent_on'=>$day(-3)])['id'];
+fails(fn()=>lookupSaveInvite($db,$old,null,['url'=>'https://myaccount.google.com/family/join/t1']),409,'duplicate invite');
+$state=lookupAdminState($db);
+check(array_column($state['invites'],'holder_state')===['ready','ready','ready'],'invites start ready');
+$codes=(array)$state['lookup_codes'];check($codes['minhanh@example.com']===lookupDerivedCode($salt,'minhanh@example.com'),'derived code in state');
+echo json_encode(['codes'=>$codes]),"\n";
+
+$a=fn(int $m,int $i)=>['member_id'=>$m,'revision'=>(int)one($db,'SELECT renewal_revision FROM members WHERE id=?',[$m])['renewal_revision'],'expected_email'=>one($db,'SELECT email FROM members WHERE id=?',[$m])['email'],'invite_id'=>$i,'invite_revision'=>(int)one($db,'SELECT revision FROM family_invites WHERE id=?',[$i])['revision']];
+$base=['from_family_id'=>$old,'to_family_id'=>$new,'expected_manager_email'=>'owner09@example.com'];
+fails(fn()=>lookupBulkMove($db,[...$base,'assignments'=>[$a($minh,$inv[1]),$a($huy,$inv[1])]]),400,'same invite twice');
+fails(fn()=>lookupBulkMove($db,[...$base,'expected_manager_email'=>'x@example.com','assignments'=>[$a($minh,$inv[1])]]),409,'changed target owner');
+$moved=lookupBulkMove($db,[...$base,'assignments'=>[$a($minh,$inv[1]),$a($huy,$inv[2])]]);
+check($moved['moved']===2,'two moved');
+check(one($db,'SELECT family_id,membership_status FROM members WHERE id=?',[$minh])===['family_id'=>$new,'membership_status'=>'invited'],'member moved as invited');
+check((int)one($db,'SELECT COUNT(*) AS n FROM issues')['n']===0,'customer case removed');
+check(array_column(lookupAdminState($db)['invites'],'holder_state')===['assigned','assigned','ready'],'invites assigned');
+fails(fn()=>lookupBulkMove($db,[...$base,'assignments'=>[$a($bao,$inv[1])]]),409,'assigned invite cannot be reused');
+
+fails(fn()=>lookupVerify($db,['email'=>'minhanh@example.com','code'=>'AAAAAA'],'1.1.1.1'),401,'wrong code');
+fails(fn()=>lookupVerify($db,['email'=>'minhanh@example.com','code'=>'12'],'1.1.1.1'),400,'short code');
+$v=lookupVerify($db,['email'=>' MinhAnh@Example.com ','code'=>strtolower($codes['minhanh@example.com'])],'1.1.1.1');
+check(lookupSessionEmail($db,$v['token'])==='minhanh@example.com','session');
+$item=$v['result']['items'][0];
+check($item['view']==='move'&&$item['family_name']==='Family 09'&&$item['move']['from_status']==='disabled'&&$item['move']['invite_url']==='https://myaccount.google.com/family/join/t1'&&$item['move']['invite_expires_on']===$day(11),'move view');
+check(!str_contains(json_encode($v['result']),'owner0')&&!str_contains(json_encode($v['result']),'giahuy'),'no other emails');
+lookupCustomerOpen($db,'minhanh@example.com',['move_id'=>$item['move']['id']]);
+check(one($db,'SELECT state FROM member_moves WHERE id=?',[$item['move']['id']])['state']==='opened','opened');
+fails(fn()=>lookupCustomerReport($db,'minhanh@example.com',['move_id'=>$item['move']['id'],'reason'=>'x']),400,'bad reason');
+$r=lookupCustomerReport($db,'minhanh@example.com',['move_id'=>$item['move']['id'],'reason'=>'twelve_months','note'=>'12 tháng']);
+check($r['items'][0]['move']['state']==='failed'&&$r['items'][0]['view']==='move','reported');
+fails(fn()=>lookupCustomerOpen($db,'giahuy@example.com',['move_id'=>$item['move']['id']]),404,'other customer cannot touch the move');
+$r=lookupCustomerJoined($db,'minhanh@example.com',['move_id'=>$item['move']['id']]);
+check($r['items'][0]['view']==='normal'&&$r['items'][0]['move']['state']==='joined'&&$r['items'][0]['move']['invite_url']==='','joined view');
+check(one($db,'SELECT membership_status FROM members WHERE id=?',[$minh])['membership_status']==='active','member active');
+check(array_column(lookupAdminState($db)['invites'],'holder_state')===['used','assigned','ready'],'invite used');
+
+$expired=lookupVerify($db,['email'=>'quocbao@example.com','code'=>$codes['quocbao@example.com']],'1.1.1.2')['result']['items'][0];
+check($expired['view']==='expired'&&$expired['status']==='disabled'&&$expired['move']===null,'expired view');
+
+$moves=lookupAdminState($db)['moves'];$huyMove=array_values(array_filter($moves,fn($m)=>$m['email']==='giahuy@example.com'))[0];
+fails(fn()=>lookupUpdateMove($db,(int)$huyMove['id'],['action'=>'dismiss','revision'=>(int)$huyMove['revision']]),409,'cannot hide an open move');
+lookupUpdateMove($db,(int)$huyMove['id'],['action'=>'reassign','invite_id'=>$inv[3],'invite_revision'=>(int)one($db,'SELECT revision FROM family_invites WHERE id=?',[$inv[3]])['revision'],'revision'=>(int)$huyMove['revision']]);
+check(array_column(lookupAdminState($db)['invites'],'holder_state')===['used','ready','assigned'],'reassigned');
+fails(fn()=>lookupDeleteInvite($db,$inv[3],['revision'=>(int)one($db,'SELECT revision FROM family_invites WHERE id=?',[$inv[3]])['revision']]),409,'assigned invite cannot be deleted');
+$huyMove=one($db,'SELECT * FROM member_moves WHERE id=?',[$huyMove['id']]);
+lookupUpdateMove($db,(int)$huyMove['id'],['action'=>'release','revision'=>(int)$huyMove['revision']]);
+check(array_column(lookupAdminState($db)['invites'],'holder_state')===['used','ready','ready'],'released');
+
+for($i=0;$i<8;$i++)fails(fn()=>lookupVerify($db,['email'=>'giahuy@example.com','code'=>$codes['giahuy@example.com']==='AAAAAA'?'BBBBBB':'AAAAAA'],'9.9.9.9'),401,'wrong attempt');
+fails(fn()=>lookupVerify($db,['email'=>'giahuy@example.com','code'=>$codes['giahuy@example.com']],'9.9.9.9'),429,'rate limited');
+$rotated=lookupRotateCode($db,['email'=>'minhanh@example.com']);
+check($rotated['code']!==$codes['minhanh@example.com']&&lookupSessionEmail($db,$v['token'])===null,'rotated code revokes sessions');
+fails(fn()=>lookupVerify($db,['email'=>'minhanh@example.com','code'=>$codes['minhanh@example.com']],'1.1.1.3'),401,'old code refused');
+lookupVerify($db,['email'=>'minhanh@example.com','code'=>$rotated['code']],'1.1.1.3');
+
+lookupSaveSettings($db,['shop_name'=>'Shop','contact_url'=>'https://m.me/shop','contact_label'=>'Nhắn','help_text'=>'8h–22h']);
+fails(fn()=>lookupSaveSettings($db,['contact_url'=>'javascript:alert(1)']),400,'contact URL');
+check(lookupSettings($db)===['shop_name'=>'Shop','contact_url'=>'https://m.me/shop','contact_label'=>'Nhắn','help_text'=>'8h–22h'],'settings without salt');
+$backup=backup($db);check($backup['version']===10&&count($backup['tables']['member_moves'])===2&&count($backup['tables']['family_invites'])===3,'backup v10 tables');
+check(lookupAuditAction('POST','/api/moves')==='Chuyển Family'&&auditActionLabel('PATCH','/api/families/3/status')==='Sửa trạng thái Family','audit labels');
+echo "ok\n";
+function auditActionLabel(string $m,string $r): string {require_once dirname(__DIR__).'/hosting/php/family-private/audit.php';return auditAction($m,$r);}

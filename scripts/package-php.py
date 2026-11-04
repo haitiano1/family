@@ -6,7 +6,7 @@ import json
 import re
 ROOT=Path(__file__).resolve().parents[1]
 DEST=ROOT/'downloads'/'family-hostinger.zip'
-assets=['product-import.js','sync-status.css','updater.js','sheets.js','index.html','app.js','statistics.js','vault.js','vault-sheet.js','style.css','csv.js','contacts.js','access.html','access.js','manifest.webmanifest','icon-180.png','icon-192.png','icon-512.png']
+assets=['product-import.js','sync-status.css','updater.js','sheets.js','index.html','app.js','statistics.js','vault.js','vault-sheet.js','moves.js','tra-cuu.html','tra-cuu.js','tra-cuu.css','style.css','csv.js','contacts.js','access.html','access.js','manifest.webmanifest','icon-180.png','icon-192.png','icon-512.png']
 DEST.parent.mkdir(exist_ok=True)
 version=json.loads((ROOT/'package.json').read_text())['version']
 schema=int(re.search(r'^const FAMILY_DATA_SCHEMA_VERSION=(\d+);',(ROOT/'hosting/php/family-private/core.php').read_text(),re.M).group(1))
@@ -30,6 +30,7 @@ with zipfile.ZipFile(DEST,'w',zipfile.ZIP_DEFLATED) as z:
     z.write(ROOT/'hosting/php/SLOT-VA-CHUYEN-FAMILY.md','SLOT-VA-CHUYEN-FAMILY.md')
     z.write(ROOT/'hosting/php/NGAY-NHAN-TIEN-GIA-HAN.md','NGAY-NHAN-TIEN-GIA-HAN.md')
     z.write(ROOT/'hosting/php/GIAO-DIEN-HIEN-DAI.md','GIAO-DIEN-HIEN-DAI.md')
+    z.write(ROOT/'hosting/php/TRA-CUU-CHUYEN-NHOM.md','TRA-CUU-CHUYEN-NHOM.md')
 # Normalize portable read permissions; no executable or secret files are bundled.
 with zipfile.ZipFile(DEST) as z: contents=[(i.filename,z.read(i.filename)) for i in z.infolist()]
 with zipfile.ZipFile(DEST,'w',zipfile.ZIP_DEFLATED) as z:
@@ -37,11 +38,11 @@ with zipfile.ZipFile(DEST,'w',zipfile.ZIP_DEFLATED) as z:
         info=zipfile.ZipInfo(name);info.external_attr=0o100644<<16;info.compress_type=zipfile.ZIP_DEFLATED;z.writestr(info,content)
 print('Created downloads/family-hostinger.zip (PHP source + shared assets only).')
 # Existing installations need only changed code/assets; configuration is never bundled.
-update_names=['public_html/product-import.js','public_html/sync-status.css','family-private/product-import.php','public_html/updater.js','public_html/update.php','public_html/index.php','family-private/runtime.php','family-private/updater.php','family-private/version.php','family-private/version.json','family-private/schema.sql','family-private/records.php','family-private/sheets.php','public_html/sheets.js','public_html/statistics.js','family-private/statistics.php','public_html/app.js','public_html/vault.js','public_html/vault-sheet.js','public_html/vault-families.js','public_html/csv.js','public_html/domain.js','public_html/contacts.js','public_html/index.html','public_html/access.html','public_html/manifest.webmanifest','public_html/style.css','public_html/api.php','family-private/core.php','family-private/vault.php','family-private/vault.sql','family-private/business.php','family-private/audit.php','family-private/issues.php','family-private/features.sql','family-private/cron.php','family-private/import.php']
+update_names=['public_html/product-import.js','public_html/sync-status.css','family-private/product-import.php','public_html/updater.js','public_html/update.php','public_html/index.php','family-private/runtime.php','family-private/updater.php','family-private/version.php','family-private/version.json','family-private/schema.sql','family-private/records.php','family-private/sheets.php','public_html/sheets.js','public_html/statistics.js','family-private/statistics.php','public_html/app.js','public_html/vault.js','public_html/vault-sheet.js','public_html/vault-families.js','public_html/csv.js','public_html/domain.js','public_html/contacts.js','public_html/index.html','public_html/access.html','public_html/manifest.webmanifest','public_html/style.css','public_html/api.php','family-private/core.php','family-private/vault.php','family-private/vault.sql','family-private/business.php','family-private/audit.php','family-private/issues.php','family-private/features.sql','family-private/cron.php','family-private/import.php','family-private/lookup.php','family-private/lookup.sql','public_html/moves.js','public_html/tra-cuu.html','public_html/tra-cuu.js','public_html/tra-cuu.css']
 with zipfile.ZipFile(DEST) as z:
     update_contents=[(name,z.read(name)) for name in update_names]
 with zipfile.ZipFile(ROOT/'downloads'/'family-hostinger-update.zip','w',zipfile.ZIP_DEFLATED) as z:
-    for name,content in update_contents+[('GIAO-DIEN-HIEN-DAI.md',(ROOT/'hosting/php/GIAO-DIEN-HIEN-DAI.md').read_bytes()),('NGAY-NHAN-TIEN-GIA-HAN.md',(ROOT/'hosting/php/NGAY-NHAN-TIEN-GIA-HAN.md').read_bytes()),('UPDATE.md',(ROOT/'hosting/php/UPDATE.md').read_bytes()),('THONG-KE-MUA-MOI.md',(ROOT/'hosting/php/THONG-KE-MUA-MOI.md').read_bytes()),('CAP-NHAT-MOT-CHAM.md',(ROOT/'hosting/php/CAP-NHAT-MOT-CHAM.md').read_bytes()),('SLOT-VA-CHUYEN-FAMILY.md',(ROOT/'hosting/php/SLOT-VA-CHUYEN-FAMILY.md').read_bytes())]:
+    for name,content in update_contents+[('GIAO-DIEN-HIEN-DAI.md',(ROOT/'hosting/php/GIAO-DIEN-HIEN-DAI.md').read_bytes()),('NGAY-NHAN-TIEN-GIA-HAN.md',(ROOT/'hosting/php/NGAY-NHAN-TIEN-GIA-HAN.md').read_bytes()),('UPDATE.md',(ROOT/'hosting/php/UPDATE.md').read_bytes()),('THONG-KE-MUA-MOI.md',(ROOT/'hosting/php/THONG-KE-MUA-MOI.md').read_bytes()),('CAP-NHAT-MOT-CHAM.md',(ROOT/'hosting/php/CAP-NHAT-MOT-CHAM.md').read_bytes()),('SLOT-VA-CHUYEN-FAMILY.md',(ROOT/'hosting/php/SLOT-VA-CHUYEN-FAMILY.md').read_bytes()),('TRA-CUU-CHUYEN-NHOM.md',(ROOT/'hosting/php/TRA-CUU-CHUYEN-NHOM.md').read_bytes())]:
         info=zipfile.ZipInfo(name);info.external_attr=0o100644<<16;info.compress_type=zipfile.ZIP_DEFLATED;z.writestr(info,content)
 print('Created downloads/family-hostinger-update.zip (changed files only; no config.php).')
 with zipfile.ZipFile(ROOT/'downloads'/'family-cap-nhat-mot-cham.zip','w',zipfile.ZIP_DEFLATED) as z:
@@ -72,6 +73,10 @@ with zipfile.ZipFile(ROOT/'downloads'/'family-sua-mail-family.zip','w',zipfile.Z
     for name,content in update_contents+[('HUONG-DAN.md',(ROOT/'hosting/php/SUA-MAIL-FAMILY.md').read_bytes())]:
         info=zipfile.ZipInfo(name);info.external_attr=0o100644<<16;info.compress_type=zipfile.ZIP_DEFLATED;z.writestr(info,content)
 print('Created downloads/family-sua-mail-family.zip.')
+with zipfile.ZipFile(ROOT/'downloads'/'family-tra-cuu-chuyen-nhom.zip','w',zipfile.ZIP_DEFLATED) as z:
+    for name,content in update_contents+[('HUONG-DAN.md',(ROOT/'hosting/php/TRA-CUU-CHUYEN-NHOM.md').read_bytes()),('UPDATE.md',(ROOT/'hosting/php/UPDATE.md').read_bytes())]:
+        info=zipfile.ZipInfo(name);info.external_attr=0o100644<<16;info.compress_type=zipfile.ZIP_DEFLATED;z.writestr(info,content)
+print('Created downloads/family-tra-cuu-chuyen-nhom.zip (customer lookup page and bulk Family moves).')
 # A named update for the existing Hostinger installation; retain prior fixes.
 with zipfile.ZipFile(ROOT/'downloads'/'family-thong-ke-mua-moi.zip','w',zipfile.ZIP_DEFLATED) as z:
     for name,content in update_contents+[('HUONG-DAN.md',(ROOT/'hosting/php/THONG-KE-MUA-MOI.md').read_bytes()),('THONG-KE-MUA-MOI.md',(ROOT/'hosting/php/THONG-KE-MUA-MOI.md').read_bytes()),('UPDATE.md',(ROOT/'hosting/php/UPDATE.md').read_bytes())]:

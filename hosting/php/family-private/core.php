@@ -47,6 +47,7 @@ function db(array $c): PDO {
     catch (PDOException $e) {error_log('Family database connection failed.');fail('Không kết nối được MySQL. Kiểm tra cấu hình database của website Family.',503);}
     databaseLock($db,$c);
     initializeSchema($db);
+    ensureLookupSchema($db);
     return $db;
 }
 // Named locks are connection-scoped; do not recursively acquire the same lock.
@@ -124,6 +125,16 @@ function initializeSchema(PDO $db): void {
     foreach(explode(';',file_get_contents(__DIR__.'/vault.sql')) as $sql)if(trim($sql))$db->exec($sql);
     if(!in_array('family_id',array_column(all($db,'SHOW COLUMNS FROM vault_items'),'Field'),true))$db->exec('ALTER TABLE vault_items ADD COLUMN family_id INT NULL, ADD UNIQUE KEY vault_family_link(family_id), ADD CONSTRAINT vault_family_fk FOREIGN KEY(family_id) REFERENCES families(id)');
     q($db,"INSERT INTO app_meta(name,value) VALUES ('schema_version',?) ON DUPLICATE KEY UPDATE value=VALUES(value)",[(string)FAMILY_DATA_SCHEMA_VERSION]);
+}
+// Tra cứu & chuyển nhóm tables are additive and created once, without changing the data schema version,
+// so the one-click updater still treats this release as compatible. DDL runs outside any transaction.
+const FAMILY_LOOKUP_SCHEMA_VERSION=1;
+function ensureLookupSchema(PDO $db): void {
+    $row=one($db,"SELECT value FROM app_meta WHERE name='lookup_schema'");
+    if(($row['value']??'')===(string)FAMILY_LOOKUP_SCHEMA_VERSION)return;
+    foreach(explode(';',file_get_contents(__DIR__.'/lookup.sql')) as $sql)if(trim($sql))$db->exec($sql);
+    q($db,"INSERT IGNORE INTO lookup_settings(name,value) VALUES ('code_salt',?)",[bin2hex(random_bytes(32))]);
+    q($db,"INSERT INTO app_meta(name,value) VALUES ('lookup_schema',?) ON DUPLICATE KEY UPDATE value=VALUES(value)",[(string)FAMILY_LOOKUP_SCHEMA_VERSION]);
 }
 function errorReply(Throwable $e): never {
     if ($e instanceof FamilyError) reply(['error'=>$e->getMessage()],$e->status);

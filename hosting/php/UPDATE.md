@@ -1,3 +1,7 @@
+# 0.21.0 — Tra cứu khách & chuyển nhóm
+
+Dùng **Cập nhật một chạm**; không cần chạy SQL, sửa config.php hay .htaccess. Nếu upload tay: sao lưu dữ liệu, upload nội dung hai thư mục family-private và public_html của gói family-tra-cuu-chuyen-nhom.zip vào đúng thư mục đang dùng, giữ config.php và database, rồi Ctrl+F5. Schema 8 giữ nguyên; các bảng tra cứu được tạo một lần khi website mở. Xem TRA-CUU-CHUYEN-NHOM.md.
+
 # Bản 0.20.2 — Sửa email Family
 
 Đổi email quản lý từ Sửa Family sẽ ngắt liên kết Kho cũ; mail mới không kế thừa mật khẩu/2FA của mail cũ. Giữ hồ sơ mã hóa cũ riêng để tránh mất dữ liệu. Không đổi luồng Fix lỗi hoặc schema. Xem SUA-MAIL-FAMILY.md.

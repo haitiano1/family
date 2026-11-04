@@ -1,4 +1,6 @@
-# YouTube Family — Quản lý khách hàng 0.20.2
+# YouTube Family — Quản lý khách hàng 0.21.0
+
+Bản 0.21.0 thêm **Tra cứu khách & chuyển nhóm**: trạng thái Family hiển thị cho khách, kho link mời theo Family, chuyển hàng loạt khách sang nhóm mới với mỗi khách một link, theo dõi tiến độ, và trang `/tra-cuu.html` để khách nhập Gmail + mã tra cứu tự lấy link vào nhóm mới. Giữ schema 8 nên cài được bằng Cập nhật một chạm; sao lưu lên phiên bản 10. Xem [hướng dẫn](hosting/php/TRA-CUU-CHUYEN-NHOM.md).
 
 Bản 0.20.2 sửa thao tác đổi email trong Sửa Family: mail mới không kế thừa thông tin Kho của mail cũ. [Hướng dẫn](hosting/php/SUA-MAIL-FAMILY.md).
 

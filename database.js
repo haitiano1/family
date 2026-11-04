@@ -1,4 +1,5 @@
 import { DatabaseSync } from 'node:sqlite';
+import { randomBytes } from 'node:crypto';
 import { mkdirSync, existsSync } from 'node:fs';
 import path from 'node:path';
 export function initDatabase(dir) {
@@ -50,6 +51,17 @@ try {
   if(!db.prepare('PRAGMA table_info(vault_items)').all().some(c=>c.name==='family_id'))db.exec('ALTER TABLE vault_items ADD COLUMN family_id INTEGER REFERENCES families(id)');
   db.exec('CREATE UNIQUE INDEX IF NOT EXISTS vault_family_link ON vault_items(family_id)');
   db.exec(`CREATE TABLE IF NOT EXISTS new_purchase_history(id INTEGER PRIMARY KEY,member_id INTEGER UNIQUE REFERENCES members(id) ON DELETE SET NULL,archive_id INTEGER,email TEXT NOT NULL,customer_name TEXT NOT NULL,contact TEXT NOT NULL,family_name TEXT NOT NULL,joined_at TEXT NOT NULL,expires_at TEXT NOT NULL,plan_months INTEGER NOT NULL,payment_status TEXT NOT NULL,amount INTEGER NOT NULL,note TEXT NOT NULL,created_at TEXT NOT NULL);`);
+  // Tra cứu & chuyển nhóm: additive tables only, so user_version stays 16 and older builds still open the file.
+  db.exec(`CREATE TABLE IF NOT EXISTS family_statuses(id INTEGER PRIMARY KEY,family_id INTEGER NOT NULL UNIQUE REFERENCES families(id) ON DELETE CASCADE,status TEXT NOT NULL DEFAULT 'active',note TEXT NOT NULL DEFAULT '',updated_at TEXT NOT NULL,revision INTEGER NOT NULL DEFAULT 0);
+  CREATE TABLE IF NOT EXISTS family_invites(id INTEGER PRIMARY KEY,family_id INTEGER NOT NULL REFERENCES families(id) ON DELETE CASCADE,label TEXT NOT NULL DEFAULT '',url TEXT NOT NULL,sent_on TEXT NOT NULL DEFAULT '',revision INTEGER NOT NULL DEFAULT 0,created_at TEXT NOT NULL,updated_at TEXT NOT NULL);
+  CREATE TABLE IF NOT EXISTS member_moves(id INTEGER PRIMARY KEY,member_id INTEGER REFERENCES members(id) ON DELETE SET NULL,email TEXT NOT NULL,customer_name TEXT NOT NULL,from_family_id INTEGER REFERENCES families(id) ON DELETE SET NULL,from_family_name TEXT NOT NULL,from_status TEXT NOT NULL,from_note TEXT NOT NULL,to_family_id INTEGER REFERENCES families(id) ON DELETE SET NULL,to_family_name TEXT NOT NULL,invite_id INTEGER REFERENCES family_invites(id) ON DELETE SET NULL,invite_label TEXT NOT NULL DEFAULT '',state TEXT NOT NULL DEFAULT 'assigned',report_reason TEXT NOT NULL DEFAULT '',report_note TEXT NOT NULL DEFAULT '',created_at TEXT NOT NULL,updated_at TEXT NOT NULL,opened_at TEXT NOT NULL DEFAULT '',joined_at TEXT NOT NULL DEFAULT '',reported_at TEXT NOT NULL DEFAULT '',dismissed_at TEXT NOT NULL DEFAULT '',revision INTEGER NOT NULL DEFAULT 0);
+  CREATE TABLE IF NOT EXISTS lookup_codes(id INTEGER PRIMARY KEY,email TEXT NOT NULL UNIQUE,code TEXT NOT NULL,created_at TEXT NOT NULL);
+  CREATE TABLE IF NOT EXISTS lookup_settings(id INTEGER PRIMARY KEY,name TEXT NOT NULL UNIQUE,value TEXT NOT NULL);
+  CREATE TABLE IF NOT EXISTS lookup_sessions(token_hash TEXT PRIMARY KEY,email TEXT NOT NULL,expires_at INTEGER NOT NULL);
+  CREATE TABLE IF NOT EXISTS lookup_attempts(name TEXT PRIMARY KEY,window_end INTEGER NOT NULL,count INTEGER NOT NULL);
+  CREATE INDEX IF NOT EXISTS member_moves_member ON member_moves(member_id);
+  CREATE INDEX IF NOT EXISTS member_moves_invite ON member_moves(invite_id);`);
+  db.prepare("INSERT OR IGNORE INTO lookup_settings(name,value) VALUES ('code_salt',?)").run(randomBytes(32).toString('hex'));
   db.exec('PRAGMA user_version=16; COMMIT');
 } catch (error) { db.exec('ROLLBACK'); throw error; }
 return db;
