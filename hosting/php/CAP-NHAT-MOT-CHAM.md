@@ -20,14 +20,14 @@ Có thể tải bản sao dữ liệu trước lần cập nhật thành công g
 
 Nút chỉ thấy **GitHub Releases đã phát hành**, không tự lấy code còn trong cuộc chat hoặc những thay đổi chưa phát hành ở main.
 
-Người quản lý repository làm sau khi mã và các kiểm thử đã được đưa lên main:
+Người quản lý repository chỉ cần gộp PR vào main:
 
 1. Đặt số phiên bản mới trong **package.json**, ví dụ 0.17.1, cùng các thay đổi cần phát hành và nội dung **hosting/php/RELEASE-NOTES.md**.
-2. Trên GitHub repository **haitiano1/family**, mở **Actions → Phát hành Family PHP → Run workflow**, chọn main.
-3. Workflow kiểm thử, đóng gói và tạo Release **v0.17.1** với **family-php-release.zip** và **family-latest.json**. Nếu tag đã có, lần phát hành dừng thay vì ghi đè gói cũ.
+2. Gộp (Merge) PR vào main. Workflow **Phát hành Family PHP** tự chạy. Vẫn có thể chạy tay: **Actions → Phát hành Family PHP → Run workflow**, chọn main.
+3. Workflow kiểm thử, đóng gói và tạo Release **v0.17.1** với **family-php-release.zip** và **family-latest.json**. Nếu phiên bản đó đã có Release, workflow bỏ qua, không ghi đè gói cũ.
 4. Sau khi workflow thành công, website có thể kiểm tra và cài bản mới. Source repository và Release cần truy cập công khai; cơ chế này chưa dùng GitHub token riêng trên Hostinger.
 
-Các file được tạo ở workspace hoặc gửi qua chat **chưa được coi là đã phát hành**. Việc thêm workflow không chạy hoặc phát hành gì cho đến khi người quản lý chủ động chạy nó.
+Các file được tạo ở workspace hoặc gửi qua chat **chưa được coi là đã phát hành**. Chỉ mã đã được gộp vào main mới được phát hành.
 
 ## Phạm vi và điều kiện
 
