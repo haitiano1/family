@@ -70,7 +70,7 @@ Website đã cập nhật các bản Sheet trước có thể chỉ upload **fam
 
 Gói **family-cap-nhat-mot-cham.zip** cài bộ cập nhật lần đầu. Sau đó website có thể lấy gói tương thích từ GitHub Releases **haitiano1/family** ngay trong nút **Cập nhật một chạm**: kiểm tra SHA-256, sao lưu dữ liệu/mã, tạm dừng yêu cầu ứng dụng, thay mã và kiểm tra khởi động ở tiến trình PHP mới. Có khôi phục mã khi thất bại hoặc gián đoạn; giữ config.php/database/kết nối Sheet.
 
-Nguồn cập nhật chỉ nhận các Release đã phát hành đúng chuẩn; code trong chat hoặc ở main chưa tự trở thành bản cập nhật. Workflow **Phát hành Family PHP** được chạy thủ công bởi người quản lý repository sau khi mã đã có trên main. Bộ cài không tự nâng cấp cấu trúc database, Apps Script hoặc bộ khôi phục nền. Hướng dẫn đầy đủ: **CAP-NHAT-MOT-CHAM.md**.
+Nguồn cập nhật chỉ nhận các Release đã phát hành đúng chuẩn; code trong chat hoặc ở main chưa tự trở thành bản cập nhật. Workflow **Phát hành Family PHP** tự chạy khi PR được gộp vào main (và vẫn chạy tay được). Bộ cài không tự nâng cấp cấu trúc database, Apps Script hoặc bộ khôi phục nền. Hướng dẫn đầy đủ: **CAP-NHAT-MOT-CHAM.md**.
 
 # Bản 0.16.0 — khách mua mới và thống kê theo kỳ gia hạn
 
