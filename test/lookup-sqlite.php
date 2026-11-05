@@ -5,7 +5,7 @@ declare(strict_types=1);
 $root=dirname(__DIR__).'/hosting/php/family-private';
 require $root.'/core.php';require $root.'/business.php';require $root.'/lookup.php';
 function check(bool $ok,string $message): void {if(!$ok){fwrite(STDERR,"FAIL: $message\n");exit(1);}}
-function fails(callable $f,int $status,string $message): void {try{$f();}catch(FamilyError $e){check($e->status===$status,"$message (status {$e->status}: {$e->getMessage()})");return;}check(false,"$message (no error)");}
+function fails(callable $f,int $status,string $message): FamilyError {try{$f();}catch(FamilyError $e){check($e->status===$status,"$message (status {$e->status}: {$e->getMessage()})");return $e;}check(false,"$message (no error)");exit(1);}
 function sqlite(string $sql): string {
     $sql=preg_replace('/\)\s*ENGINE=.*$/s',')',$sql);$sql=preg_replace('/,KEY [a-z_]+\([a-z_]+\)/','',$sql);
     return str_replace('INT PRIMARY KEY AUTO_INCREMENT','INTEGER PRIMARY KEY AUTOINCREMENT',$sql);
@@ -87,7 +87,23 @@ lookupVerify($db,['email'=>'minhanh@example.com','code'=>$rotated['code']],'1.1.
 lookupSaveSettings($db,['shop_name'=>'Shop','contact_url'=>'https://m.me/shop','contact_label'=>'Nhắn','help_text'=>'8h–22h']);
 fails(fn()=>lookupSaveSettings($db,['contact_url'=>'javascript:alert(1)']),400,'contact URL');
 check(lookupSettings($db)===['shop_name'=>'Shop','contact_url'=>'https://m.me/shop','contact_label'=>'Nhắn','help_text'=>'8h–22h'],'settings without salt');
-$backup=backup($db);check($backup['version']===10&&count($backup['tables']['member_moves'])===2&&count($backup['tables']['family_invites'])===3,'backup v10 tables');
+// Gen mail mời: same address shape as the Node build, never repeated, owner Gmail refused.
+$made=lookupGenerateInviteMails($db,$new,['count'=>3,'base_email'=>' HaiHoangrr+x@Gmail.com ']);
+check(count($made['mails'])===3&&count(array_unique($made['mails']))===3&&$made['base_email']==='haihoangrr@gmail.com','generated addresses');
+foreach($made['mails'] as $x)check(preg_match('/^haihoangrr\+[a-hj-km-np-z2-9]{6}@gmail\.com$/D',$x)===1,'address shape '.$x);
+fails(fn()=>lookupGenerateInviteMails($db,$new,['count'=>6,'base_email'=>'a@gmail.com']),400,'at most 5');
+fails(fn()=>lookupGenerateInviteMails($db,$new,['count'=>'2','base_email'=>'a@gmail.com']),400,'integer count');
+fails(fn()=>lookupGenerateInviteMails($db,$new,['count'=>1,'base_email'=>'owner09+z@example.com']),400,'owner Gmail refused');
+$all=$made['mails'];for($i=0;$i<10;$i++)$all=[...$all,...lookupGenerateInviteMails($db,$old,['count'=>5,'base_email'=>'haihoangrr@gmail.com'])['mails']];check(count(array_unique($all))===53,'never generated twice');
+$state=lookupAdminState($db);check(array_slice(array_column($state['invite_mails'],'email'),0,3)===$made['mails']&&$state['invite_mails'][0]['family_id']===$new&&$state['invite_base_email']==='haihoangrr@gmail.com','state lists generated addresses');
+// Đã gửi: a ready link ticked as sent is not handed out until unticked; a used link cannot be ticked.
+$rev=fn(int $i)=>(int)one($db,'SELECT revision FROM family_invites WHERE id=?',[$i])['revision'];
+fails(fn()=>lookupMarkInviteSent($db,$inv[1],['sent'=>true,'revision'=>$rev($inv[1])]),409,'used link cannot be ticked');
+lookupMarkInviteSent($db,$inv[3],['sent'=>true,'revision'=>$rev($inv[3])]);
+check(array_column(lookupAdminState($db)['invites'],'holder_state')===['used','ready','sent'],'sent state');
+check(str_contains(fails(fn()=>lookupBulkMove($db,[...$base,'assignments'=>[$a($bao,$inv[3])]]),409,'sent link not moved')->getMessage(),'đã gửi'),'refused because it was sent');
+lookupMarkInviteSent($db,$inv[3],['sent'=>false,'revision'=>$rev($inv[3])]);check(array_column(lookupAdminState($db)['invites'],'holder_state')===['used','ready','ready'],'unticked');
+$backup=backup($db);check($backup['version']===10&&count($backup['tables']['member_moves'])===2&&count($backup['tables']['family_invites'])===3&&count($backup['tables']['invite_mails'])===53,'backup v10 tables');
 check(lookupAuditAction('POST','/api/moves')==='Chuyển Family'&&auditActionLabel('PATCH','/api/families/3/status')==='Sửa trạng thái Family','audit labels');
 echo "ok\n";
 function auditActionLabel(string $m,string $r): string {require_once dirname(__DIR__).'/hosting/php/family-private/audit.php';return auditAction($m,$r);}

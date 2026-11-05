@@ -283,3 +283,54 @@ test('hosted mode keeps admin APIs behind the access password while the lookup p
     await f.call('lookup/verify', 'POST', { email: 'nobody@example.com', code: 'AAAAAA' }, 403, { Origin: 'https://foreign.example' });
   } finally { await f.close(); }
 });
+
+test('Gen mail mời makes unique + addresses, and a link ticked Đã gửi is never handed out again', async () => {
+  const f = await server(), target = await server(); try {
+    const a = f.admin, { oldFamily, newFamily, minh, huy } = await incident(a);
+    const made = await a(`families/${newFamily.id}/invite-mails`, 'POST', { count: 4, base_email: ' HaiHoangrr+old@Gmail.com ' }, 201);
+    assert.equal(made.base_email, 'haihoangrr@gmail.com', 'existing + tag dropped, lower case');
+    assert.equal(made.mails.length, 4);
+    for (const address of made.mails) assert.match(address, /^haihoangrr\+[a-hj-km-np-z2-9]{6}@gmail\.com$/);
+    let state = await a('state');
+    assert.deepEqual(state.invite_mails.map(m => [m.family_id, m.email]), made.mails.map(m => [newFamily.id, m]));
+    assert.equal(state.invite_base_email, 'haihoangrr@gmail.com');
+    for (const bad of [{ count: 0 }, { count: 6 }, { count: '3' }, { count: 2, base_email: 'not-an-email' }]) await a(`families/${newFamily.id}/invite-mails`, 'POST', { base_email: 'haihoangrr@gmail.com', ...bad }, 400);
+    await a(`families/${newFamily.id}/invite-mails`, 'POST', { count: 1, base_email: 'owner09+x@example.com' }, 400);
+    await a('families/999/invite-mails', 'POST', { count: 1, base_email: 'haihoangrr@gmail.com' }, 404);
+    const seen = new Set(made.mails);
+    for (let i = 0; i < 12; i++) for (const address of (await a(`families/${oldFamily.id}/invite-mails`, 'POST', { count: 5, base_email: 'haihoangrr@gmail.com' }, 201)).mails) { assert.equal(seen.has(address), false, 'never generated twice'); seen.add(address); }
+    assert.equal((await a('state')).invite_mails.length, 64);
+    const journal = await a('journal');
+    assert.ok(journal.entries.some(e => e.action === 'Tạo mail mời' && e.message.includes(made.mails[0])));
+
+    // Đã gửi: a ready link sent by hand is excluded from moves until unticked.
+    const sent = await a(`families/${newFamily.id}/invites`, 'POST', { label: made.mails[0], url: inviteUrl(41), sent_on: day(0) }, 201);
+    const spare = await a(`families/${newFamily.id}/invites`, 'POST', { label: made.mails[1], url: inviteUrl(42), sent_on: day(0) }, 201);
+    state = await a('state');
+    await a(`invites/${sent.id}/sent`, 'PATCH', { sent: true, revision: 99 }, 409);
+    await a(`invites/${sent.id}/sent`, 'PATCH', { sent: 'yes', revision: 0 }, 400);
+    await a(`invites/${sent.id}/sent`, 'PATCH', { sent: true, revision: 0 });
+    state = await a('state');
+    const ticked = state.invites.find(i => i.id === sent.id);
+    assert.equal(ticked.holder_state, 'sent'); assert.ok(ticked.sent_at);
+    const move = (memberId, inviteId) => ({ from_family_id: oldFamily.id, to_family_id: newFamily.id, expected_manager_email: 'owner09@example.com', assignments: [assignment(state, memberId, inviteId)] });
+    await a('moves', 'POST', move(minh.id, sent.id), 409);
+    await a('moves', 'POST', move(minh.id, spare.id));
+    state = await a('state');
+    await a(`invites/${spare.id}/sent`, 'PATCH', { sent: true, revision: state.invites.find(i => i.id === spare.id).revision }, 409);
+    await a(`invites/${sent.id}/sent`, 'PATCH', { sent: false, revision: ticked.revision });
+    state = await a('state');
+    assert.equal(state.invites.find(i => i.id === sent.id).holder_state, 'ready');
+    await a('moves', 'POST', move(huy.id, sent.id));
+
+    // Backups carry both; a version-10 file from 0.21 (no invite_mails, no sent_at) still restores.
+    state = await a('state');
+    await a(`invites/${spare.id}/sent`, 'PATCH', { sent: false, revision: state.invites.find(i => i.id === spare.id).revision });
+    const backup = await a('backup');
+    assert.equal(backup.version, 10); assert.equal(backup.tables.invite_mails.length, 64); assert.ok(backup.tables.family_invites.every(i => 'sent_at' in i));
+    await target.admin('restore', 'POST', backup);
+    assert.equal((await target.admin('state')).invite_mails.length, 64);
+    const old = structuredClone(backup); delete old.tables.invite_mails; for (const row of old.tables.family_invites) delete row.sent_at;
+    const empty = await server(); try { await empty.admin('restore', 'POST', old); const s = await empty.admin('state'); assert.equal(s.invite_mails.length, 0); assert.ok(s.invites.every(i => i.sent_at === '')); } finally { await empty.close(); }
+  } finally { await f.close(); await target.close(); }
+});

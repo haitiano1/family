@@ -139,4 +139,20 @@ beginAudit($db,'Dữ liệu giả');lookupSaveInvite($db,$b,null,['label'=>'shop
 $gmailReply['invites'][]=$mail('shop+f09s3@gmail.com','https://families.google.com/join/promo/older',['owner09@example.com'],'2026-11-02T09:00:00.000Z');
 $r=$gmail();check($r['updated']===0&&$invite($b,'shop+f09s3@gmail.com')['url']==='https://families.google.com/join/promo/manual','newer manual link kept');
 $gmailReply=['ok'=>true,'invites'=>'oops'];fails($gmail,502,'malformed reply');
+// Gen mail mời: a generated address files its link under its Family even when the mail
+// lacks the owner Gmail; an owner match elsewhere wins (that is the group the link joins).
+$gen=lookupGenerateInviteMails($db,$ten,['count'=>2,'base_email'=>'hai@gmail.com'])['mails'];
+$gmailReply=['ok'=>true,'mailbox'=>'Hai@gmail.com','invites'=>[
+    $mail($gen[0],'https://families.google.com/join/promo/g1',[],'2026-11-05T01:00:00.000Z'),
+    $mail($gen[1],'https://families.google.com/join/promo/g2',['owner09@example.com'],'2026-11-05T01:01:00.000Z'),
+]];
+$r=$gmail();check($r['added']===2&&$r['mailbox']==='hai@gmail.com','generated addresses filed: '.json_encode($r));
+check($invite($ten,$gen[0])['url']==='https://families.google.com/join/promo/g1','alias decides when the owner is not in the mail');
+check($invite($b,$gen[1])['url']==='https://families.google.com/join/promo/g2'&&!$invite($ten,$gen[1]),'owner decides when it disagrees');
+check($r['mismatched']===[['email'=>$gen[1],'generated_for'=>'Family 10','invited_by'=>'Family 09']],'mismatch reported');
+$state=lookupAdminState($db);check($state['gmail_mailbox']==='hai@gmail.com'&&$state['invite_base_email']==='hai@gmail.com','mailbox remembered');
+// A link ticked Đã gửi is kept when Google sends a newer invitation to the same address.
+$g1=$invite($ten,$gen[0]);lookupMarkInviteSent($db,(int)$g1['id'],['sent'=>true,'revision'=>(int)$g1['revision']]);
+$gmailReply['invites'][]=$mail($gen[0],'https://families.google.com/join/promo/g1-new',[],'2026-11-05T02:00:00.000Z');
+$r=$gmail();check($r['added']===1&&$r['updated']===0,'sent link kept, new link added');check(one($db,'SELECT url FROM family_invites WHERE id=?',[$g1['id']])['url']==='https://families.google.com/join/promo/g1','sent link unchanged');
 echo "Sheet codes and Gmail invite checks passed\n";

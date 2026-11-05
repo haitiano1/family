@@ -511,9 +511,11 @@ function sheetsGmailInvites(PDO &$db,array $c,?callable $transport=null): array 
     catch(FamilyError $e){if(str_contains($e->getMessage(),'[request]'))fail('Apps Script đang chạy bản cũ nên chưa lấy được link từ Gmail. Dán Code.gs và appsscript.json mới, chạy capQuyenGmail rồi triển khai New version.',409);throw $e;}
     $items=$reply['invites']??null;if(!is_array($items)||!array_is_list($items)||count($items)>500)fail('Apps Script trả danh sách thư mời không hợp lệ.',502);
     sheetsPut($db,'gmail_invites',true);
+    // The Gmail the script reads; Gen mail mời offers it as the base address.
+    $mailbox=is_string($reply['mailbox']??null)?strtolower(trim($reply['mailbox'])):'';if(strlen($mailbox)<=254&&preg_match('/^[^\s@+]+@[^\s@]+\.[^\s@]+$/D',$mailbox))sheetsPut($db,'gmail_mailbox',$mailbox);else $mailbox='';
     beginAudit($db,'Lấy link mời từ Gmail');
     try{$result=lookupImportInvites($db,$items);finishAudit();}catch(Throwable $e){finishAudit(false);throw $e;}
-    return ['ok'=>true,...$result];
+    return ['ok'=>true,'mailbox'=>$mailbox,...$result];
 }
 function sheetsEndpointUrl(PDO $db,array $c): string {try{return sheetsSettings($db,$c)['url']??'';}catch(Throwable $e){return '';}}
 function sheetsRequest(PDO $db,array $c,string $route,string $method): never {

@@ -40,6 +40,53 @@ export function gmailSummary(result) {
   return text;
 }
 const gmailButton = ctx => ctx.state.gmail_import ? ctx.btn('invites-gmail', 'Lấy link từ Gmail', 'secondary', 'title="Đọc thư mời Family trong Gmail 14 ngày qua và thêm link vào đúng Family"') : '';
+
+// ---- Gen mail mời: + addresses on the shop's Gmail, then their links from Gmail ----
+const DAY = 86400000;
+const inviteFor = (state, address) => (state.invites || []).filter(i => String(i.label).toLowerCase() === address).at(-1);
+// Addresses made in the last 14 days (an invitation lasts two weeks), newest first.
+const recentMails = (state, familyId) => (state.invite_mails || []).filter(m => m.family_id === familyId && Date.now() - Date.parse(m.created_at) < 14 * DAY).sort((a, b) => b.created_at.localeCompare(a.created_at) || a.id - b.id);
+const pendingMails = (state, familyId) => recentMails(state, familyId).filter(m => !inviteFor(state, m.email));
+const suggestedCount = (state, familyId) => Math.min(5, Math.max(1, 5 - familyOccupancy(state.members, familyId).occupied));
+export function inviteMailFields(ctx, familyId = null, withNone = false) {
+  const { state, escape } = ctx, count = withNone ? 0 : suggestedCount(state, familyId);
+  const options = (withNone ? [[0, 'Không tạo']] : []).concat([1, 2, 3, 4, 5].map(n => [n, n + ' mail']));
+  return `<div class="form-grid"><div class="form-field"><label for="field-invite_count">${withNone ? 'Gen mail mời' : 'Số mail cần tạo'}</label><select id="field-invite_count" name="invite_count">${options.map(([value, text]) => `<option value="${value}" ${value === count ? 'selected' : ''}>${text}</option>`).join('')}</select></div>`
+    + ctx.input('invite_base_email', 'Gmail nhận lời mời', 'email', state.invite_base_email || state.gmail_mailbox || '', !withNone, 'maxlength="254" placeholder="tenban@gmail.com"') + '</div>'
+    + `<p class="subtext">Web tạo đuôi ngẫu nhiên sau dấu +, ví dụ tenban+k7p2qx@gmail.com, và không bao giờ tạo lại đuôi đã dùng. Thư mời gửi tới các mail này đều về hộp thư Gmail trên.${state.gmail_mailbox ? ` Apps Script đang đọc Gmail ${escape(state.gmail_mailbox)}.` : ''}</p>`;
+}
+export async function createInviteMails(ctx, familyId, data) {
+  const count = Number(data.invite_count); if (!count) return null;
+  return ctx.post(`families/${familyId}/invite-mails`, { count, base_email: data.invite_base_email });
+}
+export function showInviteMails(ctx, result) {
+  const { escape, state } = ctx, family = state.families.find(f => f.id === result.family_id), all = result.mails.join(', ');
+  ctx.modal('Mail mời · ' + result.family_name, `<p>Đã tạo ${result.mails.length} mail mời mới.</p><div class="lookup-mail-list">${result.mails.map(address => `<div class="info-line"><strong class="info-text">${escape(address)}</strong>${ctx.copyButton(address, 'mail mời')}</div>`).join('')}</div><div class="row-actions">${ctx.copyButton(all, 'tất cả mail mời', 'Copy tất cả mail')}</div>`
+    + `<ol class="lookup-steps"><li>Đăng nhập tài khoản chủ Family${family ? ` <strong>${escape(family.manager_email)}</strong>` : ''}, mở trang quản lý nhóm gia đình và mời các mail trên.</li><li>${state.gmail_import ? 'Quay lại Family này, bấm <strong>Lấy link mời</strong>: web hiện link của từng mail và lưu vào kho link.' : 'Mở từng thư mời trong Gmail, chuột phải nút Accept invitation → sao chép link, rồi bấm <strong>+ Thêm link mời</strong>.'}</li></ol>`, async () => {}, 'Đóng');
+}
+function fetchedMailsTable(ctx, familyId) {
+  const { state, escape } = ctx, mails = recentMails(state, familyId);
+  if (!mails.length) return '<p class="muted">Family này chưa có mail mời tạo trong 14 ngày qua. Bấm Gen mail mời để tạo.</p>';
+  const rows = mails.map(m => {
+    const invite = inviteFor(state, m.email), elsewhere = invite && invite.family_id !== familyId ? state.families.find(f => f.id === invite.family_id) : null;
+    const status = !invite ? '<span class="badge amber">Chưa thấy thư mời</span>' : inviteStateBadge(ctx, invite) + (elsewhere ? `<span class="subtext">Lưu ở ${escape(elsewhere.name)} vì thư được mời từ chủ Family đó</span>` : '');
+    return `<tr><td data-column="mail"><div class="info-line"><strong class="info-text">${escape(m.email)}</strong>${ctx.copyButton(m.email, 'mail mời')}</div></td><td data-column="invite">${invite ? `<span class="subtext lookup-url">${escape(invite.url)}</span>` : '<span class="subtext">—</span>'}</td><td data-column="state">${status}${invite ? `<div class="lookup-sent-row">${sentToggle(ctx, invite)}</div>` : ''}</td><td data-column="actions">${invite ? ctx.copyButton(invite.url, 'link mời', 'Copy link') : ''}</td></tr>`;
+  }).join('');
+  const links = mails.map(m => [m.email, inviteFor(state, m.email)]).filter(([, i]) => i).map(([address, i]) => `${address}: ${i.url}`).join('\n');
+  return `<div class="table-wrap"><table class="lookup-table"><thead><tr><th scope="col">MAIL MỜI</th><th scope="col">LINK MỜI</th><th scope="col">TRẠNG THÁI</th><th scope="col"></th></tr></thead><tbody>${rows}</tbody></table></div>${links ? `<div class="row-actions">${ctx.copyButton(links, 'tất cả link mời', 'Copy tất cả link')}</div>` : ''}`;
+}
+function showFetchedMails(ctx, family, result) {
+  const { state, escape } = ctx, bases = [...new Set(recentMails(state, family.id).map(m => m.email.replace(/\+[^@]*@/, '@')))];
+  const wrongBox = result.mailbox && bases.length && !bases.includes(result.mailbox) ? `<p class="error-box">Apps Script đang đọc Gmail ${escape(result.mailbox)}, còn mail mời của Family này thuộc ${escape(bases.join(', '))}. Thư mời gửi tới Gmail khác sẽ không được thấy.</p>` : '';
+  const moved = (result.mismatched || []).filter(m => recentMails(state, family.id).some(r => r.email === m.email));
+  ctx.modal('Link mời · ' + family.name, `<p>${escape(gmailSummary(result))}</p>${wrongBox}${moved.length ? `<p class="notice">${moved.map(m => `${escape(m.email)} được mời từ chủ ${escape(m.invited_by)}, nên link lưu ở ${escape(m.invited_by)}.`).join(' ')}</p>` : ''}${fetchedMailsTable(ctx, family.id)}`, async () => {}, 'Đóng');
+  const dialog = $('#modal'); dialog.classList.add('lookup-wide'); dialog.addEventListener('close', () => dialog.classList.remove('lookup-wide'), { once: true });
+}
+function pendingNotice(ctx, family) {
+  const mails = pendingMails(ctx.state, family.id); if (!mails.length) return '';
+  const { escape } = ctx;
+  return `<div class="notice lookup-callout lookup-pending-mails"><div><strong>${mails.length} mail chờ lấy link</strong><span class="subtext">Mời các mail này từ tài khoản chủ ${escape(family.manager_email)}, rồi bấm ${ctx.state.gmail_import ? 'Lấy link mời' : '+ Thêm link mời để dán link'}.</span><div class="lookup-mail-list">${mails.map(m => `<div class="info-line"><span class="info-text">${escape(m.email)}</span>${ctx.copyButton(m.email, 'mail mời')}</div>`).join('')}</div></div><div class="row-actions">${ctx.copyButton(mails.map(m => m.email).join(', '), 'tất cả mail chờ mời', 'Copy tất cả mail')}</div></div>`;
+}
 export function familyStatusBadge(ctx, familyId) {
   const status = familyStatus(ctx.state, familyId).status;
   return problem(status) ? `<span class="badge ${statusColors[status]} lookup-family-badge">${ctx.escape(familyStatusLabels[status])}</span>` : '';
@@ -54,7 +101,13 @@ const inviteName = (ctx, invite) => invite.label || 'Link #' + invite.id;
 function inviteStateBadge(ctx, invite) {
   if (invite.holder_state === 'used') return `<span class="badge green">Đã dùng</span><span class="subtext">${ctx.escape(invite.holder_name || invite.holder_email)}</span>`;
   if (invite.holder_state === 'assigned') return `<span class="badge blue">Đã giao</span><span class="subtext">${ctx.escape(invite.holder_name || invite.holder_email)}</span>`;
+  if (invite.holder_state === 'sent') return `<span class="badge amber">Đã gửi</span><span class="subtext">Lúc ${ctx.date(invite.sent_at)}</span>`;
   return '<span class="badge">Sẵn sàng</span>';
+}
+// Đã gửi: ticked by the owner after sending a link by hand, so it is not given to a second customer.
+function sentToggle(ctx, invite) {
+  const locked = ['used', 'assigned'].includes(invite.holder_state);
+  return `<label class="lookup-sent" title="${locked ? 'Link đang giao hoặc đã dùng' : 'Tick khi đã gửi link này cho khách để không gửi nhầm cho người khác'}"><input type="checkbox" data-action="invite-sent" data-id="${invite.id}" ${invite.sent_at ? 'checked' : ''} ${locked ? 'disabled' : ''}> Đã gửi</label>`;
 }
 function expiryText(ctx, invite) {
   if (!invite.sent_on) return '<span class="subtext">Chưa nhập ngày gửi</span>';
@@ -65,7 +118,7 @@ function expiryText(ctx, invite) {
 function inviteTable(ctx, invites) {
   const { escape, btn } = ctx;
   if (!invites.length) return '<p class="muted">Chưa có link mời. Gửi lời mời từ tài khoản chủ Family tới các mail của bạn (ví dụ mail+1, mail+2…), rồi dán link nút <strong>Chấp nhận lời mời</strong> vào đây.</p>';
-  return `<div class="table-wrap"><table class="lookup-table"><thead><tr><th scope="col">LINK MỜI</th><th scope="col">LỜI MỜI HẾT HẠN</th><th scope="col">TRẠNG THÁI</th><th scope="col">THAO TÁC</th></tr></thead><tbody>${invites.map(i => `<tr><td data-column="invite"><strong>${escape(inviteName(ctx, i))}</strong><span class="subtext lookup-url">${escape(i.url)}</span></td><td data-column="expiry" class="date-cell">${expiryText(ctx, i)}</td><td data-column="state">${inviteStateBadge(ctx, i)}</td><td data-column="actions"><div class="row-actions">${ctx.copyButton(i.url, 'link mời', 'Copy link')}${btn('invite-edit', 'Sửa', 'secondary tiny', `data-id="${i.id}"`)}${i.holder_state === 'assigned' ? '' : btn('invite-delete', 'Xóa', 'danger tiny', `data-id="${i.id}"`)}</div></td></tr>`).join('')}</tbody></table></div>`;
+  return `<div class="table-wrap"><table class="lookup-table"><thead><tr><th scope="col">LINK MỜI</th><th scope="col">LỜI MỜI HẾT HẠN</th><th scope="col">TRẠNG THÁI</th><th scope="col">THAO TÁC</th></tr></thead><tbody>${invites.map(i => `<tr><td data-column="invite"><strong>${escape(inviteName(ctx, i))}</strong><span class="subtext lookup-url">${escape(i.url)}</span></td><td data-column="expiry" class="date-cell">${expiryText(ctx, i)}</td><td data-column="state">${inviteStateBadge(ctx, i)}<div class="lookup-sent-row">${sentToggle(ctx, i)}</div></td><td data-column="actions"><div class="row-actions">${ctx.copyButton(i.url, 'link mời', 'Copy link')}${btn('invite-edit', 'Sửa', 'secondary tiny', `data-id="${i.id}"`)}${i.holder_state === 'assigned' ? '' : btn('invite-delete', 'Xóa', 'danger tiny', `data-id="${i.id}"`)}</div></td></tr>`).join('')}</tbody></table></div>`;
 }
 function moveBadge(ctx, move) {
   const [color, text] = moveStates[move.effective_state] || ['', move.effective_state];
@@ -94,7 +147,7 @@ export function familyLookupSections(ctx, family) {
   const incoming = (state.moves || []).filter(m => m.to_family_id === family.id);
   const callout = problem(status.status) && members.length ? `<div class="notice lookup-callout"><div><strong>Nhóm đang có sự cố.</strong> ${movable} khách còn hạn có thể chuyển sang nhóm mới${expired ? `, ${expired} khách đã quá hạn sẽ thấy lời nhắc gia hạn` : ''}.</div>${btn('move-open', 'Chuyển khách sang nhóm mới', 'primary', `data-id="${family.id}"`)}</div>` : '';
   return `<section class="card lookup-card"><div class="section-heading"><div><h2>Trạng thái cho khách</h2><p>Khách thấy trạng thái và lời nhắn này trên trang tra cứu.</p></div><div class="row-actions">${btn('family-status', 'Đổi trạng thái', 'secondary', `data-id="${family.id}"`)}</div></div><div class="lookup-status"><span class="badge ${statusColors[status.status]}">${escape(familyStatusLabels[status.status])}</span>${status.updated_at ? `<span class="subtext">Cập nhật ${ctx.date(status.updated_at)}</span>` : ''}<p>${escape(status.note || 'Chưa có lời nhắn cho khách.')}</p></div>${callout}</section>`
-    + (problem(status.status) && !invites.length ? '' : `<section class="card lookup-card"><div class="section-heading"><div><h2>Link mời vào Family này <span class="section-count">${ready}/${invites.length}</span></h2><p>Mỗi link chỉ giao cho một khách khi chuyển nhóm. ${state.gmail_import ? 'Google gửi thư mời mới thì bấm Lấy link từ Gmail; web tự thay link của đúng Gmail nhận thư.' : 'Google đổi link thì bấm Sửa và dán link mới.'}</p></div><div class="row-actions">${gmailButton(ctx)}${btn('invite-add', '+ Thêm link mời', 'secondary', `data-id="${family.id}"`)}</div></div>${inviteTable(ctx, invites)}</section>`)
+    + (problem(status.status) && !invites.length ? '' : `<section class="card lookup-card"><div class="section-heading"><div><h2>Link mời vào Family này <span class="section-count">${ready}/${invites.length}</span></h2><p>Mỗi link chỉ giao cho một khách. Gửi link bằng tay thì tick <strong>Đã gửi</strong> để không gửi nhầm cho khách khác. ${state.gmail_import ? 'Google gửi thư mời mới thì bấm Lấy link mời; web tự thay link chưa dùng của đúng Gmail nhận thư.' : 'Google đổi link thì bấm Sửa và dán link mới.'}</p></div><div class="row-actions">${btn('invite-mails-gen', 'Gen mail mời', 'secondary', `data-id="${family.id}"`)}${state.gmail_import ? btn('invite-mails-fetch', 'Lấy link mời', 'primary', `data-id="${family.id}" title="Đọc thư mời trong Gmail và hiện link của từng mail đã tạo"`) : ''}${btn('invite-add', '+ Thêm link mời', 'secondary', `data-id="${family.id}"`)}</div></div>${pendingNotice(ctx, family)}${inviteTable(ctx, invites)}</section>`)
     + (incoming.length ? `<section class="card lookup-card"><div class="section-heading"><div><h2>Khách chuyển đến Family này</h2><p>Khách bấm "Tôi đã vào được" hoặc bạn bấm Đã vào để chuyển khách sang đang ở nhóm.</p></div></div>${moveTable(ctx, incoming)}</section>` : '');
 }
 
@@ -195,6 +248,29 @@ export async function handleLookupAction(ctx, action, button) {
     return true;
   }
   if (action === 'move-open') { openBulkMove(ctx, id); return true; }
+  if (action === 'invite-sent') {
+    const invite = (state.invites || []).find(i => i.id === id), sent = button.checked;
+    if (!invite) { button.checked = !sent; return ctx.toast('Link đã thay đổi. Tải lại trang.'), true; }
+    try { await ctx.patch(`invites/${id}/sent`, { sent, revision: invite.revision }); await ctx.refresh(); ctx.toast(sent ? 'Đã đánh dấu link đã gửi. Link này không được giao cho khách khác.' : 'Đã bỏ đánh dấu. Link quay lại trạng thái sẵn sàng.'); }
+    catch (error) { button.checked = !sent; ctx.toast(error.message, 8000); }
+    return true;
+  }
+  if (action === 'invite-mails-gen') {
+    const family = state.families.find(f => f.id === id); if (!family) return ctx.toast('Family đã thay đổi. Tải lại trang.'), true;
+    ctx.modal('Gen mail mời · ' + family.name, inviteMailFields(ctx, family.id), async data => {
+      const result = await createInviteMails(ctx, family.id, data);
+      return { after: () => showInviteMails(ctx, result) };
+    }, 'Tạo mail');
+    return true;
+  }
+  if (action === 'invite-mails-fetch') {
+    const family = state.families.find(f => f.id === id); if (!family) return ctx.toast('Family đã thay đổi. Tải lại trang.'), true;
+    button.disabled = true;
+    try { const result = await ctx.post('sheets/gmail-invites', {}); await ctx.refresh(); showFetchedMails(ctx, ctx.state.families.find(f => f.id === id) || family, result); }
+    catch (error) { ctx.toast(error.message, 12000); }
+    finally { if (button.isConnected) button.disabled = false; }
+    return true;
+  }
   if (action === 'invites-gmail') {
     button.disabled = true;
     try { const result = await ctx.post('sheets/gmail-invites', {}); ctx.toast(gmailSummary(result), 9000); await ctx.refresh(); }

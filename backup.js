@@ -1,6 +1,6 @@
 import {validateVaultBackup} from './vault-crypto.js';
 import {randomBytes} from 'node:crypto';
-import {lookupBackupTables} from './lookup.js';
+import {lookupBackupTables,optionalBackupTables} from './lookup.js';
 const baseTables=['accounts','families','members','archived_customers','renewal_history','other_purchases','logs'];
 const customerTables=[...baseTables,'issues','audit_events'];
 const legacyTables=[...customerTables,'vault_meta','vault_items'];
@@ -12,6 +12,7 @@ export function customerBackup(db) {
   return {format:'family-customer-backup',version:10,created_at:new Date().toISOString(),tables:content};
 }
 export function restoreCustomers(db,data,fail) {
+  if(data&&data.version===10&&data.tables&&typeof data.tables==='object')for(const name of optionalBackupTables)if(!Object.hasOwn(data.tables,name))data={...data,tables:{...data.tables,[name]:[]}};
   if (data.format!=='family-customer-backup' || ![1,2,3,4,5,6,7,8,9,10].includes(data.version) || !data.tables || (data.version===1?baseTables:data.version<6?customerTables:data.version<8?legacyTables:data.version<10?purchaseTables:tables).some(name=>!Array.isArray(data.tables[name]))) fail('File sao lưu khách hàng không hợp lệ.');
   if(data.version<10)data={...data,tables:{...data.tables,...Object.fromEntries(lookupBackupTables.map(name=>[name,[]]))}};
   if(data.version<8&&data.tables.new_purchase_history?.length)fail('Lịch sử mua mới cần sao lưu phiên bản 8.');
@@ -35,6 +36,7 @@ export function restoreCustomers(db,data,fail) {
         if(data.version<3&&row&&typeof row==='object')row={...(table==='families'?{trial_date:''}:table==='issues'?{trial_date:'',reported_on:''}:{}),...row};
         if(data.version<4&&row&&typeof row==='object')row={...(table==='families'?{archived_at:''}:table==='other_purchases'?{plan_months:0}:table==='archived_customers'?{family_archive_id:null}:{}),...row};
         if(table==='other_purchases'&&data.version<9&&row&&typeof row==='object'&&!Object.hasOwn(row,'purchase_source'))row={...row,purchase_source:''};
+        if(table==='family_invites'&&row&&typeof row==='object'&&!Object.hasOwn(row,'sent_at'))row={...row,sent_at:''};
         if (!row || typeof row!=='object' || columns.some(c=>!Object.hasOwn(row,c) || (row[c]!==null && !['string','number'].includes(typeof row[c])))) fail('Dữ liệu sao lưu thiếu trường hoặc sai định dạng.');
         if(table==='other_purchases'&&(typeof row.purchase_source!=='string'||row.purchase_source.length>200))fail('Nguồn mua trong sao lưu không hợp lệ.');
         if(table==='archived_customers'){
