@@ -494,7 +494,8 @@ test('Đã fix · Đổi sang mail mới keeps customers in the Family: statuses
     await c('joined', 'POST', { move_id: signed.items[0].move.id });
     await a(`families/${fam.id}/invite-mails`, 'POST', { count: 1 }, 201);
     await new Promise(resolve => setTimeout(resolve, 5));
-    const created = await a('issues', 'POST', { family_id: fam.id, target_type: 'manager', title: 'Bị quét' }, 201);
+    const created = await a('issues', 'POST', { family_id: fam.id, target_type: 'manager' }, 201);
+    assert.equal((await a('state')).issues.find(i => i.id === created.id).title, 'Bị quét', 'an empty title means Bị quét');
     await new Promise(resolve => setTimeout(resolve, 5));
     // After the report: a link of the new owner already came in.
     const fresh = await a(`families/${fam.id}/invites`, 'POST', { label: 'haihoangrr+new333@gmail.com', url: inviteUrl(92), sent_on: day(0) }, 201);
