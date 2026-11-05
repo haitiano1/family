@@ -1,3 +1,7 @@
+# 0.24.1 — Xóa mail mời tạo nhầm
+
+Dùng **Cập nhật một chạm**. Khung mail chờ lấy link có nút × cạnh từng mail và nút Xóa tất cả. Không đổi schema hay Apps Script.
+
 # 0.24.0 — Gen mail mời tạo ngay, trạng thái Family theo Fix lỗi
 
 Dùng **Cập nhật một chạm**; không cần đổi Apps Script, SQL hay config.php. Gen mail mời luôn dùng haihoangrr@gmail.com và tạo ngay khi chọn số lượng. Khách mới (Đã mời, chưa vào / Mua mới) tra cứu Gmail sẽ tự nhận một link riêng của Family mình và link được tự tick Đã gửi. Báo lỗi mail quản lý tự đặt Family thành Bị quét; case Đã fix tự đưa Family về Đang hoạt động. Xem TRA-CUU-CHUYEN-NHOM.md.

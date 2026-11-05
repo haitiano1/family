@@ -88,7 +88,7 @@ function showFetchedMails(ctx, family, result) {
 function pendingNotice(ctx, family) {
   const mails = pendingMails(ctx.state, family.id); if (!mails.length) return '';
   const { escape } = ctx;
-  return `<div class="notice lookup-callout lookup-pending-mails"><div><strong>${mails.length} mail chờ lấy link</strong><span class="subtext">Mời các mail này từ tài khoản chủ ${escape(family.manager_email)}, rồi bấm ${ctx.state.gmail_import ? 'Lấy link mời' : '+ Thêm link mời để dán link'}.</span><div class="lookup-mail-list">${mails.map(m => `<div class="info-line"><span class="info-text">${escape(m.email)}</span>${ctx.copyButton(m.email, 'mail mời')}</div>`).join('')}</div></div><div class="row-actions">${ctx.copyButton(mails.map(m => m.email).join(', '), 'tất cả mail chờ mời', 'Copy tất cả mail')}</div></div>`;
+  return `<div class="notice lookup-callout lookup-pending-mails"><div><strong>${mails.length} mail chờ lấy link</strong><span class="subtext">Mời các mail này từ tài khoản chủ ${escape(family.manager_email)}, rồi bấm ${ctx.state.gmail_import ? 'Lấy link mời' : '+ Thêm link mời để dán link'}.</span><div class="lookup-mail-list">${mails.map(m => `<div class="info-line"><span class="info-text">${escape(m.email)}</span>${ctx.copyButton(m.email, 'mail mời')}<button type="button" class="copy-info lookup-mail-delete" data-action="invite-mails-delete" data-id="${family.id}" data-mails="${m.id}" title="Xóa ${escape(m.email)}" aria-label="Xóa ${escape(m.email)}">×</button></div>`).join('')}</div></div><div class="row-actions lookup-pending-actions">${ctx.copyButton(mails.map(m => m.email).join(', '), 'tất cả mail chờ mời', 'Copy tất cả mail')}${ctx.btn('invite-mails-delete', mails.length > 1 ? 'Xóa tất cả' : 'Xóa mail', 'danger tiny', `data-id="${family.id}" data-mails="${mails.map(m => m.id).join(',')}"`)}</div></div>`;
 }
 export function familyStatusBadge(ctx, familyId) {
   const status = familyStatus(ctx.state, familyId).status;
@@ -265,6 +265,14 @@ export async function handleLookupAction(ctx, action, button) {
     try { const result = await createInviteMails(ctx, family.id, button.dataset.count); await ctx.refresh(); showInviteMails(ctx, result); }
     catch (error) { ctx.toast(error.message, 8000); }
     finally { if (button.isConnected) button.disabled = false; }
+    return true;
+  }
+  if (action === 'invite-mails-delete') {
+    const ids = String(button.dataset.mails || '').split(',').map(Number).filter(Boolean), mails = (state.invite_mails || []).filter(m => ids.includes(m.id));
+    if (!mails.length) return ctx.toast('Mail mời đã thay đổi. Tải lại trang.'), true;
+    ctx.modal(mails.length > 1 ? `Xóa ${mails.length} mail mời?` : 'Xóa mail mời?', `<div class="lookup-mail-list">${mails.map(m => `<div class="info-line"><span class="info-text">${ctx.escape(m.email)}</span></div>`).join('')}</div><p>Chỉ xóa khỏi danh sách chờ lấy link trên web. Nếu đã mời mail này từ tài khoản chủ, lời mời trên Google vẫn còn.</p>`, async () => {
+      const result = await ctx.api(`families/${id}/invite-mails`, { method: 'DELETE', body: JSON.stringify({ ids }) }); ctx.toast(`Đã xóa ${result.deleted} mail mời.`);
+    }, 'Xóa');
     return true;
   }
   if (action === 'invite-mails-fetch') {

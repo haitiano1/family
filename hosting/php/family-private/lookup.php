@@ -210,6 +210,20 @@ function lookupImportInvites(PDO $db,array $items): array {
     foreach($seen as $key=>$_)unset($unmatched[explode("\0",$key,2)[1]]);
     return [...$out,'families'=>array_keys($families),'unmatched'=>array_slice(array_keys($unmatched),0,20),'unmatched_count'=>count($unmatched),'mismatched'=>array_values($mismatched)];
 }
+// Remove addresses made by mistake. Only addresses still waiting for their link can go;
+// one that already has a link is managed in the invite table.
+function lookupDeleteInviteMails(PDO $db,int $familyId,array $d): array {
+    $f=lookupActiveFamily($db,$familyId);if(!$f)fail('Không tìm thấy Family đang hoạt động.',404);
+    $ids=$d['ids']??null;if(!is_array($ids)||!$ids||!array_is_list($ids)||count($ids)>50||array_filter($ids,fn($id)=>!is_int($id)))fail('Chọn mail mời cần xóa.');
+    $rows=array_map(fn($id)=>one($db,'SELECT * FROM invite_mails WHERE id=? AND family_id=?',[$id,$f['id']]),$ids);
+    if(in_array(false,$rows,true))fail('Mail mời đã thay đổi. Tải lại trang rồi thử lại.',409);
+    foreach($rows as $row)if(one($db,'SELECT id FROM family_invites WHERE LOWER(label)=?',[$row['email']]))fail($row['email'].' đã có link mời. Xóa link đó trong bảng link mời nếu không dùng.',409);
+    return transaction($db,function()use($db,$f,$rows){
+        foreach($rows as $row)q($db,'DELETE FROM invite_mails WHERE id=?',[$row['id']]);
+        logEntry($db,'Cá nhân: xóa '.count($rows).' mail mời của '.$f['name'].': '.implode(', ',array_column($rows,'email')));
+        return ['ok'=>true,'deleted'=>count($rows)];
+    });
+}
 function lookupMarkInviteSent(PDO $db,int $id,array $d): array {
     $i=one($db,'SELECT * FROM family_invites WHERE id=?',[$id]);if(!$i)fail('Không tìm thấy link mời.',404);
     $f=lookupActiveFamily($db,(int)$i['family_id']);if(!$f)fail('Không tìm thấy Family đang hoạt động.',404);
@@ -422,6 +436,7 @@ function lookupRequest(PDO $db,array $c,string $route,string $method): never {
 function lookupAdminRequest(PDO $db,string $route,string $method): void {
     if(preg_match('~^/api/families/(\d+)/status$~D',$route,$p)&&$method==='PATCH')reply(lookupSaveStatus($db,(int)$p[1],body()));
     if(preg_match('~^/api/invites/(\d+)/sent$~D',$route,$p)&&$method==='PATCH')reply(lookupMarkInviteSent($db,(int)$p[1],body()));
+    if(preg_match('~^/api/families/(\d+)/invite-mails$~D',$route,$p)&&$method==='DELETE')reply(lookupDeleteInviteMails($db,(int)$p[1],body()));
     if(preg_match('~^/api/families/(\d+)/invite-mails$~D',$route,$p)&&$method==='POST')reply(lookupGenerateInviteMails($db,(int)$p[1],body()),201);
     if(preg_match('~^/api/families/(\d+)/invites$~D',$route,$p)&&$method==='POST')reply(lookupSaveInvite($db,(int)$p[1],null,body()),201);
     if(preg_match('~^/api/invites/(\d+)$~D',$route,$p)&&$method==='PATCH')reply(lookupSaveInvite($db,null,(int)$p[1],body()));
@@ -434,7 +449,7 @@ function lookupAdminRequest(PDO $db,string $route,string $method): void {
 function lookupAuditAction(string $method,string $route): string {
     if(preg_match('~^/api/families/\d+/status$~D',$route))return 'Sửa trạng thái Family';
     if(preg_match('~^/api/families/\d+/invites$~D',$route))return 'Thêm link mời';
-    if(preg_match('~^/api/families/\d+/invite-mails$~D',$route))return 'Tạo mail mời';
+    if(preg_match('~^/api/families/\d+/invite-mails$~D',$route))return $method==='DELETE'?'Xóa mail mời':'Tạo mail mời';
     if(preg_match('~^/api/invites/\d+/sent$~D',$route))return 'Đánh dấu link đã gửi';
     if(preg_match('~^/api/invites/\d+$~D',$route))return $method==='DELETE'?'Xóa link mời':'Sửa link mời';
     if($route==='/api/moves')return 'Chuyển Family';

@@ -119,5 +119,10 @@ check(lookupResult($db,'chi@example.com')['items'][0]['view']==='normal','custom
 check(lookupResult($db,'em@example.com')['items'][0]['view']==='waiting','pool used up');
 check(one($db,'SELECT sent_at FROM family_invites WHERE id=?',[$p1])['sent_at']!==''&&(int)one($db,'SELECT COUNT(*) AS n FROM member_moves WHERE invite_id=?',[$p1])['n']===1,'ticked and held once');
 lookupCustomerJoined($db,'an@example.com',['move_id'=>$item['move']['id']]);check(one($db,'SELECT membership_status FROM members WHERE id=?',[$an])['membership_status']==='active','joined');
+// Deleting addresses made by mistake: only those still waiting for a link, only in their Family.
+$mistake=lookupGenerateInviteMails($db,$f12,['count'=>2])['mails'];$mid=fn(string $x)=>(int)one($db,'SELECT id FROM invite_mails WHERE email=?',[$x])['id'];
+fails(fn()=>lookupDeleteInviteMails($db,$f12,['ids'=>[]]),400,'ids required');fails(fn()=>lookupDeleteInviteMails($db,$new,['ids'=>[$mid($mistake[0])]]),409,'other Family');
+lookupSaveInvite($db,$f12,null,['label'=>$mistake[1],'url'=>'https://families.google.com/join/promo/del','sent_on'=>$day(0)]);fails(fn()=>lookupDeleteInviteMails($db,$f12,['ids'=>[$mid($mistake[1])]]),409,'address with a link stays');
+check(lookupDeleteInviteMails($db,$f12,['ids'=>[$mid($mistake[0])]])===['ok'=>true,'deleted'=>1]&&!one($db,'SELECT id FROM invite_mails WHERE email=?',[$mistake[0]]),'deleted');
 echo "ok\n";
 function auditActionLabel(string $m,string $r): string {require_once dirname(__DIR__).'/hosting/php/family-private/audit.php';return auditAction($m,$r);}
