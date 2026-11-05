@@ -20,6 +20,15 @@ Mỗi Gmail khách có một **mã tra cứu 6 ký tự** cố định. Từ 0.2
 
 Vào **Thêm → Tra cứu khách → Sửa thông tin** để đặt tên shop, link liên hệ (Messenger, Zalo…) và ghi chú hiển thị cho khách.
 
+## Khách mới tự nhận link (0.24.0)
+
+- Khách có trạng thái thành viên **Đã mời, chưa vào** hoặc **Mua mới** trong một Family đang hoạt động, còn hạn, tra cứu Gmail trên `/tra-cuu.html` sẽ tự nhận **một** link *Sẵn sàng* trong **Link mời vào Family này** của chính Family đó.
+- Web chọn link còn hạn có ngày gửi sớm nhất. Link được giữ cho khách đó: chưa vào được ngay (kể cả khi bấm *Tôi không vào được*) thì lần tra cứu sau vẫn là link đó, cho tới khi khách được chuyển sang nhóm mới. Link không bao giờ giao cho khách khác. Google gửi lại thư mời cho đúng mail của link đó thì Lấy link mời thay link mới vào chỗ của khách. Link tự được tick **Đã gửi**; trang Family hiện khách trong mục **Khách nhận link vào Family này**.
+- Khách bấm **Tôi đã vào được** (hoặc bạn bấm **Đã vào**) thì khách chuyển sang *Đã vào* và link thành *Đã dùng*.
+- Family hết link thì khách thấy "Shop đang chuẩn bị link vào nhóm". Thêm link (Gen mail mời → Lấy link mời) là khách tra cứu lại sẽ nhận được.
+- Khách đang ở nhóm (*Đã vào*), khách hết hạn hoặc Family đang có sự cố thì không nhận link tự động.
+- Mọi link khách đã xem trên trang tra cứu, kể cả link chuyển nhóm, đều tự tick **Đã gửi**. Thu hồi link đó thì link giữ dấu Đã gửi; bỏ tick nếu chắc khách chưa dùng.
+
 ## Khi Family gặp sự cố
 
 0. Từ 0.24.0, **Báo lỗi** cho mail quản lý ở mục Fix lỗi sẽ tự đặt Family thành **Bị quét** kèm lời nhắn mẫu, nên khách thấy ngay trên trang tra cứu. Khi case chuyển sang **Đã fix** (đổi sang mail mới hoặc giữ mail), Family tự về **Đang hoạt động**. Mở lại case thì Family lại thành Bị quét. Báo lỗi mail khách không đổi trạng thái Family. Nếu bạn đã tự đặt trạng thái khác (ví dụ *Bị vô hiệu hoá*), báo lỗi không ghi đè trạng thái đó.

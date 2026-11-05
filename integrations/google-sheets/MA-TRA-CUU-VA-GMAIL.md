@@ -52,6 +52,8 @@ Vẫn mời được các Gmail tự đặt như `hai+1@gmail.com`; nút **Lấy
 
 ## Tick Đã gửi (0.23.0)
 
+Từ 0.24.0, web tự tick **Đã gửi** khi khách xem link trên trang tra cứu. Khách **Đã mời, chưa vào** / **Mua mới** tra cứu Gmail sẽ tự nhận một link riêng của Family mình (xem TRA-CUU-CHUYEN-NHOM.md). Ô tick vẫn dùng được cho link bạn gửi tay.
+
 - Mỗi link trong **Link mời vào Family này** có ô **Đã gửi**. Gửi link cho khách bằng tay (Zalo, Messenger…) thì tick ô này.
 - Link đã tick hiện **Đã gửi** kèm giờ tick. Link này không có trong danh sách chọn khi **Chuyển khách sang nhóm mới** hoặc **Đổi link**, và Lấy link mời không thay link này.
 - Bỏ tick thì link quay lại **Sẵn sàng**. Link đang giao trong lượt chuyển nhóm hoặc đã có khách vào nhóm thì không cần tick.
@@ -65,7 +67,8 @@ Cách web xử lý thư mời:
 - Thư không khớp Family nào thì web chỉ báo "chưa khớp", không tự gán, để không giao nhầm link sang Family khác. Khi đó bạn dán link tay như trước.
 - Google gửi thư mời mới cho cùng một Gmail:
   - Link cũ chưa ai dùng: web thay bằng link mới. Khách đang được giao link đó sẽ thấy link mới khi tra cứu lại.
-  - Link cũ đã có khách vào nhóm hoặc đã tick **Đã gửi**: web giữ nguyên dòng cũ và thêm một dòng mới.
+  - Link cũ đang giữ cho một khách (khách đã nhận khi tra cứu hoặc khi chuyển nhóm): web thay link mới vào đúng chỗ, khách thấy link mới khi tra cứu lại.
+  - Link cũ đã có khách vào nhóm, hoặc bạn tự tick **Đã gửi** khi gửi tay: web giữ nguyên dòng cũ và thêm một dòng mới.
 - Link bạn dán tay có ngày gửi mới hơn thư thì web giữ nguyên.
 - Script chỉ đọc thư. Script không bấm link, không đánh dấu đã đọc, không xóa và không gửi thư.
 

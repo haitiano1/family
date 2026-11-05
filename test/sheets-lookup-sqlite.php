@@ -169,4 +169,14 @@ $customer=(int)one($db,'SELECT id FROM members WHERE family_id=? LIMIT 1',[$b])[
 beginAudit($db,'Báo lỗi khách');saveIssue($db,null,['family_id'=>$b,'target_type'=>'member','target_id'=>$customer,'title'=>'Mail khách lỗi']);finishAudit();check($statusOf($b)==='active','a customer mail report leaves the Family status');
 lookupSaveStatus($db,$ten,['status'=>'disabled','note'=>'Tự đặt','revision'=>(int)lookupStatusRow($db,$ten)['revision']]);
 beginAudit($db,'Báo lỗi thử');saveIssue($db,null,['family_id'=>$ten,'target_type'=>'manager','title'=>'Lỗi tiếp']);finishAudit();check($statusOf($ten)==='disabled'&&lookupStatusRow($db,$ten)['note']==='Tự đặt','an existing incident status is kept');
+// A link held for a customer (handed out on lookup) takes Google's newer link for the same Gmail.
+$heldMail=lookupGenerateInviteMails($db,$ten,['count'=>1])['mails'][0];
+$gmailReply=['ok'=>true,'invites'=>[$mail($heldMail,'https://families.google.com/join/promo/h1',['owner10-new@example.com'],'2026-11-05T03:00:00.000Z')]];check($gmail()['added']===1,'held link imported');
+q($db,"INSERT INTO members(family_id,email,customer_name,expires_at,plan_months,membership_status) VALUES (?,?,?,?,1,'invited')",[$ten,'newbie@example.com','Newbie',(new DateTimeImmutable(today()))->modify('+60 days')->format('Y-m-d')]);
+lookupSaveStatus($db,$ten,['status'=>'active','note'=>'','revision'=>(int)lookupStatusRow($db,$ten)['revision']]);
+foreach(all($db,"SELECT id FROM family_invites WHERE family_id=? AND sent_at='' AND url<>?",[$ten,'https://families.google.com/join/promo/h1']) as $other)q($db,'UPDATE family_invites SET sent_at=? WHERE id=?',[stamp(),$other['id']]);
+$first=lookupResult($db,'newbie@example.com')['items'][0]['move'];check($first['kind']==='join'&&$first['invite_url']==='https://families.google.com/join/promo/h1','customer holds the generated link');
+$gmailReply['invites'][]=$mail($heldMail,'https://families.google.com/join/promo/h2',['owner10-new@example.com'],'2026-11-05T04:00:00.000Z');
+$r=$gmail();check($r['updated']===1&&$r['added']===0,'held link updated in place');
+$again=lookupResult($db,'newbie@example.com')['items'][0]['move'];check($again['id']===$first['id']&&$again['invite_url']==='https://families.google.com/join/promo/h2','same slot, newer link for the same customer');
 echo "Sheet codes and Gmail invite checks passed\n";

@@ -302,19 +302,40 @@ export function initLookup(db, { fail, email, text, calendarDate, log }) {
   }
 
   // ---- Public lookup (customer) ----
+  // A customer of this Family who has not joined yet ("Đã mời, chưa vào" or "Mua mới") gets one
+  // ready link of the Family's own pool the first time they look up their Gmail. The link is
+  // held for them (never handed to anyone else) and ticked Đã gửi.
+  const joinable = member => ['invited', 'new'].includes(member.membership_status);
+  function allocateJoin(member, status, period, current) {
+    if (!joinable(member) || status.status !== 'active' || period.expiry_status === 'expired') return false;
+    if (one("SELECT id FROM member_moves WHERE member_id=? AND to_family_id=? AND state!='cancelled'", member.id, member.family_id)) return false;
+    const family = activeFamily(member.family_id); if (!family) return false;
+    const invite = all("SELECT * FROM family_invites WHERE family_id=? AND sent_at='' ORDER BY CASE WHEN sent_on='' THEN 1 ELSE 0 END,sent_on,id", family.id)
+      .find(i => inviteHolder(inviteRefs(i.id)).state === 'ready' && (!i.sent_on || inviteExpiry(i.sent_on) >= current));
+    if (!invite) return false;
+    const time = now();
+    run("INSERT INTO member_moves(member_id,email,customer_name,from_family_id,from_family_name,from_status,from_note,to_family_id,to_family_name,invite_id,invite_label,state,created_at,updated_at) VALUES (?,?,?,NULL,'','active','',?,?,?,?,'assigned',?,?)", member.id, member.email, member.customer_name, family.id, family.name, invite.id, invite.label, time, time);
+    run('UPDATE family_invites SET sent_at=?,revision=revision+1,updated_at=? WHERE id=?', time, time, invite.id);
+    log(`Tự động: giao link mời ${invite.label || '#' + invite.id} của ${family.name} cho ${member.email} khi khách tra cứu`);
+    return true;
+  }
   function result(address) {
     const current = today();
     const items = all("SELECT m.*,f.name AS family_name FROM members m JOIN families f ON f.id=m.family_id WHERE m.email=? AND f.archived_at='' ORDER BY m.id", address).map(member => {
       const status = statusRow(member.family_id), period = expiry(member.expires_at, current);
+      const allocated = allocateJoin(member, status, period, current);
       const latest = one("SELECT * FROM member_moves WHERE member_id=? AND state!='cancelled' AND dismissed_at='' ORDER BY id DESC LIMIT 1", member.id);
       let move = null;
       if (latest && latest.to_family_id === member.family_id) {
         const open = openMoveStates.includes(latest.state);
         const invite = open && latest.invite_id ? one('SELECT * FROM family_invites WHERE id=?', latest.invite_id) : null;
+        // A link shown to its customer is ticked Đã gửi, so it is never handed to someone else.
+        if (invite && !invite.sent_at) run('UPDATE family_invites SET sent_at=?,revision=revision+1,updated_at=? WHERE id=?', now(), now(), invite.id);
         const source = latest.from_family_id && activeFamily(latest.from_family_id) ? statusRow(latest.from_family_id) : null;
-        move = { id: latest.id, state: latest.state, from_family_name: latest.from_family_name, from_status: source ? source.status : latest.from_status, from_note: source ? source.note : latest.from_note, invite_url: invite ? invite.url : '', invite_expires_on: invite ? inviteExpiry(invite.sent_on) : '', report_reason: latest.report_reason, reported_at: latest.reported_at, opened_at: latest.opened_at, joined_at: latest.joined_at };
+        move = { id: latest.id, kind: latest.from_family_id == null && latest.from_family_name === '' ? 'join' : 'move', state: latest.state, from_family_name: latest.from_family_name, from_status: source ? source.status : latest.from_status, from_note: source ? source.note : latest.from_note, invite_url: invite ? invite.url : '', invite_expires_on: invite ? inviteExpiry(invite.sent_on) : '', report_reason: latest.report_reason, reported_at: latest.reported_at, opened_at: latest.opened_at, joined_at: latest.joined_at };
       }
-      const view = move && openMoveStates.includes(move.state) ? 'move' : problemStatuses.includes(status.status) ? (period.expiry_status === 'expired' ? 'expired' : 'incident') : period.expiry_status === 'expired' ? 'expired' : 'normal';
+      const waiting = !allocated && !move && joinable(member) && status.status === 'active' && period.expiry_status !== 'expired';
+      const view = move && openMoveStates.includes(move.state) ? 'move' : problemStatuses.includes(status.status) ? (period.expiry_status === 'expired' ? 'expired' : 'incident') : period.expiry_status === 'expired' ? 'expired' : waiting ? 'waiting' : 'normal';
       return { customer_name: member.customer_name, family_name: member.family_name, plan_months: member.plan_months, expires_at: member.expires_at, ...period, membership_status: member.membership_status, status: status.status, status_note: status.note, status_updated_at: status.updated_at, view, move };
     });
     return { email: address, today: current, shop: settings(), items };

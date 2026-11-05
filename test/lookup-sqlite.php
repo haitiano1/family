@@ -105,5 +105,19 @@ check(str_contains(fails(fn()=>lookupBulkMove($db,[...$base,'assignments'=>[$a($
 lookupMarkInviteSent($db,$inv[3],['sent'=>false,'revision'=>$rev($inv[3])]);check(array_column(lookupAdminState($db)['invites'],'holder_state')===['used','ready','ready'],'unticked');
 $backup=backup($db);check($backup['version']===10&&count($backup['tables']['member_moves'])===2&&count($backup['tables']['family_invites'])===3&&count($backup['tables']['invite_mails'])===53,'backup v10 tables');
 check(lookupAuditAction('POST','/api/moves')==='Chuyển Family'&&auditActionLabel('PATCH','/api/families/3/status')==='Sửa trạng thái Family','audit labels');
+// New customers ("Đã mời, chưa vào" / "Mua mới") get one link of their own Family on lookup.
+$f12=$family('Family 12','vicakarl2@example.com');
+$join=function(string $mail,string $status,int $days)use($db,$f12,$day){q($db,'INSERT INTO members(family_id,email,customer_name,expires_at,plan_months,membership_status,joined_at) VALUES (?,?,?,?,1,?,?)',[$f12,$mail,$mail,$day($days),$status,$day(0)]);return (int)$db->lastInsertId();};
+$an=$join('an@example.com','invited',90);$join('binh@example.com','new',90);$join('chi@example.com','active',90);$join('em@example.com','invited',90);
+lookupSaveInvite($db,$f12,null,['label'=>'cu','url'=>'https://families.google.com/join/promo/p0','sent_on'=>$day(-20)]);
+$p1=lookupSaveInvite($db,$f12,null,['label'=>'a','url'=>'https://families.google.com/join/promo/p1','sent_on'=>$day(-2)])['id'];
+lookupSaveInvite($db,$f12,null,['label'=>'b','url'=>'https://families.google.com/join/promo/p2','sent_on'=>$day(-1)]);
+$item=lookupResult($db,'an@example.com')['items'][0];check($item['view']==='move'&&$item['move']['kind']==='join'&&$item['move']['invite_url']==='https://families.google.com/join/promo/p1','oldest valid link handed out');
+check(lookupResult($db,'an@example.com')['items'][0]['move']['invite_url']==='https://families.google.com/join/promo/p1','same link on every lookup');
+check(lookupResult($db,'binh@example.com')['items'][0]['move']['invite_url']==='https://families.google.com/join/promo/p2','Mua mới gets the next link');
+check(lookupResult($db,'chi@example.com')['items'][0]['view']==='normal','customer in the group gets nothing');
+check(lookupResult($db,'em@example.com')['items'][0]['view']==='waiting','pool used up');
+check(one($db,'SELECT sent_at FROM family_invites WHERE id=?',[$p1])['sent_at']!==''&&(int)one($db,'SELECT COUNT(*) AS n FROM member_moves WHERE invite_id=?',[$p1])['n']===1,'ticked and held once');
+lookupCustomerJoined($db,'an@example.com',['move_id'=>$item['move']['id']]);check(one($db,'SELECT membership_status FROM members WHERE id=?',[$an])['membership_status']==='active','joined');
 echo "ok\n";
 function auditActionLabel(string $m,string $r): string {require_once dirname(__DIR__).'/hosting/php/family-private/audit.php';return auditAction($m,$r);}

@@ -68,8 +68,32 @@ function groupCard(title, familyName, status, item) {
 const note = (title, text, tone = '') => text ? `<section class="message ${tone}"><span class="title">${escape(title)}</span><p>${escape(text)}</p></section>` : '';
 const inAppHint = () => inApp ? `<div class="inapp"><strong>Bạn đang mở trong Messenger/Zalo.</strong><span>Google không cho vào nhóm trong trình duyệt của ứng dụng chat. Bấm ⋯ ở góc trên → <strong>Mở bằng trình duyệt</strong> (Chrome/Safari), hoặc sao chép link trang này rồi mở bằng Chrome/Safari.</span><button type="button" class="btn small" data-act="copy-page">Sao chép link trang này</button></div>` : '';
 
+// A new customer's own link into their Family (handed out automatically on lookup).
+function joinView(item) {
+  const move = item.move, failed = move.state === 'failed';
+  const link = move.invite_url
+    ? `<a class="btn primary big" href="${escape(move.invite_url)}" rel="noreferrer" data-open="${move.id}">Vào nhóm →</a><span class="sub">Link riêng của bạn, chỉ dùng được 1 lần. Đừng gửi cho người khác.</span>${move.invite_expires_on ? `<span class="sub">Link còn hiệu lực đến ${day(move.invite_expires_on)}.</span>` : ''}`
+    : `<p class="message red"><span class="title">Link đang được cập nhật</span><span>Shop đang đổi link mới cho bạn. Quay lại trang này sau ít phút.</span></p>`;
+  return groupCard('Nhóm của bạn', item.family_name, item.status, item)
+    + (failed ? note('Bạn đã báo lỗi' + (move.reported_at ? ' lúc ' + time(move.reported_at) : ''), 'Shop đang xử lý. Bạn vẫn có thể thử lại link bên dưới hoặc chờ shop nhắn.', 'red') : '')
+    + `<section class="card">
+      <div class="row"><h2>Vào nhóm</h2><span class="badge blue">${escape(item.family_name)}</span></div>
+      <ol class="steps">
+        <li><span class="num" aria-hidden="true">1</span><div><h3>Đăng nhập đúng Gmail</h3><p>Mở link bằng trình duyệt đang đăng nhập <strong>${escape(data.email)}</strong>. Nếu trình duyệt đang đăng nhập Gmail khác, Gmail đó sẽ vào nhóm thay bạn.</p></div></li>
+        <li><span class="num" aria-hidden="true">2</span><div><h3>Bấm vào nhóm</h3><p>Google mở trang mời, bạn bấm đồng ý tham gia là xong. Nếu Google báo bạn đang ở nhóm gia đình khác, rời nhóm đó trước.</p>${link}</div></li>
+      </ol>
+      ${inAppHint()}
+    </section>`
+    + (reporting === move.id ? reportForm(move) : `<section class="card"><div><h2>Vào được chưa?</h2><p class="muted">Mở YouTube, thấy chữ Premium cạnh logo là xong.</p></div><div class="actions"><button type="button" class="btn success" data-act="joined" data-move="${move.id}">✓ Tôi đã vào được</button><button type="button" class="btn" data-act="report" data-move="${move.id}">Tôi không vào được</button></div></section>`);
+}
+function waitingView(item) {
+  return groupCard('Nhóm của bạn', item.family_name, item.status, item)
+    + note('Shop đang chuẩn bị link vào nhóm', 'Khi có link, link riêng của bạn sẽ hiện ngay tại trang này. Quay lại sau ít phút hoặc nhắn shop.', 'blue')
+    + (shop.contact_url ? `<section class="card">${contactLink('Nhắn shop', 'btn primary big')}</section>` : '');
+}
 function moveView(item) {
   const move = item.move, failed = move.state === 'failed';
+  if (move.kind === 'join') return joinView(item);
   const link = move.invite_url
     ? `<a class="btn primary big" href="${escape(move.invite_url)}" rel="noreferrer" data-open="${move.id}">Vào nhóm mới →</a><span class="sub">Link riêng của bạn, chỉ dùng được 1 lần. Đừng gửi cho người khác.</span>${move.invite_expires_on ? `<span class="sub">Link còn hiệu lực đến ${day(move.invite_expires_on)}.</span>` : ''}`
     : `<p class="message red"><span class="title">Link đang được cập nhật</span><span>Shop đang đổi link mới cho bạn. Quay lại trang này sau ít phút.</span></p>`;
@@ -115,7 +139,7 @@ function normalView(item) {
 }
 function resultView(focus = true) {
   const items = data.items || [];
-  const views = { move: moveView, incident: incidentView, expired: expiredView, normal: normalView };
+  const views = { move: moveView, incident: incidentView, expired: expiredView, waiting: waitingView, normal: normalView };
   show(`<div class="intro"><h1>Xin chào${items[0]?.customer_name ? ', ' + escape(items[0].customer_name) : ''}</h1><p>${escape(data.email)}</p></div>`
     + (items.length ? items.map(item => (views[item.view] || normalView)(item)).join('') : `<section class="card"><h2>Chưa tìm thấy nhóm đang hoạt động</h2><p class="muted">Gmail này không còn trong nhóm nào của shop.</p>${contactLink()}</section>`), focus);
 }

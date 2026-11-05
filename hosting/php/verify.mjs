@@ -751,5 +751,11 @@ test('PHP lookup page: Family status, invite pool, bulk move, Gmail + code sign-
  const issue=await a('issues','POST',{family_id:next.id,target_type:'manager',title:'Mail chủ bị quét'},201);state=await a('state');const auto=state.family_statuses.find(x=>x.family_id===next.id);assert.equal(auto.status,'scanned');assert.match(auto.note,/Family 09 bị Google quét/);
  const opened=state.issues.find(x=>x.id===issue.id);await a('issues/'+issue.id,'PATCH',{revision:opened.revision,status:'done',resolution:'keep'});state=await a('state');assert.equal(state.family_statuses.find(x=>x.family_id===next.id).status,'active');
  assert.ok((await a('journal')).entries.some(e=>e.message.includes('Tự động: đặt trạng thái Family 09 là Đang hoạt động')));
+ // A new customer of Family 09 gets one ready link of its pool on lookup, ticked Đã gửi.
+ await a('members','POST',{family_id:next.id,email:'moi@example.com',customer_name:'Khách mới',expires_at:'2099-01-01',membership_status:'invited'},201);
+ await a('families/'+next.id+'/invites','POST',{label:'moi',url:'https://families.google.com/join/promo/php-3',sent_on:''},201);
+ state=await a('state');const newcomer=await lookup('verify','POST',{email:'moi@example.com',code:state.lookup_codes['moi@example.com']});const handed=newcomer.body.items[0].move;
+ assert.equal(newcomer.body.items[0].view,'move');assert.equal(handed.kind,'join');assert.match(handed.invite_url,/php-[23]$/);
+ state=await a('state');const held=state.invites.find(i=>i.url===handed.invite_url);assert.equal(held.holder_state,'assigned');assert.ok(held.sent_at);
  await lookup('logout','POST',{},200,signed.cookie);assert.deepEqual((await lookup('me','GET',undefined,200,signed.cookie)).body,{signed_in:false});
 });
