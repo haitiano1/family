@@ -1,4 +1,6 @@
-# Hải Premium — Quản lý khách hàng 0.28.0
+# Hải Premium — Quản lý khách hàng 0.28.1
+
+Bản 0.28.1: trang tra cứu dùng lời văn shop đã sửa, không hiện tên Family cho khách (thẻ cuối hiện Gmail của khách), và giao link là xong: bỏ bước Hoàn tất, nút Tôi đã vào được / Tôi không vào được và nút Đã vào.
 
 Bản 0.28.0: **trang tra cứu mới** cho khách với thanh tiến trình (Báo lỗi → Tiếp nhận → Đang xử lý → Vào nhóm mới) có chibi chạy tới đúng bước; giao link là xong, không theo dõi khách đã vào hay chưa, trang tự làm mới 30 giây một lần. Khách thấy nhóm vẫn bình thường mà mất Premium thì bấm **Báo mất Premium cho shop**: báo lỗi hiện ở đầu **Fix lỗi**, ở Tổng quan và gửi về **Telegram** nếu bạn cài bot. Xem [hướng dẫn](hosting/php/TRA-CUU-CHUYEN-NHOM.md).
 
