@@ -1,8 +1,15 @@
 name: Phát hành Family PHP
+# Runs by itself when a PR is merged into main (and can still be started by hand).
+# A version that is already released is skipped, so merges without a version bump do nothing.
 on:
+  push:
+    branches: [main]
   workflow_dispatch:
 permissions:
   contents: read
+concurrency:
+  group: release-php
+  cancel-in-progress: false
 jobs:
   release:
     runs-on: ubuntu-latest
@@ -19,15 +26,31 @@ jobs:
         run: |
           test "$GITHUB_REPOSITORY" = haitiano1/family
           node -e "if(!/^\d+\.\d+\.\d+$/.test(JSON.parse(require('fs').readFileSync('package.json')).version))process.exit(1)"
+      - name: Skip a version that is already released
+        id: version
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          release_version=$(node -p "JSON.parse(require('fs').readFileSync('package.json')).version")
+          if gh release view "v$release_version" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "v$release_version đã được phát hành, bỏ qua." >> "$GITHUB_STEP_SUMMARY"
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
       - name: Test application
+        if: steps.version.outputs.skip != 'true'
         run: node --test test/*.test.js
       - name: Test PHP and MySQL
+        if: steps.version.outputs.skip != 'true'
         run: node --test hosting/php/verify.mjs
       - name: Build verified release assets
+        if: steps.version.outputs.skip != 'true'
         run: |
           python3 scripts/package-php.py
           python3 scripts/package-release.py
       - name: Publish a new release
+        if: steps.version.outputs.skip != 'true'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
