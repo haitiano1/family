@@ -103,7 +103,7 @@ function flowOf(item) {
     const current = move?.invite_url ? 2 : 1;
     return {
       current, n: 3, yours: current === 2,
-      title: current === 2 ? 'Đến lượt bạn: vào nhóm' : 'Shop đang chuẩn bị link vào nhóm',
+      title: current === 2 ? 'Bạn thao tác: vào nhóm' : 'Shop đang chuẩn bị link vào nhóm',
       sub: current === 2 ? 'Làm 2 bước ở mục Vào nhóm, mất khoảng 1 phút.' : 'Link riêng của bạn sẽ hiện ngay tại trang này.',
       steps: [
         { label: 'Đăng ký', title: 'Shop nhận đơn', detail: 'Shop đã ghi nhận Gmail của bạn.' },
@@ -116,7 +116,7 @@ function flowOf(item) {
   const current = item.view === 'reported' ? 1 : move?.invite_url ? 3 : 2, linkLater = item.view === 'move' && !move?.invite_url;
   return {
     current, n: 4, yours: current === 3,
-    title: current === 3 ? 'Đến lượt bạn: vào nhóm mới' : current === 1 ? 'Shop đang kiểm tra nhóm của bạn' : linkLater ? 'Shop đang tạo link riêng cho bạn' : 'Hải đang chuẩn bị nhóm mới, phiền bạn đợi xíuuuu ^^',
+    title: current === 3 ? 'Bạn thao tác: vào nhóm mới' : current === 1 ? 'Shop đang kiểm tra nhóm của bạn' : linkLater ? 'Shop đang tạo link riêng cho bạn' : 'Hải đang chuẩn bị nhóm mới, phiền bạn đợi xíuuuu ^^',
     sub: current === 3 ? 'Làm 3 bước ở mục Bạn thao tác để vào nhóm mới, mất khoảng 1 phút.'
       : current === 1 ? 'Shop đã nhận báo lỗi của bạn. Kết quả kiểm tra sẽ hiện ngay tại đây.'
       : linkLater ? 'Nhóm mới đã sẵn sàng. Link riêng của bạn sẽ hiện ngay tại đây.'
@@ -131,7 +131,7 @@ function flowOf(item) {
 }
 const watched = item => ['reported', 'incident', 'waiting'].includes(item.view) || (item.view === 'move' && !item.move?.invite_url);
 function statusCard(item, flow) {
-  const pct = Math.round((flow.current + 0.5) / flow.n * 100), live = flow.yours ? 'Đến lượt bạn' : 'Đang xử lý';
+  const pct = Math.round((flow.current + 0.5) / flow.n * 100), live = flow.yours ? 'Bạn thao tác' : 'Đang xử lý';
   return `<section class="card status" data-progress="${pct}" data-key="${item.member_ref}" data-n="${flow.n}">
     <div class="status-meta"><span class="live">${live}</span><span class="step-count">Bước ${flow.current + 1}/${flow.n}</span></div>
     <h1>${escape(flow.title)}</h1>
@@ -144,7 +144,7 @@ function statusCard(item, flow) {
 function timelineCard(flow) {
   return `<section class="card"><h2>Chi tiết tiến trình</h2><ol class="timeline">${flow.steps.map((step, i) => {
     const state = i < flow.current ? 'done' : i === flow.current ? 'now' : 'later';
-    const right = state === 'now' ? `<span class="now-chip">${flow.yours ? 'Đến lượt bạn' : 'Đang làm'}</span>` : step.time ? `<span class="step-time">${time(step.time)}</span>` : '';
+    const right = state === 'now' ? `<span class="now-chip">${flow.yours ? 'Bạn thao tác' : 'Đang làm'}</span>` : step.time ? `<span class="step-time">${time(step.time)}</span>` : '';
     return `<li class="${state}"${state === 'now' ? ' aria-current="step"' : ''}><span class="dot">${state === 'done' ? tick : i + 1}</span><div class="step"><div class="step-head"><h3>${escape(step.title)}</h3>${right}</div>${step.detail ? `<p>${escape(step.detail)}</p>` : ''}${state === 'now' && step.body ? `<div class="step-body">${step.body}</div>` : ''}</div></li>`;
   }).join('')}</ol></section>`;
 }
