@@ -17,7 +17,7 @@ export const inviteMailAlphabet = 'abcdefghjkmnpqrstuvwxyz23456789';
 export const inviteMailMax = 5;
 // The shop Gmail that receives every invitation (the Apps Script mailbox).
 export const inviteMailInbox = 'haihoangrr@gmail.com';
-export const autoScannedNote = name => `${name} bị Google quét nên một số thành viên có thể mất Premium. Shop đang xử lý và sẽ cập nhật tại đây; hạn dùng của bạn giữ nguyên.`;
+export const autoScannedNote = name => 'Nhóm Youtube của bạn bị Google quét nên có thể mất Premium. Shop đang xử lý và sẽ cập nhật tại đây.';
 export function inviteMailBase(address) {
   const at = address.lastIndexOf('@'), local = address.slice(0, at).split('+')[0];
   return local && at > 0 ? local + address.slice(at) : '';

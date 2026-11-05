@@ -348,7 +348,7 @@ test('Fix lỗi sets the Family status: owner mail reported → Bị quét, case
     const status = async id => (await a('state')).family_statuses.find(s => s.family_id === id) || { status: 'active', note: '' };
     const created = await a('issues', 'POST', { family_id: oldFamily.id, target_type: 'manager', title: 'Mail chủ bị quét' }, 201);
     let s = await status(oldFamily.id);
-    assert.equal(s.status, 'scanned'); assert.match(s.note, /Family 04 bị Google quét/);
+    assert.equal(s.status, 'scanned'); assert.match(s.note, /Nhóm Youtube của bạn bị Google quét/);
     assert.equal((await f.customer()('verify', 'POST', { email: 'minhanh@example.com', code: (await a('state')).lookup_codes['minhanh@example.com'] })).items[0].view, 'incident', 'customers see the incident at once');
     let issue = (await a('state')).issues.find(i => i.id === created.id);
     await a(`issues/${created.id}`, 'PATCH', { revision: issue.revision, status: 'done', resolution: 'replace', replacement_email: 'owner04-new@example.com', expected_email: 'owner04@example.com' });

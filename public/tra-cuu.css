@@ -206,3 +206,4 @@ fieldset { margin: 0; padding: 0; border: 0; min-width: 0; display: grid; gap: 1
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation: none !important; transition: none !important; }
 }
+@media (max-width: 420px) { .labels { font-size: 11px; letter-spacing: -.01em; } }

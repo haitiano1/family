@@ -112,34 +112,33 @@ function flowOf(item) {
     return {
       current, n: 4, tone: joined ? 'done' : failed ? 'warn' : '', yours: current === 2,
       title: joined ? 'Chào mừng bạn vào nhóm' : failed ? 'Shop đang kiểm tra lỗi bạn báo' : current === 2 ? 'Đến lượt bạn: vào nhóm' : 'Shop đang chuẩn bị link vào nhóm',
-      sub: joined ? `Bạn đã vào ${item.family_name}${move.joined_at ? ' lúc ' + time(move.joined_at) : ''}. Mở YouTube là thấy Premium.` : failed ? 'Bạn vẫn có thể thử lại link hoặc chờ shop nhắn.' : current === 2 ? (move.state === 'opened' ? 'Bạn đã mở link. Vào được rồi thì bấm Tôi đã vào được.' : 'Làm 2 bước ở mục Vào nhóm, mất khoảng 1 phút.') : 'Link riêng của bạn sẽ hiện ngay tại trang này.',
+      sub: joined ? `Bạn đã vào nhóm${move.joined_at ? ' lúc ' + time(move.joined_at) : ''}. Mở YouTube là thấy Premium.` : failed ? 'Bạn vẫn có thể thử lại link hoặc chờ shop nhắn.' : current === 2 ? (move.state === 'opened' ? 'Bạn đã mở link. Vào được rồi thì bấm Tôi đã vào được.' : 'Làm 2 bước ở mục Vào nhóm, mất khoảng 1 phút.') : 'Link riêng của bạn sẽ hiện ngay tại trang này.',
       steps: [
-        { label: 'Đăng ký', title: 'Shop nhận đơn', detail: `Gmail ${data.email} đã có trong ${item.family_name}.` },
+        { label: 'Đăng ký', title: 'Shop nhận đơn', detail: 'Shop đã ghi nhận Gmail của bạn.' },
         { label: 'Chuẩn bị', title: 'Chuẩn bị link vào nhóm', detail: current > 1 ? 'Link riêng của bạn đã sẵn sàng.' : 'Shop đang chuẩn bị link riêng cho bạn. Bạn chưa cần làm gì, link sẽ hiện ngay tại đây.' },
         { label: 'Vào nhóm', title: 'Vào nhóm', detail: current === 2 ? '' : current > 2 ? 'Bạn đã mở link và vào nhóm.' : 'Mở link riêng để vào nhóm.', body: current === 2 ? joinTodo(move, false) : '' },
-        { label: 'Hoàn tất', title: 'Dùng Premium', time: joined ? move.joined_at : '', detail: joined ? `Bạn đã vào ${item.family_name}.` : 'Mở YouTube, thấy chữ Premium cạnh logo là xong.' }
+        { label: 'Hoàn tất', title: 'Dùng Premium', time: joined ? move.joined_at : '', detail: joined ? 'Bạn đã vào nhóm.' : 'Mở YouTube, thấy chữ Premium cạnh logo là xong.' }
       ]
     };
   }
-  const moved = move && move.kind === 'move';
-  const fromName = moved ? move.from_family_name : item.family_name, shopNote = moved ? move.from_note : item.status_note;
+  const moved = move && move.kind === 'move', shopNote = moved ? move.from_note : item.status_note;
   const current = joined ? 5 : item.view === 'reported' ? 1 : item.view === 'incident' ? 2 : move?.invite_url ? 3 : 2;
   const failed = move?.state === 'failed' && !joined, linkLater = item.view === 'move' && !move.invite_url;
   return {
     current, n: 5, tone: joined ? 'done' : failed ? 'warn' : '', yours: current === 3,
-    title: joined ? 'Premium đã hoạt động lại' : failed ? 'Shop đang kiểm tra lỗi bạn báo' : current === 3 ? 'Đến lượt bạn: vào nhóm mới' : current === 1 ? 'Shop đang kiểm tra nhóm của bạn' : linkLater ? 'Shop đang tạo link riêng cho bạn' : 'Shop đang chuẩn bị nhóm mới',
-    sub: joined ? `Bạn đã vào ${item.family_name}${move.joined_at ? ' lúc ' + time(move.joined_at) : ''}. Hạn dùng giữ nguyên.`
+    title: joined ? 'Premium đã hoạt động lại' : failed ? 'Shop đang kiểm tra lỗi bạn báo' : current === 3 ? 'Đến lượt bạn: vào nhóm mới' : current === 1 ? 'Shop đang kiểm tra nhóm của bạn' : linkLater ? 'Shop đang tạo link riêng cho bạn' : 'Hải đang chuẩn bị nhóm mới, phiền bạn đợi xíuuuu ^^',
+    sub: joined ? `Bạn đã vào nhóm mới${move.joined_at ? ' lúc ' + time(move.joined_at) : ''}. Hạn dùng giữ nguyên.`
       : failed ? 'Bạn vẫn có thể thử lại link hoặc chờ shop nhắn.'
       : current === 3 ? (move.state === 'opened' ? 'Bạn đã mở link. Vào được rồi thì bấm Tôi đã vào được.' : 'Làm 3 bước ở mục Vào nhóm mới, mất khoảng 1 phút.')
       : current === 1 ? 'Shop đã nhận báo lỗi của bạn. Kết quả kiểm tra sẽ hiện ngay tại đây.'
       : linkLater ? 'Nhóm mới đã sẵn sàng. Link riêng của bạn sẽ hiện ngay tại đây.'
-      : 'Hạn dùng của bạn giữ nguyên. Bạn chưa cần làm gì, link vào nhóm mới sẽ hiện ngay tại đây.',
+      : 'Bạn chưa cần làm gì, link vào nhóm mới sẽ hiện ngay tại đây sau khi mình fix xong.',
     steps: [
-      { label: 'Báo lỗi', title: problem ? 'Bạn báo mất Premium' : 'Phát hiện sự cố', time: problem?.created_at || '', detail: problem ? (problemLabels[problem.reason] || [problem.reason])[0] : `Nhóm ${fromName} gặp sự cố.` },
-      { label: 'Tiếp nhận', title: 'Shop tiếp nhận', time: current > 1 && item.view === 'incident' ? item.status_updated_at : '', detail: current > 1 ? (shopNote || 'Shop đã xác nhận nhóm gặp sự cố và đang xử lý.') : 'Shop đang kiểm tra nhóm của bạn. Nhóm gặp sự cố thì shop chuẩn bị nhóm mới cho bạn.' },
-      { label: 'Nhóm mới', title: 'Chuẩn bị nhóm mới', detail: current > 2 ? 'Link riêng của bạn đã sẵn sàng.' : current === 2 ? 'Shop đang tạo nhóm mới và link riêng cho bạn. Bạn chưa cần làm gì, trang tự cập nhật.' : 'Shop tạo nhóm mới và link riêng cho bạn.' },
-      { label: 'Vào nhóm', title: 'Vào nhóm mới', detail: current === 3 ? '' : current > 3 ? 'Bạn đã vào nhóm mới.' : 'Rời nhóm cũ rồi mở link riêng để vào nhóm mới.', body: current === 3 ? joinTodo(move, true) : '' },
-      { label: 'Hoàn tất', title: 'Premium hoạt động lại', time: joined ? move.joined_at : '', detail: joined ? `Bạn đã vào ${item.family_name}. Hạn dùng giữ nguyên.` : 'Mở YouTube, thấy chữ Premium cạnh logo là xong.' }
+      { label: 'Báo lỗi', title: problem ? 'Bạn báo mất Premium' : 'Phát hiện sự cố mất Premium', time: problem?.created_at || '', detail: problem ? (problemLabels[problem.reason] || [problem.reason])[0] : '' },
+      { label: 'Tiếp nhận', title: current > 1 ? 'Shop đã tiếp nhận và đang xử lý' : 'Shop tiếp nhận', time: current > 1 && item.view === 'incident' ? item.status_updated_at : '', detail: current > 1 ? (shopNote || 'Nhóm Youtube của bạn bị Google quét nên có thể mất Premium. Shop đang xử lý và sẽ cập nhật tại đây.') : 'Shop đang kiểm tra nhóm của bạn. Nhóm gặp sự cố thì shop chuẩn bị nhóm mới cho bạn.' },
+      { label: 'Đang xử lý', title: 'Chuẩn bị nhóm mới', detail: current > 2 ? 'Link riêng của bạn đã sẵn sàng.' : current === 2 ? 'Shop đang tạo nhóm mới và link riêng cho bạn. Bạn chưa cần làm gì, trang tự cập nhật.' : 'Shop tạo nhóm mới và link riêng cho bạn.' },
+      { label: 'Vào nhóm mới', title: 'Bạn thao tác để vào nhóm mới', detail: current === 3 ? '' : current > 3 ? 'Bạn đã vào nhóm mới.' : 'Bạn tiến hành rời nhóm cũ rồi mở link riêng để vào nhóm mới.', body: current === 3 ? joinTodo(move, true) : '' },
+      { label: 'Hoàn tất', title: 'Premium hoạt động lại', time: joined ? move.joined_at : '', detail: joined ? 'Bạn đã vào nhóm mới. Hạn dùng giữ nguyên.' : 'Mở YouTube, thấy chữ Premium cạnh logo là xong.' }
     ]
   };
 }
@@ -165,7 +164,7 @@ function timelineCard(flow) {
 }
 function planCard(item) {
   return `<section class="card plan">
-    <div class="plan-name"><div><span class="label">Nhóm của bạn</span><strong>${escape(item.family_name)}</strong></div><span class="badge ${statusColors[item.status] || ''}">${escape(familyStatusLabels[item.status] || item.status)}</span></div>
+    <div class="plan-name"><div><span class="label">Mail của bạn</span><strong>${escape(data.email)}</strong></div><span class="badge ${statusColors[item.status] || ''}">${escape(familyStatusLabels[item.status] || item.status)}</span></div>
     <div><span class="label">Gói</span><strong>YouTube Premium</strong><span class="sub">${escape(plan(item))}</span></div>
     <div><span class="label">Hạn dùng</span><strong>${day(item.expires_at)}</strong>${expiryLine(item)}</div>
   </section>`;
@@ -184,7 +183,7 @@ function calmCard(item) {
   return `<section class="card status ${expired ? 'stop' : 'done'}">
       <div class="status-meta"><span class="live">${expired ? 'Hết hạn' : 'Đang hoạt động'}</span></div>
       <h1>${expired ? `Gói đã hết hạn ${Math.abs(item.days_left)} ngày` : 'Premium đang hoạt động'}</h1>
-      <p class="status-sub">${expired ? 'Gia hạn xong, thông tin mới hiện ngay trên trang này.' : `Nhóm ${escape(item.family_name)} hoạt động bình thường. Bạn không cần làm gì thêm.`}</p>
+      <p class="status-sub">${expired ? 'Gia hạn xong, thông tin mới hiện ngay trên trang này.' : 'Nhóm của bạn hoạt động bình thường. Bạn không cần làm gì thêm.'}</p>
     </section>`
     + (handled ? note('Shop đã xử lý báo lỗi của bạn' + (item.problem.handled_at ? ' lúc ' + time(item.problem.handled_at) : ''), item.problem.handled_note || 'Mở lại YouTube để kiểm tra. Vẫn lỗi thì báo lại cho shop.', 'green') : '')
     + planCard(item)

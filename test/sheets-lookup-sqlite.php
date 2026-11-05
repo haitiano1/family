@@ -160,7 +160,7 @@ $r=$gmail();check($r['added']===1&&$r['updated']===0,'sent link kept, new link a
 $statusOf=fn(int $f)=>lookupStatusRow($db,$f)['status'];
 check($statusOf($ten)==='active','starts active');
 beginAudit($db,'Báo lỗi thử');$case=saveIssue($db,null,['family_id'=>$ten,'target_type'=>'manager','title'=>'Mail chủ bị quét']);finishAudit();
-check($statusOf($ten)==='scanned'&&str_contains(lookupStatusRow($db,$ten)['note'],'Family 10 bị Google quét'),'owner mail report marks Bị quét');
+check($statusOf($ten)==='scanned'&&str_contains(lookupStatusRow($db,$ten)['note'],'Nhóm Youtube của bạn bị Google quét'),'owner mail report marks Bị quét');
 $issue=one($db,'SELECT * FROM issues WHERE id=?',[$case['id']]);
 beginAudit($db,'Fix thử');saveIssue($db,$case['id'],['revision'=>(int)$issue['revision'],'status'=>'done','resolution'=>'replace','replacement_email'=>'owner10-new@example.com','expected_email'=>'owner10@example.com']);finishAudit();
 check($statusOf($ten)==='active'&&lookupStatusRow($db,$ten)['note']==='','done case puts the Family back to Đang hoạt động');

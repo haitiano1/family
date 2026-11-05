@@ -4,7 +4,7 @@
   "version": "0.28.0",
   "schema": 8,
   "min_php": "8.2.0",
-  "size": 206282,
-  "sha256": "8a343ac3b1f073bc56d4974025e187aae07922a0645cd4a3924f32e5dbf9dc1b",
+  "size": 206328,
+  "sha256": "e2f99601f76c808e4959f4fce44d4fbe527fe9185af88f95a13b84197184e36c",
   "url": "https://github.com/haitiano1/family/releases/download/v0.28.0/family-php-release.zip"
 }
