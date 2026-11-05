@@ -73,7 +73,7 @@ function joinView(item) {
   const move = item.move, failed = move.state === 'failed';
   const link = move.invite_url
     ? `<a class="btn primary big" href="${escape(move.invite_url)}" rel="noreferrer" data-open="${move.id}">Vào nhóm →</a><span class="sub">Link riêng của bạn, chỉ dùng được 1 lần. Đừng gửi cho người khác.</span>${move.invite_expires_on ? `<span class="sub">Link còn hiệu lực đến ${day(move.invite_expires_on)}.</span>` : ''}`
-    : `<p class="message red"><span class="title">Link đang được cập nhật</span><span>Shop đang đổi link mới cho bạn. Quay lại trang này sau ít phút.</span></p>`;
+    : `<p class="message blue"><span class="title">Shop đang chuẩn bị link cho bạn</span><span>Link riêng của bạn sẽ hiện ngay tại đây. Quay lại trang này sau ít phút hoặc nhắn shop.</span></p>`;
   return groupCard('Nhóm của bạn', item.family_name, item.status, item)
     + (failed ? note('Bạn đã báo lỗi' + (move.reported_at ? ' lúc ' + time(move.reported_at) : ''), 'Shop đang xử lý. Bạn vẫn có thể thử lại link bên dưới hoặc chờ shop nhắn.', 'red') : '')
     + `<section class="card">
@@ -84,7 +84,7 @@ function joinView(item) {
       </ol>
       ${inAppHint()}
     </section>`
-    + (reporting === move.id ? reportForm(move) : `<section class="card"><div><h2>Vào được chưa?</h2><p class="muted">Mở YouTube, thấy chữ Premium cạnh logo là xong.</p></div><div class="actions"><button type="button" class="btn success" data-act="joined" data-move="${move.id}">✓ Tôi đã vào được</button><button type="button" class="btn" data-act="report" data-move="${move.id}">Tôi không vào được</button></div></section>`);
+    + (!move.invite_url ? '' : reporting === move.id ? reportForm(move) : `<section class="card"><div><h2>Vào được chưa?</h2><p class="muted">Mở YouTube, thấy chữ Premium cạnh logo là xong.</p></div><div class="actions"><button type="button" class="btn success" data-act="joined" data-move="${move.id}">✓ Tôi đã vào được</button><button type="button" class="btn" data-act="report" data-move="${move.id}">Tôi không vào được</button></div></section>`);
 }
 function waitingView(item) {
   return groupCard('Nhóm của bạn', item.family_name, item.status, item)
@@ -96,7 +96,7 @@ function moveView(item) {
   if (move.kind === 'join') return joinView(item);
   const link = move.invite_url
     ? `<a class="btn primary big" href="${escape(move.invite_url)}" rel="noreferrer" data-open="${move.id}">Vào nhóm mới →</a><span class="sub">Link riêng của bạn, chỉ dùng được 1 lần. Đừng gửi cho người khác.</span>${move.invite_expires_on ? `<span class="sub">Link còn hiệu lực đến ${day(move.invite_expires_on)}.</span>` : ''}`
-    : `<p class="message red"><span class="title">Link đang được cập nhật</span><span>Shop đang đổi link mới cho bạn. Quay lại trang này sau ít phút.</span></p>`;
+    : `<p class="message blue"><span class="title">Shop đang chuẩn bị link cho bạn</span><span>Link riêng của bạn sẽ hiện ngay tại đây. Quay lại trang này sau ít phút hoặc nhắn shop.</span></p>`;
   return groupCard('Nhóm cũ', move.from_family_name, move.from_status, item)
     + note('Lời nhắn từ shop', move.from_note)
     + (failed ? note('Bạn đã báo lỗi' + (move.reported_at ? ' lúc ' + time(move.reported_at) : ''), 'Shop đang xử lý. Bạn vẫn có thể thử lại link bên dưới hoặc chờ shop nhắn.', 'red') : '')
@@ -109,7 +109,7 @@ function moveView(item) {
       </ol>
       ${inAppHint()}
     </section>`
-    + (reporting === move.id ? reportForm(move) : `<section class="card"><div><h2>Vào được chưa?</h2><p class="muted">Mở YouTube, thấy chữ Premium cạnh logo là xong.</p></div><div class="actions"><button type="button" class="btn success" data-act="joined" data-move="${move.id}">✓ Tôi đã vào được</button><button type="button" class="btn" data-act="report" data-move="${move.id}">Tôi không vào được</button></div></section>`);
+    + (!move.invite_url ? '' : reporting === move.id ? reportForm(move) : `<section class="card"><div><h2>Vào được chưa?</h2><p class="muted">Mở YouTube, thấy chữ Premium cạnh logo là xong.</p></div><div class="actions"><button type="button" class="btn success" data-act="joined" data-move="${move.id}">✓ Tôi đã vào được</button><button type="button" class="btn" data-act="report" data-move="${move.id}">Tôi không vào được</button></div></section>`);
 }
 function reportForm(move) {
   return `<section class="card"><form id="report" data-move="${move.id}">
@@ -127,8 +127,7 @@ function incidentView(item) {
 }
 function expiredView(item) {
   return groupCard('Nhóm hiện tại', item.family_name, item.status, item)
-    + (item.status !== 'active' ? note('Lời nhắn từ shop', item.status_note) : '')
-    + `<section class="message red"><span class="title">Gói của bạn đã hết hạn</span><p>${item.status !== 'active' ? 'Vì vậy shop chưa cấp link nhóm mới cho Gmail này. ' : ''}Gia hạn xong, thông tin mới sẽ hiện ngay trên trang này.</p></section>`
+    + `<section class="message red"><span class="title">Gói của bạn đã hết hạn</span><p>Gia hạn xong, thông tin mới sẽ hiện ngay trên trang này.</p></section>`
     + `<section class="card"><h2>Gia hạn gói</h2><p class="muted">Nhắn shop để chọn gói và thanh toán. Shop xác nhận xong, bạn tải lại trang này.</p>${contactLink('Nhắn shop để gia hạn', 'btn primary big')}</section>`;
 }
 function normalView(item) {

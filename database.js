@@ -65,6 +65,8 @@ try {
   CREATE INDEX IF NOT EXISTS invite_mails_family ON invite_mails(family_id);`);
   // 0.23.0: Đã gửi tick on invite links (databases created by 0.21 lack the column).
   if(!db.prepare('PRAGMA table_info(family_invites)').all().some(column=>column.name==='sent_at'))db.exec("ALTER TABLE family_invites ADD COLUMN sent_at TEXT NOT NULL DEFAULT ''");
+  // 0.26.0: links of a replaced owner are retired rather than deleted.
+  if(!db.prepare('PRAGMA table_info(family_invites)').all().some(column=>column.name==='retired_at'))db.exec("ALTER TABLE family_invites ADD COLUMN retired_at TEXT NOT NULL DEFAULT ''");
   db.prepare("INSERT OR IGNORE INTO lookup_settings(name,value) VALUES ('code_salt',?)").run(randomBytes(32).toString('hex'));
   db.exec('PRAGMA user_version=16; COMMIT');
 } catch (error) { db.exec('ROLLBACK'); throw error; }

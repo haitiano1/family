@@ -36,7 +36,7 @@ export function restoreCustomers(db,data,fail) {
         if(data.version<3&&row&&typeof row==='object')row={...(table==='families'?{trial_date:''}:table==='issues'?{trial_date:'',reported_on:''}:{}),...row};
         if(data.version<4&&row&&typeof row==='object')row={...(table==='families'?{archived_at:''}:table==='other_purchases'?{plan_months:0}:table==='archived_customers'?{family_archive_id:null}:{}),...row};
         if(table==='other_purchases'&&data.version<9&&row&&typeof row==='object'&&!Object.hasOwn(row,'purchase_source'))row={...row,purchase_source:''};
-        if(table==='family_invites'&&row&&typeof row==='object'&&!Object.hasOwn(row,'sent_at'))row={...row,sent_at:''};
+        if(table==='family_invites'&&row&&typeof row==='object')row={sent_at:'',retired_at:'',...row};
         if (!row || typeof row!=='object' || columns.some(c=>!Object.hasOwn(row,c) || (row[c]!==null && !['string','number'].includes(typeof row[c])))) fail('Dữ liệu sao lưu thiếu trường hoặc sai định dạng.');
         if(table==='other_purchases'&&(typeof row.purchase_source!=='string'||row.purchase_source.length>200))fail('Nguồn mua trong sao lưu không hợp lệ.');
         if(table==='archived_customers'){

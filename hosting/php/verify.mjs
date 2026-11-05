@@ -745,8 +745,8 @@ test('PHP lookup page: Family status, invite pool, bulk move, Gmail + code sign-
  await a('invites/'+spare.id+'/sent','PATCH',{sent:true,revision:state.invites.find(i=>i.id===spare.id).revision});state=await a('state');assert.equal(state.invites.find(i=>i.id===spare.id).holder_state,'sent');
  await a('invites/'+invite.id+'/sent','PATCH',{sent:true,revision:state.invites.find(i=>i.id===invite.id).revision},409);assert.ok((await a('journal')).entries.some(e=>e.action==='Đánh dấu link đã gửi'));
  const fresh=await a('backup');assert.equal(fresh.version,10);assert.equal(fresh.tables.invite_mails.length,3);assert.ok(fresh.tables.family_invites.every(i=>'sent_at' in i));
- sql(`ALTER TABLE ${f.db}.family_invites DROP COLUMN sent_at`);sql(`DROP TABLE ${f.db}.invite_mails`);sql(`UPDATE ${f.db}.app_meta SET value='1' WHERE name='lookup_schema'`);
- state=await a('state');assert.equal(state.invite_mails.length,0);assert.ok(state.invites.every(i=>i.sent_at===''));assert.equal(sql(`SELECT value FROM ${f.db}.app_meta WHERE name='lookup_schema'`),'2');
+ sql(`ALTER TABLE ${f.db}.family_invites DROP COLUMN sent_at, DROP COLUMN retired_at`);sql(`DROP TABLE ${f.db}.invite_mails`);sql(`UPDATE ${f.db}.app_meta SET value='1' WHERE name='lookup_schema'`);
+ state=await a('state');assert.equal(state.invite_mails.length,0);assert.ok(state.invites.every(i=>i.sent_at===''&&i.retired_at===''));assert.equal(sql(`SELECT value FROM ${f.db}.app_meta WHERE name='lookup_schema'`),'3');
  // Fix lỗi on the owner mail marks the Family Bị quét; completing the case puts it back to active.
  const issue=await a('issues','POST',{family_id:next.id,target_type:'manager',title:'Mail chủ bị quét'},201);state=await a('state');const auto=state.family_statuses.find(x=>x.family_id===next.id);assert.equal(auto.status,'scanned');assert.match(auto.note,/Family 09 bị Google quét/);
  const opened=state.issues.find(x=>x.id===issue.id);await a('issues/'+issue.id,'PATCH',{revision:opened.revision,status:'done',resolution:'keep'});state=await a('state');assert.equal(state.family_statuses.find(x=>x.family_id===next.id).status,'active');
@@ -757,11 +757,20 @@ test('PHP lookup page: Family status, invite pool, bulk move, Gmail + code sign-
  state=await a('state');const newcomer=await lookup('verify','POST',{email:'moi@example.com',code:state.lookup_codes['moi@example.com']});const handed=newcomer.body.items[0].move;
  assert.equal(newcomer.body.items[0].view,'move');assert.equal(handed.kind,'join');assert.match(handed.invite_url,/php-[23]$/);
  state=await a('state');const held=state.invites.find(i=>i.url===handed.invite_url);assert.equal(held.holder_state,'assigned');assert.ok(held.sent_at);
+ // Đã fix · Đổi sang mail mới: customers stay, keep their status and wait for a link of the new owner.
+ const s20=await a('families','POST',{name:'Family 20',manager_email:'owner20@example.com'},201);const p20=await a('members','POST',{family_id:s20.id,email:'p20@example.com',expires_at:'2020-01-01',membership_status:'active'},201);
+ const old20=await a('families/'+s20.id+'/invites','POST',{label:'cu20',url:'https://families.google.com/join/promo/php-20',sent_on:''},201);
+ await new Promise(r=>setTimeout(r,1100));const c20=await a('issues','POST',{family_id:s20.id,target_type:'manager',title:'Bị quét'},201);await new Promise(r=>setTimeout(r,1100));
+ const fixed=await a('issues/'+c20.id,'PATCH',{revision:0,status:'done',resolution:'replace',replacement_email:'owner20b@example.com',expected_email:'owner20@example.com',invite_count:1});
+ assert.equal(fixed.waiting_customers,1);assert.equal(fixed.retired_links,1);assert.equal(fixed.invite_mails.mails.length,1);
+ state=await a('state');assert.equal(state.members.find(m=>m.id===p20.id).membership_status,'active');assert.equal(state.invites.find(i=>i.id===old20.id).holder_state,'retired');assert.equal(state.family_statuses.find(x=>x.family_id===s20.id).status,'active');
+ await a('families/'+s20.id+'/invites','POST',{label:fixed.invite_mails.mails[0],url:'https://families.google.com/join/promo/php-21',sent_on:''},201);
+ state=await a('state');const p20look=await lookup('verify','POST',{email:'p20@example.com',code:state.lookup_codes['p20@example.com']});assert.equal(p20look.body.items[0].move.invite_url,'https://families.google.com/join/promo/php-21');
  // Đã fix · Cho khách vào: every customer of Family 09 moves to Family 10, overwriting the same Gmail.
  const ten=await a('families','POST',{name:'Family 10',manager_email:'owner10@example.com'},201);await a('members','POST',{family_id:ten.id,email:'moi@example.com',customer_name:'Bản trùng',expires_at:'2026-01-01'},201);
  await a('families/'+next.id+'/hand-over','POST',{to_family_id:ten.id,expected_manager_email:'changed@example.com'},409);
  const over=await a('families/'+next.id+'/hand-over','POST',{to_family_id:ten.id,expected_manager_email:'owner10@example.com'});assert.equal(over.moved,2);assert.equal(over.replaced,1);
- state=await a('state');const landed=state.members.filter(m=>m.family_id===ten.id);assert.equal(landed.length,2);assert.ok(landed.every(m=>m.membership_status==='invited'));assert.equal(landed.find(m=>m.email==='moi@example.com').customer_name,'Khách mới');assert.equal(state.members.some(m=>m.family_id===next.id),false);
+ state=await a('state');const landed=state.members.filter(m=>m.family_id===ten.id);assert.equal(landed.length,2);assert.equal(landed.find(m=>m.email==='minhanh@example.com').membership_status,'active');assert.equal(landed.find(m=>m.email==='moi@example.com').membership_status,'invited');assert.equal(landed.find(m=>m.email==='moi@example.com').customer_name,'Khách mới');assert.equal(state.members.some(m=>m.family_id===next.id),false);
  assert.ok((await a('journal')).entries.some(e=>e.action==='Cho khách vào Family mới'));
  await lookup('logout','POST',{},200,signed.cookie);assert.deepEqual((await lookup('me','GET',undefined,200,signed.cookie)).body,{signed_in:false});
 });

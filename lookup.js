@@ -65,8 +65,9 @@ export function initLookup(db, { fail, email, text, calendarDate, log }) {
   const revision = (value, message = 'Dữ liệu đã thay đổi. Tải lại trang rồi thử lại.') => { if (!Number.isInteger(value)) fail(message); return value; };
   const activeFamily = id => Number.isSafeInteger(id) && id > 0 ? one("SELECT f.*,a.email AS manager_email FROM families f JOIN accounts a ON a.id=f.manager_id WHERE f.id=? AND f.archived_at=''", id) : undefined;
   const statusRow = familyId => one('SELECT * FROM family_statuses WHERE family_id=?', familyId) || { family_id: familyId, status: 'active', note: '', updated_at: '', revision: 0 };
-  // A ready link the owner ticked as sent by hand is not handed out again.
-  const inviteState = invite => { const state = inviteHolder(inviteRefs(invite.id)).state; return state === 'ready' && invite.sent_at ? 'sent' : state; };
+  // A link already shown to a customer (Đã gửi) is not handed out again; a link of a replaced
+  // owner (retired) is never handed out.
+  const inviteState = invite => { if (invite.retired_at) return 'retired'; const state = inviteHolder(inviteRefs(invite.id)).state; return state === 'ready' && invite.sent_at ? 'sent' : state; };
   const inviteRefs = inviteId => all("SELECT mv.id,mv.state,mv.email,mv.customer_name,mv.to_family_id,mv.member_id,m.family_id AS member_family_id FROM member_moves mv LEFT JOIN members m ON m.id=mv.member_id WHERE mv.invite_id=? AND mv.state!='cancelled' ORDER BY mv.id", inviteId);
 
   function settings() {
@@ -151,9 +152,15 @@ export function initLookup(db, { fail, email, text, calendarDate, log }) {
       return { ok: true, deleted: rows.length };
     });
   }
-  // Cho khách vào: every customer of the old Family, with all their details, moves into the new
-  // Family as "Đã mời, chưa vào" (they then get their own link on lookup). A record of the same
-  // Gmail already in the new Family is replaced by the old Family's record.
+  // A customer who must (re)join a group without a link yet: the move is open with no invite,
+  // and the first ready link of the Family is attached when the customer looks up their Gmail.
+  function awaitLink(member, to, from) {
+    const time = now();
+    run("INSERT INTO member_moves(member_id,email,customer_name,from_family_id,from_family_name,from_status,from_note,to_family_id,to_family_name,invite_id,invite_label,state,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,NULL,'','assigned',?,?)", member.id, member.email, member.customer_name, from.id, from.name, from.status, from.note, to.id, to.name, time, time);
+  }
+  // Cho khách vào: every customer of the old Family, with all their details and member status,
+  // moves into the new Family and waits for their own link, handed out on lookup. A record of the
+  // same Gmail already in the new Family is replaced by the old Family's record.
   function handOver(fromId, data) {
     const from = activeFamily(fromId); if (!from) fail('Không tìm thấy Family cũ đang hoạt động.', 404);
     const to = activeFamily(data.to_family_id); if (!to || to.id === from.id) fail('Chọn Family mới đang hoạt động.');
@@ -161,14 +168,16 @@ export function initLookup(db, { fail, email, text, calendarDate, log }) {
     const members = all('SELECT * FROM members WHERE family_id=? ORDER BY id', from.id);
     if (!members.length) fail(`${from.name} không còn khách để chuyển.`, 409);
     const owner = members.find(m => m.email === to.manager_email); if (owner) fail(`Email ${owner.email} trùng mail chủ ${to.name}.`, 409);
+    const source = statusRow(from.id);
     return atomic('lookup_hand_over', () => {
       const time = now(); let replaced = 0;
       for (const member of members) {
         const duplicate = one('SELECT id FROM members WHERE family_id=? AND email=?', to.id, member.email);
         if (duplicate) { run('UPDATE member_moves SET member_id=NULL WHERE member_id=?', duplicate.id); run("DELETE FROM issues WHERE family_id=? AND target_type='member' AND target_id=?", to.id, duplicate.id); run('DELETE FROM members WHERE id=?', duplicate.id); replaced++; }
         run("UPDATE member_moves SET state='cancelled',updated_at=?,revision=revision+1 WHERE member_id=? AND state IN ('assigned','opened','failed')", time, member.id);
-        run("UPDATE members SET family_id=?,membership_status='invited',renewal_revision=renewal_revision+1 WHERE id=?", to.id, member.id);
+        run('UPDATE members SET family_id=?,renewal_revision=renewal_revision+1 WHERE id=?', to.id, member.id);
         run("DELETE FROM issues WHERE family_id=? AND target_type='member' AND target_id=?", from.id, member.id);
+        awaitLink(member, to, { id: from.id, name: from.name, status: source.status, note: source.note });
       }
       log(`Cá nhân: cho ${members.length} khách của ${from.name} (${from.manager_email}) vào ${to.name} (${to.manager_email})${replaced ? `, ghi đè ${replaced} hồ sơ trùng Gmail` : ''}: ${members.map(m => m.email).join(', ')}`);
       return { ok: true, moved: members.length, replaced, family_id: to.id, family_name: to.name };
@@ -179,6 +188,7 @@ export function initLookup(db, { fail, email, text, calendarDate, log }) {
     const family = activeFamily(invite.family_id); if (!family) fail('Không tìm thấy Family đang hoạt động.', 404);
     if (revision(data.revision) !== invite.revision) fail('Link mời vừa được sửa ở nơi khác. Tải lại rồi thử lại.', 409);
     if (typeof data.sent !== 'boolean') fail('Thiếu trạng thái đã gửi.');
+    if (invite.retired_at) fail('Link của chủ cũ không dùng được nữa.', 409);
     const state = inviteHolder(inviteRefs(invite.id)).state;
     if (data.sent && state !== 'ready') fail(state === 'used' ? 'Link này đã có khách dùng.' : 'Link đang giao cho khách trong lượt chuyển nhóm.', 409);
     run('UPDATE family_invites SET sent_at=?,revision=revision+1,updated_at=? WHERE id=?', data.sent ? now() : '', now(), invite.id);
@@ -196,6 +206,30 @@ export function initLookup(db, { fail, email, text, calendarDate, log }) {
     if (old) run('UPDATE family_statuses SET status=?,note=?,updated_at=?,revision=revision+1 WHERE family_id=?', next, note, now(), family.id);
     else run('INSERT INTO family_statuses(family_id,status,note,updated_at,revision) VALUES (?,?,?,?,1)', family.id, next, note, now());
     log(`Tự động: đặt trạng thái ${family.name} là ${label(next)} ${event === 'reported' ? 'khi báo lỗi mail quản lý' : 'khi hoàn tất Fix lỗi'}`);
+  }
+
+  // Đã fix · Đổi sang mail mới on the owner keeps the same Family record: every customer has to
+  // accept the new owner's invitation, so they become "Đã mời, chưa vào" and get a fresh link on
+  // lookup. Links and Gen mail made before the case was reported belong to the old owner's group:
+  // the links are retired (kept, so Lấy link mời never imports them again) and the addresses go.
+  // A prepared Family of the new owner (donor) hands over its links and addresses.
+  function ownerReplaced(familyId, { since, donorId = null, count = 0 }) {
+    const family = activeFamily(familyId); if (!family) return null;
+    const time = now();
+    const retired = Number(run("UPDATE family_invites SET retired_at=?,revision=revision+1,updated_at=? WHERE family_id=? AND retired_at='' AND created_at<?", time, time, family.id, since).changes);
+    run('DELETE FROM invite_mails WHERE family_id=? AND created_at<?', family.id, since);
+    if (donorId) { run('UPDATE family_invites SET family_id=?,revision=revision+1,updated_at=? WHERE family_id=?', family.id, time, donorId); run('UPDATE invite_mails SET family_id=? WHERE family_id=?', family.id, donorId); }
+    for (const move of all("SELECT mv.id,mv.state FROM member_moves mv JOIN members m ON m.id=mv.member_id WHERE mv.to_family_id=? AND m.family_id=? AND mv.state!='cancelled' AND mv.dismissed_at=''", family.id, family.id)) {
+      if (openMoveStates.includes(move.state)) run("UPDATE member_moves SET state='cancelled',updated_at=?,revision=revision+1 WHERE id=?", time, move.id);
+      else run('UPDATE member_moves SET dismissed_at=?,updated_at=?,revision=revision+1 WHERE id=?', time, time, move.id);
+    }
+    // Customers keep their member status; each one waits for a link of the new owner's group.
+    const status = statusRow(family.id), problem = problemStatuses.includes(status.status);
+    const old = { id: null, name: family.name, status: problem ? status.status : 'scanned', note: problem && status.note ? status.note : autoScannedNote(family.name) };
+    const members = all('SELECT * FROM members WHERE family_id=? ORDER BY id', family.id);
+    for (const member of members) awaitLink(member, family, old);
+    log(`Tự động: ${family.name} đổi chủ sang ${family.manager_email}: ${members.length} khách chờ link vào nhóm mới${retired ? `, bỏ ${retired} link của chủ cũ` : ''}`);
+    return { waiting: members.length, retired, invite_mails: count ? generateInviteMails(family.id, { count }) : null };
   }
 
   function saveStatus(familyId, data) {
@@ -325,7 +359,7 @@ export function initLookup(db, { fail, email, text, calendarDate, log }) {
     const refs = all("SELECT mv.id,mv.invite_id,mv.state,mv.email,mv.customer_name,mv.to_family_id,mv.member_id,m.family_id AS member_family_id FROM member_moves mv LEFT JOIN members m ON m.id=mv.member_id WHERE mv.invite_id IS NOT NULL AND mv.state!='cancelled' ORDER BY mv.id");
     const invites = all('SELECT * FROM family_invites ORDER BY family_id,id').map(invite => {
       const holder = inviteHolder(refs.filter(r => r.invite_id === invite.id));
-      return { ...invite, expires_on: inviteExpiry(invite.sent_on), holder_state: holder.state === 'ready' && invite.sent_at ? 'sent' : holder.state, holder_move_id: holder.move?.id ?? null, holder_email: holder.move?.email ?? '', holder_name: holder.move?.customer_name ?? '' };
+      return { ...invite, expires_on: inviteExpiry(invite.sent_on), holder_state: invite.retired_at ? 'retired' : holder.state === 'ready' && invite.sent_at ? 'sent' : holder.state, holder_move_id: holder.move?.id ?? null, holder_email: holder.move?.email ?? '', holder_name: holder.move?.customer_name ?? '' };
     });
     const moves = all("SELECT mv.*,m.family_id AS member_family_id FROM member_moves mv LEFT JOIN members m ON m.id=mv.member_id WHERE mv.dismissed_at='' ORDER BY mv.id DESC LIMIT 500").map(move => {
       const live = move.member_family_id != null && move.member_family_id === move.to_family_id;
@@ -345,14 +379,17 @@ export function initLookup(db, { fail, email, text, calendarDate, log }) {
   // held for them (never handed to anyone else) and ticked Đã gửi.
   const joinable = member => ['invited', 'new'].includes(member.membership_status);
   function allocateJoin(member, status, period, current) {
-    if (!joinable(member) || status.status !== 'active' || period.expiry_status === 'expired') return false;
-    if (one("SELECT id FROM member_moves WHERE member_id=? AND to_family_id=? AND state!='cancelled'", member.id, member.family_id)) return false;
+    // Customers past their expiry date still get a link: they renew, they just have not paid yet.
+    if (status.status !== 'active') return false;
+    const pending = one("SELECT * FROM member_moves WHERE member_id=? AND to_family_id=? AND state!='cancelled' AND dismissed_at='' ORDER BY id DESC LIMIT 1", member.id, member.family_id);
+    if (pending ? !(openMoveStates.includes(pending.state) && pending.invite_id == null) : !joinable(member)) return false;
     const family = activeFamily(member.family_id); if (!family) return false;
-    const invite = all("SELECT * FROM family_invites WHERE family_id=? AND sent_at='' ORDER BY CASE WHEN sent_on='' THEN 1 ELSE 0 END,sent_on,id", family.id)
+    const invite = all("SELECT * FROM family_invites WHERE family_id=? AND sent_at='' AND retired_at='' ORDER BY CASE WHEN sent_on='' THEN 1 ELSE 0 END,sent_on,id", family.id)
       .find(i => inviteHolder(inviteRefs(i.id)).state === 'ready' && (!i.sent_on || inviteExpiry(i.sent_on) >= current));
     if (!invite) return false;
     const time = now();
-    run("INSERT INTO member_moves(member_id,email,customer_name,from_family_id,from_family_name,from_status,from_note,to_family_id,to_family_name,invite_id,invite_label,state,created_at,updated_at) VALUES (?,?,?,NULL,'','active','',?,?,?,?,'assigned',?,?)", member.id, member.email, member.customer_name, family.id, family.name, invite.id, invite.label, time, time);
+    if (pending) run('UPDATE member_moves SET invite_id=?,invite_label=?,updated_at=?,revision=revision+1 WHERE id=?', invite.id, invite.label, time, pending.id);
+    else run("INSERT INTO member_moves(member_id,email,customer_name,from_family_id,from_family_name,from_status,from_note,to_family_id,to_family_name,invite_id,invite_label,state,created_at,updated_at) VALUES (?,?,?,NULL,'','active','',?,?,?,?,'assigned',?,?)", member.id, member.email, member.customer_name, family.id, family.name, invite.id, invite.label, time, time);
     run('UPDATE family_invites SET sent_at=?,revision=revision+1,updated_at=? WHERE id=?', time, time, invite.id);
     log(`Tự động: giao link mời ${invite.label || '#' + invite.id} của ${family.name} cho ${member.email} khi khách tra cứu`);
     return true;
@@ -372,8 +409,8 @@ export function initLookup(db, { fail, email, text, calendarDate, log }) {
         const source = latest.from_family_id && activeFamily(latest.from_family_id) ? statusRow(latest.from_family_id) : null;
         move = { id: latest.id, kind: latest.from_family_id == null && latest.from_family_name === '' ? 'join' : 'move', state: latest.state, from_family_name: latest.from_family_name, from_status: source ? source.status : latest.from_status, from_note: source ? source.note : latest.from_note, invite_url: invite ? invite.url : '', invite_expires_on: invite ? inviteExpiry(invite.sent_on) : '', report_reason: latest.report_reason, reported_at: latest.reported_at, opened_at: latest.opened_at, joined_at: latest.joined_at };
       }
-      const waiting = !allocated && !move && joinable(member) && status.status === 'active' && period.expiry_status !== 'expired';
-      const view = move && openMoveStates.includes(move.state) ? 'move' : problemStatuses.includes(status.status) ? (period.expiry_status === 'expired' ? 'expired' : 'incident') : period.expiry_status === 'expired' ? 'expired' : waiting ? 'waiting' : 'normal';
+      const waiting = !allocated && !move && joinable(member) && status.status === 'active';
+      const view = move && openMoveStates.includes(move.state) ? 'move' : problemStatuses.includes(status.status) ? 'incident' : waiting ? 'waiting' : period.expiry_status === 'expired' ? 'expired' : 'normal';
       return { family_name: member.family_name, plan_months: member.plan_months, expires_at: member.expires_at, ...period, membership_status: member.membership_status, status: status.status, status_note: status.note, status_updated_at: status.updated_at, view, move };
     });
     return { email: address, today: current, shop: settings(), items };
@@ -439,5 +476,5 @@ export function initLookup(db, { fail, email, text, calendarDate, log }) {
     return result(address);
   }
 
-  return { adminState, settings, saveSettings, rotateCode, generateInviteMails, deleteInviteMails, markInviteSent, handOver, issueStatus, saveStatus, saveInvite, deleteInvite, bulkMove, updateMove, result, verify, sessionEmail, logout, customerOpen, customerJoined, customerReport };
+  return { adminState, settings, saveSettings, rotateCode, generateInviteMails, deleteInviteMails, markInviteSent, handOver, issueStatus, ownerReplaced, saveStatus, saveInvite, deleteInvite, bulkMove, updateMove, result, verify, sessionEmail, logout, customerOpen, customerJoined, customerReport };
 }

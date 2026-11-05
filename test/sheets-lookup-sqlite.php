@@ -23,7 +23,7 @@ $db->sqliteCreateFunction('IS_USED_LOCK',function($name)use(&$locks){return $loc
 $db->sqliteCreateFunction('GET_LOCK',function($name,$wait)use(&$locks){$locks[$name]=1;return 1;},2);
 $db->sqliteCreateFunction('RELEASE_LOCK',function($name)use(&$locks){$held=isset($locks[$name]);unset($locks[$name]);return $held?1:null;},1);
 foreach(['schema.sql','features.sql','vault.sql','lookup.sql'] as $file)foreach(explode(';',file_get_contents("$root/$file")) as $sql)if(trim($sql))$db->exec($sql);
-$db->exec("ALTER TABLE families ADD COLUMN trial_date VARCHAR(10) NOT NULL DEFAULT ''");$db->exec("ALTER TABLE families ADD COLUMN archived_at VARCHAR(32) NOT NULL DEFAULT ''");$db->exec('ALTER TABLE vault_items ADD COLUMN family_id INT NULL');$db->exec("ALTER TABLE issues ADD COLUMN trial_date VARCHAR(10) NOT NULL DEFAULT ''");$db->exec("ALTER TABLE issues ADD COLUMN reported_on VARCHAR(10) NOT NULL DEFAULT ''");
+$db->exec("ALTER TABLE families ADD COLUMN trial_date VARCHAR(10) NOT NULL DEFAULT ''");$db->exec("ALTER TABLE families ADD COLUMN archived_at VARCHAR(32) NOT NULL DEFAULT ''");$db->exec('ALTER TABLE vault_items ADD COLUMN family_id INT NULL');$db->exec("ALTER TABLE issues ADD COLUMN trial_date VARCHAR(10) NOT NULL DEFAULT ''");$db->exec("ALTER TABLE issues ADD COLUMN reported_on VARCHAR(10) NOT NULL DEFAULT ''");$db->exec('ALTER TABLE archived_customers ADD COLUMN family_archive_id BIGINT NULL');
 q($db,"INSERT INTO lookup_settings(name,value) VALUES ('code_salt',?)",[str_repeat('5a',32)]);
 $c=['db_name'=>'family_test','db_password'=>'fake-db-password','access_password'=>'fake-access-password','db_host'=>'localhost'];
 sheetsPut($db,'config',vaultSeal(json_encode(['url'=>'https://script.google.com/macros/s/test/exec','token'=>str_repeat('t',64)]),sheetsKey($c),'family-sheets-config-v1'));
@@ -187,8 +187,45 @@ try{beginAudit($db,'Fix thử');saveIssue($db,$moving['id'],['revision'=>(int)$o
 q($db,"INSERT INTO members(family_id,email,customer_name,expires_at,plan_months,membership_status) VALUES (?,?,?,?,1,'active')",[$b,'old1@example.com','Khách cũ','2099-01-01']);q($db,"INSERT INTO members(family_id,email,customer_name,expires_at,plan_months,membership_status) VALUES (?,?,?,?,1,'active')",[$ten,'old1@example.com','Bản trùng','2026-01-01']);
 $tenOwner=lookupActiveFamily($db,$ten)['manager_email'];
 $over=lookupHandOver($db,$b,['to_family_id'=>$ten,'expected_manager_email'=>$tenOwner]);check($over['moved']===1&&$over['replaced']===1,'hand-over with overwrite');
-$moved=all($db,'SELECT * FROM members WHERE email=?',['old1@example.com']);check(count($moved)===1&&(int)$moved[0]['family_id']===$ten&&$moved[0]['customer_name']==='Khách cũ'&&$moved[0]['membership_status']==='invited','old record wins as Đã mời, chưa vào');
+$moved=all($db,'SELECT * FROM members WHERE email=?',['old1@example.com']);check(count($moved)===1&&(int)$moved[0]['family_id']===$ten&&$moved[0]['customer_name']==='Khách cũ'&&$moved[0]['membership_status']==='active','old record wins, member status kept');
+$wait=one($db,"SELECT * FROM member_moves WHERE member_id=? AND to_family_id=? AND state='assigned'",[$moved[0]['id'],$ten]);check($wait&&$wait['invite_id']===null&&$wait['from_family_name']==='Family 15'&&(int)$wait['from_family_id']===$b,'hand-over leaves the customer waiting for a link');
 try{lookupHandOver($db,$b,['to_family_id'=>$ten,'expected_manager_email'=>$tenOwner]);check(false,'empty Family refused');}catch(FamilyError $e){check($e->status===409,'empty Family refused');}
 beginAudit($db,'Fix thử');saveIssue($db,$moving['id'],['revision'=>(int)$open['revision'],'status'=>'done','resolution'=>'move','move_family_id'=>$ten]);finishAudit();
 check(one($db,'SELECT resolution_note FROM issues WHERE id=?',[$moving['id']])['resolution_note']==='Đã chuyển khách sang Family 10.'&&$statusOf($b)==='scanned','move keeps Bị quét');
+// ---- Đã fix · Đổi sang mail mới keeps customers in the same Family ----
+beginAudit($db,'Dữ liệu giả');$s16=saveFamilyRecord($db,null,['name'=>'Family 16','manager_email'=>'owner16@example.com'])['id'];finishAudit();
+foreach(['p1@example.com'=>'active','p2@example.com'=>'invited'] as $address=>$state)q($db,"INSERT INTO members(family_id,email,customer_name,expires_at,plan_months,membership_status) VALUES (?,?,?,?,1,?)",[$s16,$address,'Khách '.$address,'2020-01-01',$state]);
+beginAudit($db,'Dữ liệu giả');$oldLink=lookupSaveInvite($db,$s16,null,['label'=>'shop+f16old@gmail.com','url'=>'https://families.google.com/join/promo/f16old','sent_on'=>'2026-11-01'])['id'];finishAudit();
+sleep(1);beginAudit($db,'Báo lỗi thử');$c16=saveIssue($db,null,['family_id'=>$s16,'target_type'=>'manager','title'=>'Bị quét'])['id'];finishAudit();sleep(1);
+$o16=one($db,'SELECT * FROM issues WHERE id=?',[$c16]);
+try{beginAudit($db,'Fix thử');saveIssue($db,$c16,['revision'=>(int)$o16['revision'],'status'=>'done','resolution'=>'replace','replacement_email'=>'owner16-new@example.com','expected_email'=>'owner16@example.com','invite_count'=>6]);finishAudit();check(false,'six mails refused');}catch(FamilyError $e){finishAudit(false);check($e->status===400,'six mails refused');}
+beginAudit($db,'Fix thử');$r16=saveIssue($db,$c16,['revision'=>(int)$o16['revision'],'status'=>'done','resolution'=>'replace','replacement_email'=>'owner16-new@example.com','expected_email'=>'owner16@example.com','invite_count'=>2]);finishAudit();
+check($r16['waiting_customers']===2&&$r16['retired_links']===1&&count($r16['invite_mails']['mails'])===2,'owner change result: '.json_encode($r16));
+check(array_column(all($db,'SELECT membership_status FROM members WHERE family_id=? ORDER BY id',[$s16]),'membership_status')===['active','invited'],'member statuses kept');
+check(one($db,'SELECT retired_at FROM family_invites WHERE id=?',[$oldLink])['retired_at']!==''&&$statusOf($s16)==='active','old link retired, Family active');
+check(count(all($db,"SELECT id FROM member_moves WHERE to_family_id=? AND state='assigned' AND invite_id IS NULL AND from_status='scanned'",[$s16]))===2,'both customers wait for a link');
+$held=array_values(array_filter(lookupAdminState($db)['invites'],fn($i)=>(int)$i['id']===$oldLink));check($held[0]['holder_state']==='retired','admin sees the link as retired');
+// Lấy link mời never brings the old link back; a new link of the new owner goes in, even for an old label.
+$gmailReply=['ok'=>true,'invites'=>[
+    $mail('shop+f16old@gmail.com','https://families.google.com/join/promo/f16old',['owner16@example.com'],'2026-11-01T09:00:00.000Z'),
+    $mail('shop+f16old@gmail.com','https://families.google.com/join/promo/f16again',['owner16-new@example.com'],'2026-11-05T09:00:00.000Z'),
+    $mail($r16['invite_mails']['mails'][0],'https://families.google.com/join/promo/f16new',['owner16-new@example.com'],'2026-11-05T09:01:00.000Z'),
+]];
+$r=$gmail();check($r['added']===2&&$r['updated']===0,'new owner links filed: '.json_encode($r));
+check(count(all($db,"SELECT id FROM family_invites WHERE family_id=? AND retired_at=''",[$s16]))===2&&one($db,'SELECT url FROM family_invites WHERE id=?',[$oldLink])['url']==='https://families.google.com/join/promo/f16old','retired row untouched');
+$code16=(array)lookupAdminState($db)['lookup_codes'];
+$p1=lookupVerify($db,['email'=>'p1@example.com','code'=>$code16['p1@example.com']],'1.1.6.1')['result']['items'][0];
+check($p1['view']==='move'&&$p1['move']['kind']==='move'&&$p1['move']['from_family_name']==='Family 16'&&in_array($p1['move']['invite_url'],['https://families.google.com/join/promo/f16again','https://families.google.com/join/promo/f16new'],true),'expired customer gets a new owner link: '.json_encode($p1['move']));
+$p2=lookupVerify($db,['email'=>'p2@example.com','code'=>$code16['p2@example.com']],'1.1.6.2')['result']['items'][0];
+check($p2['move']['invite_url']!==''&&$p2['move']['invite_url']!==$p1['move']['invite_url'],'second customer, second link');
+// A prepared Family of the new owner hands over its links and Gen mail.
+beginAudit($db,'Dữ liệu giả');$s17=saveFamilyRecord($db,null,['name'=>'Family 17','manager_email'=>'owner17@example.com'])['id'];$s18=saveFamilyRecord($db,null,['name'=>'Family 18','manager_email'=>'owner18@example.com'])['id'];finishAudit();
+q($db,"INSERT INTO members(family_id,email,customer_name,expires_at,plan_months,membership_status) VALUES (?,?,?,?,1,'active')",[$s17,'p3@example.com','Khách 3','2099-01-01']);
+q($db,"INSERT INTO vault_items(payload,revision,created_at,updated_at,family_id) VALUES ('opaque',0,?,?,?)",[stamp(),stamp(),$s18]);
+beginAudit($db,'Dữ liệu giả');$donorLink=lookupSaveInvite($db,$s18,null,['label'=>'shop+f18a@gmail.com','url'=>'https://families.google.com/join/promo/f18a','sent_on'=>'2026-11-05'])['id'];lookupGenerateInviteMails($db,$s18,['count'=>1]);finishAudit();
+sleep(1);beginAudit($db,'Báo lỗi thử');$c17=saveIssue($db,null,['family_id'=>$s17,'target_type'=>'manager','title'=>'Bị quét'])['id'];finishAudit();
+$o17=one($db,'SELECT * FROM issues WHERE id=?',[$c17]);
+beginAudit($db,'Fix thử');$r17=saveIssue($db,$c17,['revision'=>(int)$o17['revision'],'status'=>'done','resolution'=>'replace','replacement_email'=>'owner18@example.com','expected_email'=>'owner17@example.com']);finishAudit();
+check($r17['waiting_customers']===1&&!isset($r17['invite_mails'])&&(int)one($db,'SELECT family_id FROM family_invites WHERE id=?',[$donorLink])['family_id']===$s17&&(int)one($db,'SELECT COUNT(*) AS n FROM invite_mails WHERE family_id=?',[$s17])['n']===1,'donor links and Gen mail come along');
+$p3=lookupVerify($db,['email'=>'p3@example.com','code'=>((array)lookupAdminState($db)['lookup_codes'])['p3@example.com']],'1.1.6.3')['result']['items'][0];check($p3['move']['invite_url']==='https://families.google.com/join/promo/f18a','customer gets the prepared link');
 echo "Sheet codes and Gmail invite checks passed\n";

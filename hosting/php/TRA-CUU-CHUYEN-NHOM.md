@@ -22,12 +22,30 @@ Vào **Thêm → Tra cứu khách → Sửa thông tin** để đặt tên shop,
 
 ## Khách mới tự nhận link (0.24.0)
 
-- Khách có trạng thái thành viên **Đã mời, chưa vào** hoặc **Mua mới** trong một Family đang hoạt động, còn hạn, tra cứu Gmail trên `/tra-cuu.html` sẽ tự nhận **một** link *Sẵn sàng* trong **Link mời vào Family này** của chính Family đó.
+- Khách có trạng thái thành viên **Đã mời, chưa vào** hoặc **Mua mới** trong một Family đang hoạt động (từ 0.26.0 kể cả khách đã quá hạn), tra cứu Gmail trên `/tra-cuu.html` sẽ tự nhận **một** link *Sẵn sàng* trong **Link mời vào Family này** của chính Family đó.
 - Web chọn link còn hạn có ngày gửi sớm nhất. Link được giữ cho khách đó: chưa vào được ngay (kể cả khi bấm *Tôi không vào được*) thì lần tra cứu sau vẫn là link đó, cho tới khi khách được chuyển sang nhóm mới. Link không bao giờ giao cho khách khác. Google gửi lại thư mời cho đúng mail của link đó thì Lấy link mời thay link mới vào chỗ của khách. Link tự được tick **Đã gửi**; trang Family hiện khách trong mục **Khách nhận link vào Family này**.
 - Khách bấm **Tôi đã vào được** (hoặc bạn bấm **Đã vào**) thì khách chuyển sang *Đã vào* và link thành *Đã dùng*.
 - Family hết link thì khách thấy "Shop đang chuẩn bị link vào nhóm". Thêm link (Gen mail mời → Lấy link mời) là khách tra cứu lại sẽ nhận được.
-- Khách đang ở nhóm (*Đã vào*), khách hết hạn hoặc Family đang có sự cố thì không nhận link tự động.
+- Khách đang ở nhóm (*Đã vào*) hoặc Family đang có sự cố thì không nhận link tự động, trừ khách đang **Chờ link** sau khi đổi chủ hoặc Cho khách vào. Từ 0.26.0, khách quá hạn vẫn nhận link vì khách vẫn gia hạn, chỉ chưa chuyển tiền.
 - Link đã đưa cho khách tự có tag **Đã gửi** (từ 0.25.0 không còn ô tick). Khách vào nhóm bằng link nào thì dòng đó hiện Gmail của khách thay cho mail haihoangrr+…. **Thu hồi link** đưa link về Sẵn sàng; link cũ sau **Đổi link** giữ tag Đã gửi, bấm **Đưa lại vào kho** nếu chắc chưa ai dùng.
+
+## Đợt quét: đổi chủ ngay trên Family cũ (0.26.0, nên dùng)
+
+Không cần tạo Family mới. Một đợt quét chỉ còn 3 bước:
+
+1. **Báo lỗi** mail quản lý ở Fix lỗi. Family tự thành **Bị quét**, khách thấy lời nhắn.
+2. Có Gmail chủ mới: **Fix lỗi → Đã fix → Đổi sang mail mới**, nhập Gmail chủ mới. Ô **Gen mail mời cho chủ mới** chọn sẵn số mail bằng số khách (tối đa 5). Bấm Xác nhận. Web sẽ:
+   - đổi mail chủ, đưa Family về **Đang hoạt động**, ngày trial là hôm nay;
+   - giữ nguyên khách và trạng thái thành viên của từng khách; mỗi khách có một dòng **Chờ link · khách tra cứu là nhận** trong mục *Khách nhận link vào Family này*;
+   - bỏ các link và mail mời tạo trước lúc Báo lỗi (của chủ cũ). Link cũ được giữ ẩn để Lấy link mời không nhập lại và không giao cho ai;
+   - trong **Kho**, Family này hiện mail mới và ngày trial là ngày đổi; mật khẩu, 2FA, mail khôi phục và ghi chú để trống để bạn nhập sau;
+   - hiện các mail mời vừa tạo kèm nút **Copy tất cả mail**.
+3. Đăng nhập Gmail chủ mới, mời các mail đó, rồi bấm **Lấy link mời** ở Family (website đang mở thì web cũng tự lấy 10 phút một lần). Khách tra cứu Gmail sẽ thấy hướng dẫn rời nhóm cũ và nút **Vào nhóm mới** với link riêng. Chưa có link thì khách thấy "Shop đang chuẩn bị link cho bạn" và link tự hiện khi có.
+
+Ghi chú:
+- Link và mail mời tạo **sau** lúc Báo lỗi được giữ, vì đó là của chủ mới. Bạn có thể Gen mail và mời trước khi bấm Đã fix.
+- Nếu Gmail chủ mới đã có một Family chuẩn bị sẵn (có Kho, chưa có khách), web dùng Kho và ngày trial của Family đó như trước, và chuyển luôn link và mail mời của nó sang Family này.
+- Muốn tự giao link cho khách đang chờ: dòng của khách → **…** → **Đổi link**. **Thu hồi link** bỏ lượt chờ của khách đó.
 
 ## Đã fix · Cho khách vào (0.25.0)
 
@@ -35,7 +53,7 @@ Khi đã có Family mới thay cho Family bị quét, ở trang Fix lỗi bấm 
 
 - Web lấy **toàn bộ** khách của Family cũ (kể cả khách hết hạn) và chuyển sang Family mới, giữ nguyên tên, Contact, gói, ngày mua, hạn, thanh toán và lịch sử.
 - Nếu Family mới đã có hồ sơ cùng Gmail (ví dụ bạn đã thêm tay), hồ sơ đó bị **ghi đè** bằng hồ sơ ở Family cũ.
-- Khách chuyển sang trạng thái **Đã mời, chưa vào**. Khách còn hạn tra cứu Gmail sẽ tự nhận một link Sẵn sàng của Family mới (link tự có tag Đã gửi). Nên Gen mail mời → mời → Lấy link mời ở Family mới trước hoặc ngay sau đó.
+- Từ 0.26.0 khách giữ nguyên trạng thái thành viên và có dòng **Chờ link** ở Family mới. Khách tra cứu Gmail sẽ tự nhận một link Sẵn sàng của Family mới (link tự có tag Đã gửi), kể cả khách quá hạn. Nên Gen mail mời → mời → Lấy link mời ở Family mới trước hoặc ngay sau đó.
 - Case chuyển sang Đã fix, Family cũ giữ **Bị quét** (không còn khách), web mở trang Family mới.
 - Web dừng và không chuyển ai nếu một khách trùng Gmail chủ Family mới, hoặc Family cũ không còn khách.
 
@@ -44,7 +62,7 @@ Khi đã có Family mới thay cho Family bị quét, ở trang Fix lỗi bấm 
 0. Từ 0.24.0, **Báo lỗi** cho mail quản lý ở mục Fix lỗi sẽ tự đặt Family thành **Bị quét** kèm lời nhắn mẫu, nên khách thấy ngay trên trang tra cứu. Khi case chuyển sang **Đã fix** (đổi sang mail mới hoặc giữ mail), Family tự về **Đang hoạt động**. Mở lại case thì Family lại thành Bị quét. Báo lỗi mail khách không đổi trạng thái Family. Nếu bạn đã tự đặt trạng thái khác (ví dụ *Bị vô hiệu hoá*), báo lỗi không ghi đè trạng thái đó.
 1. Muốn chọn trạng thái hoặc lời nhắn khác: mở Family lỗi → **Đổi trạng thái**, chọn *Đang kiểm tra*, *Bị quét* hoặc *Bị vô hiệu hoá* và viết lời nhắn cho khách. Ô lời nhắn có sẵn câu mẫu khi còn trống.
 2. Ở Family mới: gửi lời mời từ tài khoản chủ tới các mail của bạn (ví dụ `mail+1@gmail.com`, `mail+2@gmail.com`…). Trong email của Google, chuột phải nút **Chấp nhận lời mời** → sao chép link, rồi bấm **+ Thêm link mời** và dán link vào. Nhập ngày gửi để web nhắc khi lời mời sắp hết hạn (Google cho 2 tuần).
-3. Quay lại Family lỗi → **Chuyển khách sang nhóm mới**. Chọn Family mới; web tự ghép mỗi khách còn hạn với một link sẵn sàng. Khách quá hạn mặc định *Không chuyển* và trên trang tra cứu chỉ thấy lời nhắc gia hạn. Có thể đổi link hoặc bỏ chuyển từng khách trước khi xác nhận.
+3. Quay lại Family lỗi → **Chuyển khách sang nhóm mới**. Chọn Family mới; web tự ghép mỗi khách với một link sẵn sàng, kể cả khách quá hạn (từ 0.26.0). Có thể đổi link hoặc chọn *Không chuyển* cho từng khách trước khi xác nhận.
 4. Khách được chuyển ở trạng thái **Đã mời, chưa vào**. Gói, ngày mua, hạn, Contact, thanh toán và lịch sử giữ nguyên. Case Fix lỗi gắn với mail khách được xóa như khi Chuyển Family. Nhật ký ghi thao tác vào nhóm **Chuyển Family**.
 
 ## Theo dõi tiến độ

@@ -66,7 +66,7 @@ check(one($db,'SELECT membership_status FROM members WHERE id=?',[$minh])['membe
 check(array_column(lookupAdminState($db)['invites'],'holder_state')===['used','assigned','ready'],'invite used');
 
 $expired=lookupVerify($db,['email'=>'quocbao@example.com','code'=>$codes['quocbao@example.com']],'1.1.1.2')['result']['items'][0];
-check($expired['view']==='expired'&&$expired['status']==='disabled'&&$expired['move']===null,'expired view');
+check($expired['view']==='incident'&&$expired['status']==='disabled'&&$expired['move']===null,'past expiry still sees the incident');
 
 $moves=lookupAdminState($db)['moves'];$huyMove=array_values(array_filter($moves,fn($m)=>$m['email']==='giahuy@example.com'))[0];
 fails(fn()=>lookupUpdateMove($db,(int)$huyMove['id'],['action'=>'dismiss','revision'=>(int)$huyMove['revision']]),409,'cannot hide an open move');

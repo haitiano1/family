@@ -61,7 +61,7 @@ function issueReusePreparedOwner(PDO $db,array $family,string $replacement,strin
     q($db,'UPDATE vault_items SET family_id=?,revision=revision+1,updated_at=? WHERE id=?',[$family['id'],$now,$vault['id']]);
     // Any old A record still has its original encrypted email and stable ID.
     if($oldVault)q($db,'UPDATE vault_items SET family_id=?,revision=revision+1,updated_at=? WHERE id=?',[$donor['id'],$now,$oldVault['id']]);
-    return ['trial'=>$donor['trial_date']?:today()];
+    return ['trial'=>$donor['trial_date']?:today(),'donor'=>(int)$donor['id']];
 }
 function saveIssue(PDO $db,?int $id,array $d): array {
     $old=$id?one($db,'SELECT * FROM issues WHERE id=?',[$id]):null;if($id&&!$old)fail('Không tìm thấy lỗi.',404);
@@ -74,14 +74,16 @@ function saveIssue(PDO $db,?int $id,array $d): array {
         q($db,'INSERT INTO issues(family_id,family_name,target_type,target_id,subject_email,original_email,title,note,created_at,updated_at,trial_date,reported_on) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)',[$f['id'],$f['name'],$type,$target['id'],$target['email'],$target['email'],$title,$note,$now,$now,$f['trial_date'],today()]);$new=(int)$db->lastInsertId();logEntry($db,"Cá nhân: báo lỗi {$target['email']}: $title");if($type==='manager'&&function_exists('lookupIssueStatus'))lookupIssueStatus($db,(int)$f['id'],'reported');return ['id'=>$new];
     }
     if($old['status']==='done'&&$status!=='done')requireNoOpenIssue($db,$old['family_id'],$old['id']);
-    $subject=$old['subject_email'];$resolution=$old['resolution'];$resolved=$old['resolution_email'];$resolutionNote=$old['resolution_note'];$done=$old['done_at'];
+    $subject=$old['subject_email'];$resolution=$old['resolution'];$resolved=$old['resolution_email'];$resolutionNote=$old['resolution_note'];$done=$old['done_at'];$handover=null;
     if($status==='done'&&$old['status']!=='done'){
         if(!in_array($d['resolution']??'', ['keep','replace','move'],true))fail('Chọn Giữ nguyên mail hoặc Đổi sang mail mới.');$resolution=$d['resolution'];$target=issueTarget($db,$old);
         if($resolution==='replace'){
             $replacement=email($d['replacement_email']??'');if(!$target||$target['email']!==($d['expected_email']??$old['subject_email']))fail('Mail trong Family đã thay đổi hoặc bị xóa. Tải lại để kiểm tra; chưa đổi mail.',409);if($replacement===$target['email'])fail('Mail mới cần khác mail hiện tại.');
             $f=one($db,'SELECT f.*,a.email AS manager_email FROM families f JOIN accounts a ON a.id=f.manager_id WHERE f.id=?',[$old['family_id']]);
             $newTrial='';
-            if($old['target_type']==='manager'){if(one($db,'SELECT id FROM members WHERE family_id=? AND email=?',[$f['id'],$replacement]))fail('Mail mới trùng khách trong Family.',409);$reuse=issueReusePreparedOwner($db,$f,$replacement,$now);if($reuse){$newTrial=$reuse['trial'];}else{$newTrial=(new DateTimeImmutable($now))->setTimezone(new DateTimeZone('Asia/Ho_Chi_Minh'))->format('Y-m-d');q($db,'UPDATE accounts SET email=? WHERE id=?',[$replacement,$target['id']]);q($db,'UPDATE families SET trial_date=? WHERE id=?',[$newTrial,$f['id']]);q($db,'DELETE FROM vault_items WHERE family_id=?',[$f['id']]);}}
+            if($old['target_type']==='manager'){$inviteCount=$d['invite_count']??0;if(!is_int($inviteCount)||$inviteCount<0||$inviteCount>5)fail('Chọn từ 0 đến 5 mail mời.');if(one($db,'SELECT id FROM members WHERE family_id=? AND email=?',[$f['id'],$replacement]))fail('Mail mới trùng khách trong Family.',409);$reuse=issueReusePreparedOwner($db,$f,$replacement,$now);if($reuse){$newTrial=$reuse['trial'];}else{$newTrial=(new DateTimeImmutable($now))->setTimezone(new DateTimeZone('Asia/Ho_Chi_Minh'))->format('Y-m-d');q($db,'UPDATE accounts SET email=? WHERE id=?',[$replacement,$target['id']]);q($db,'UPDATE families SET trial_date=? WHERE id=?',[$newTrial,$f['id']]);q($db,'DELETE FROM vault_items WHERE family_id=?',[$f['id']]);}
+                // Same Family, new owner: customers re-join through the new owner's links.
+                if(function_exists('lookupOwnerReplaced'))$handover=lookupOwnerReplaced($db,(int)$f['id'],$old['created_at'],$reuse['donor']??null,$inviteCount);}
             else{if($replacement===$f['manager_email']||one($db,'SELECT id FROM members WHERE family_id=? AND email=? AND id!=?',[$f['id'],$replacement,$target['id']]))fail('Mail mới đã có trong Family.',409);q($db,'UPDATE members SET email=?,renewal_revision=renewal_revision+1 WHERE id=?',[$replacement,$target['id']]);}
             $resolutionNote="Đã đổi từ {$target['email']} sang $replacement.".($newTrial?' Ngày trial mới: '.implode('/',array_reverse(explode('-',$newTrial))).'. '.(!empty($reuse)?'Đã nhận đầy đủ thông tin Kho của mail mới; mail cũ được giữ trong Family lưu trữ.':'Đã để trống thông tin Kho để nhập lại cho mail mới.'):'');$subject=$replacement;
         }elseif($resolution==='move'){
@@ -95,7 +97,7 @@ function saveIssue(PDO $db,?int $id,array $d): array {
     if($status!==$old['status'])issueOrderForget($db,$old['id'],$old['created_at']);
     q($db,'UPDATE issues SET title=?,note=?,status=?,subject_email=?,resolution=?,resolution_email=?,resolution_note=?,done_at=?,updated_at=?,revision=revision+1 WHERE id=?',[$title,$note,$status,$subject,$resolution,$resolved,$resolutionNote,$done,$now,$id]);logEntry($db,"Cá nhân: lỗi #$id → $status".($resolutionNote?' · '.$resolutionNote:''));
     if($old['target_type']==='manager'&&($status==='done')!==($old['status']==='done')&&!($status==='done'&&$resolution==='move')&&function_exists('lookupIssueStatus'))lookupIssueStatus($db,(int)$old['family_id'],$status==='done'?'resolved':'reported');
-    return ['ok'=>true];
+    return $handover?['ok'=>true,'waiting_customers'=>$handover['waiting'],'retired_links'=>$handover['retired'],...($handover['invite_mails']?['invite_mails'=>$handover['invite_mails']]:[])]:['ok'=>true];
 }
 function deleteIssue(PDO $db,int $id,array $d): array {
     $old=one($db,'SELECT * FROM issues WHERE id=?',[$id]);if(!$old)fail('Không tìm thấy case lỗi.',404);if(!is_int($d['revision']??null)||$d['revision']!==$old['revision']||($d['expected_created_at']??null)!==$old['created_at'])fail('Case đã thay đổi. Tải lại rồi thử lại.',409);if($old['status']!=='done')fail('Chỉ xóa case ở cột Đã fix.');issueOrderForget($db,$old['id'],$old['created_at']);q($db,'DELETE FROM issues WHERE id=?',[$id]);logEntry($db,"Cá nhân: xóa case đã fix {$old['subject_email']} #$id");return ['ok'=>true];
