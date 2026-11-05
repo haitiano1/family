@@ -36,7 +36,7 @@ async function api(path,options={}) {
 }
 const post=(path,data)=>api(path,{method:'POST',body:JSON.stringify(data)});
 const patch=(path,data)=>api(path,{method:'PATCH',body:JSON.stringify(data)});
-async function refresh(render=true) {state=await api('state');if(state.sheets_supported)startSheetSync({api,refresh,toast});if(render)draw();}
+async function refresh(render=true) {state=await api('state');if(state.sheets_supported)startSheetSync({api,refresh,toast,getState:()=>state});if(render)draw();}
 const hero = (eyebrow, title, description, action = '') => `<section class="card hero"><div class="hero-copy"><span class="eyebrow">${eyebrow}</span><h1>${escape(title)}</h1><p>${description}</p></div>${action?`<div class="hero-actions">${action}</div>`:''}</section>`;
 const empty = (title, description, action = '') => `<div class="empty"><div class="empty-icon">${uiIcon('check')}</div><h2>${title}</h2><p>${description}</p>${action}</div>`;
 const stats = entries => `<div class="dashboard-summary stats ${entries.length===3?'stats-three':''}">${entries.map(([name, n]) => `<div class="card stat"><h2>${name}</h2><strong>${escape(n)}</strong></div>`).join('')}</div>`;

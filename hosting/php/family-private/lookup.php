@@ -575,18 +575,35 @@ function lookupCustomerReport(PDO $db,string $address,array $d): array {
     logEntry($db,"Khách $address báo không vào được {$mv['to_family_name']}: $reason".($note!==''?" · $note":''));
     return lookupResult($db,$address);
 }
+// A customer still waiting for a link makes the server read Gmail itself (at most once a minute),
+// so a new invitation reaches the customer page without the shop pressing Lấy link mời.
+function lookupNeedsLink(array $result): bool {
+    foreach($result['items']??[] as $i)if($i['view']==='waiting'||($i['view']==='move'&&($i['move']['invite_url']??'')===''))return true;
+    return false;
+}
+function lookupAutoImport(PDO &$db,array $c): bool {
+    if(!function_exists('sheetsGmailInvites')||!function_exists('sheetsSettings'))return false;
+    try{if(!sheetsSettings($db,$c))return false;}catch(Throwable $e){return false;}
+    if(lookupMs()-(int)lookupStored($db,'gmail_auto_at')<60000)return false;
+    lookupStore($db,'gmail_auto_at',(string)lookupMs());
+    try{$r=sheetsGmailInvites($db,$c,$GLOBALS['family_gmail_transport']??null);return ($r['added']??0)+($r['updated']??0)>0;}catch(Throwable $e){error_log('Automatic Gmail invite import failed.');return false;}
+}
+function lookupWithFreshLinks(PDO &$db,array $c,array $result): array {
+    return lookupNeedsLink($result)&&lookupAutoImport($db,$c)?lookupResult($db,$result['email']):$result;
+}
 function lookupCookie(array $c,string $token,int $age): void {
     setcookie('fam_lookup',$token,['expires'=>$age>0?time()+$age:1,'path'=>'/api/lookup','secure'=>$c['secure'],'httponly'=>true,'samesite'=>'Strict']);
 }
 // Public routes run before the access-password check. Sign-in is outside the audit
 // transaction so its attempt counter survives an error answer.
 function lookupRequest(PDO $db,array $c,string $route,string $method): never {
+    // $db is passed by reference below: the Gmail read may reconnect to MySQL.
     if($route==='/api/lookup/info'&&$method==='GET')reply(['shop'=>lookupSettings($db)]);
-    if($route==='/api/lookup/verify'&&$method==='POST'){$r=lookupVerify($db,body(),(string)($_SERVER['REMOTE_ADDR']??''));lookupCookie($c,$r['token'],3600);reply($r['result']);}
+    if($route==='/api/lookup/verify'&&$method==='POST'){$r=lookupVerify($db,body(),(string)($_SERVER['REMOTE_ADDR']??''));lookupCookie($c,$r['token'],3600);reply(lookupWithFreshLinks($db,$c,$r['result']));}
     $token=$_COOKIE['fam_lookup']??'';
     if($route==='/api/lookup/logout'&&$method==='POST'){if(is_string($token)&&preg_match('/^[a-f0-9]{64}$/D',$token))q($db,'DELETE FROM lookup_sessions WHERE token_hash=?',[hash('sha256',$token)]);lookupCookie($c,'',0);reply(['ok'=>true]);}
     $address=lookupSessionEmail($db,$token);
-    if($route==='/api/lookup/me'&&$method==='GET')reply($address?lookupResult($db,$address):['signed_in'=>false]);
+    if($route==='/api/lookup/me'&&$method==='GET')reply($address?lookupWithFreshLinks($db,$c,lookupResult($db,$address)):['signed_in'=>false]);
     if(!$address)fail('Phiên tra cứu đã hết. Nhập lại Gmail và mã tra cứu.',401);
     $actions=['/api/lookup/open'=>['Khách mở link mời','lookupCustomerOpen'],'/api/lookup/joined'=>['Khách xác nhận vào nhóm','lookupCustomerJoined'],'/api/lookup/report'=>['Khách báo lỗi vào nhóm','lookupCustomerReport'],'/api/lookup/problem'=>['Khách báo mất Premium','lookupCustomerProblem']];
     if(isset($actions[$route])&&$method==='POST'){$d=body();beginAudit($db,$actions[$route][0],'Khách tra cứu');reply($actions[$route][1]($db,$address,$d));}

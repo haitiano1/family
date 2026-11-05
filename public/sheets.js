@@ -84,9 +84,11 @@ export function startSheetSync(context){
   },30000);
   updateHeader();
 }
-// Every 10 minutes while the website is open, file new invite links from Gmail (Apps Script v5.8+).
+// While the website is open, file new invite links from Gmail (Apps Script v5.8+): every 10 minutes,
+// or every minute while Gen mail mời addresses still wait for their link.
+const pendingMails=()=>{const app=ctx.getState?.();return !!app&&(app.invite_mails||[]).some(m=>!(app.invites||[]).some(i=>String(i.label).toLowerCase()===m.email));};
 async function gmailCheck(){
-  if(!state?.configured||!state.gmail_invites||busy||document.querySelector('dialog[open]')||Date.now()-lastGmail<600000)return;
+  if(!state?.configured||!state.gmail_invites||busy||document.querySelector('dialog[open]')||Date.now()-lastGmail<(pendingMails()?60000:600000))return;
   lastGmail=Date.now();
   try{const result=await ctx.api('sheets/gmail-invites',{method:'POST',body:'{}'});if(result.added||result.updated){ctx.toast(gmailSummary(result),9000);await ctx.refresh(false);document.dispatchEvent(new Event('family-sheet-updated'));}}catch{}
 }

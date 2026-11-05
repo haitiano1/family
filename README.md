@@ -1,4 +1,6 @@
-# Hải Premium — Quản lý khách hàng 0.28.1
+# Hải Premium — Quản lý khách hàng 0.28.2
+
+Bản 0.28.2: **tự lấy link mời**. Khách đang chờ link mở trang tra cứu thì máy chủ tự đọc Gmail (tối đa một lần mỗi phút), nên mời xong là link tự hiện cho khách, không cần bấm Lấy link mời. Trang quản lý đang mở cũng tự kiểm tra Gmail mỗi phút khi còn mail chờ lấy link.
 
 Bản 0.28.1: trang tra cứu dùng lời văn shop đã sửa, không hiện tên Family cho khách (thẻ cuối hiện Gmail của khách), và giao link là xong: bỏ bước Hoàn tất, nút Tôi đã vào được / Tôi không vào được và nút Đã vào.
 
