@@ -63,12 +63,10 @@ main { padding-top: 22px; padding-bottom: 32px; display: flex; flex-direction: c
 .fill { position: absolute; inset: 0 auto 0 0; width: calc(var(--p, 0) * 1%); border-radius: inherit; background: var(--go); transition: width 1.6s cubic-bezier(.22, .8, .24, 1); overflow: hidden; }
 .fill::after { content: ""; position: absolute; inset: 0; background: linear-gradient(100deg, transparent 20%, rgba(255, 255, 255, .45) 45%, transparent 70%); transform: translateX(-100%); animation: shine 2.4s ease-in-out infinite; }
 .status.warn .fill { background: var(--warn); }
-.runner { position: absolute; top: 0; left: clamp(30px, calc(var(--p, 0) * 1%), calc(100% - 30px)); width: 66px; height: 73px; transform: translateX(-50%); transition: left 1.6s cubic-bezier(.22, .8, .24, 1); pointer-events: none; }
+.runner { position: absolute; top: 0; left: calc(var(--p, 0) * 1%); width: 66px; height: 73px; transform: translateX(-50%); transition: left 1.6s cubic-bezier(.22, .8, .24, 1); pointer-events: none; }
 .runner svg { display: block; width: 66px; height: 73px; overflow: visible; }
 .labels { display: grid; grid-template-columns: repeat(var(--n, 5), minmax(0, 1fr)); margin-top: 10px; font-size: 12px; line-height: 1.3; color: var(--soft); }
 .labels span { text-align: center; padding: 0 2px; }
-.labels span:first-child { text-align: left; }
-.labels span:last-child { text-align: right; }
 .labels .done { color: var(--go-deep); font-weight: 600; }
 .labels .now { color: var(--ink); font-weight: 750; }
 
@@ -123,7 +121,7 @@ main { padding-top: 22px; padding-bottom: 32px; display: flex; flex-direction: c
 .later h3 { color: var(--soft); font-weight: 650; }
 .step-time { flex: none; color: var(--soft); font-size: 12px; }
 .step p { color: var(--muted); font-size: 14px; overflow-wrap: anywhere; white-space: pre-line; }
-.now-chip { display: inline-flex; align-items: center; padding: 2px 9px; border-radius: 999px; background: var(--go-tint); color: var(--go-deep); font-size: 12px; font-weight: 700; }
+.now-chip { flex: none; white-space: nowrap; display: inline-flex; align-items: center; padding: 2px 9px; border-radius: 999px; background: var(--go-tint); color: var(--go-deep); font-size: 12px; font-weight: 700; }
 .warn-step .now-chip { background: var(--warn-tint); color: var(--warn-ink); }
 .step-body { display: grid; gap: 14px; margin-top: 10px; }
 @keyframes ring { 70% { box-shadow: 0 0 0 9px rgba(34, 197, 94, 0); } 100% { box-shadow: 0 0 0 0 rgba(34, 197, 94, 0); } }
