@@ -11,6 +11,8 @@ const LOOKUP_BACKUP_TABLES=['family_statuses','family_invites','member_moves','l
 // Gen mail mời: random tag after "+" on the shop's Gmail, e.g. haihoangrr+k7p2qx@gmail.com.
 const LOOKUP_INVITE_MAIL_ALPHABET='abcdefghjkmnpqrstuvwxyz23456789';
 const LOOKUP_INVITE_MAIL_MAX=5;
+// The shop Gmail that receives every invitation (the Apps Script mailbox).
+const LOOKUP_INVITE_MAIL_INBOX='haihoangrr@gmail.com';
 const LOOKUP_CODE_ALPHABET='ABCDEFGHJKMNPQRSTUVWXYZ23456789';
 const LOOKUP_SETTING_NAMES=['shop_name','contact_url','contact_label','help_text'];
 const LOOKUP_WINDOW_MS=900000,LOOKUP_EMAIL_LIMIT=8,LOOKUP_IP_LIMIT=40,LOOKUP_SESSION_MS=3600000,LOOKUP_MOVE_LIMIT=50;
@@ -98,9 +100,17 @@ function lookupRotateCode(PDO $db,array $d): array {
     });
 }
 
-function lookupSetting(PDO $db,string $name): string {return (string)(one($db,'SELECT value FROM lookup_settings WHERE name=?',[$name])['value']??'');}
-function lookupPutSetting(PDO $db,string $name,string $value): void {
-    if(one($db,'SELECT id FROM lookup_settings WHERE name=?',[$name]))q($db,'UPDATE lookup_settings SET value=? WHERE name=?',[$value,$name]);else q($db,'INSERT INTO lookup_settings(name,value) VALUES (?,?)',[$name,$value]);
+// Fix lỗi drives the status customers see: reporting the owner Gmail marks an active Family
+// "Bị quét"; completing the case (or keeping the mail) puts it back to "Đang hoạt động".
+function lookupAutoScannedNote(string $name): string {return "$name bị Google quét nên một số thành viên có thể mất Premium. Shop đang xử lý và sẽ cập nhật tại đây; hạn dùng của bạn giữ nguyên.";}
+function lookupIssueStatus(PDO $db,int $familyId,string $event): void {
+    $f=lookupActiveFamily($db,$familyId);if(!$f)return;
+    $old=one($db,'SELECT * FROM family_statuses WHERE family_id=?',[$f['id']]);$current=$old['status']??'active';
+    if($event==='reported'?$current!=='active':$current==='active')return;
+    $next=$event==='reported'?'scanned':'active';$note=$event==='reported'?lookupAutoScannedNote($f['name']):'';
+    if($old)q($db,'UPDATE family_statuses SET status=?,note=?,updated_at=?,revision=revision+1 WHERE family_id=?',[$next,$note,lookupNow(),$f['id']]);
+    else q($db,'INSERT INTO family_statuses(family_id,status,note,updated_at,revision) VALUES (?,?,?,?,1)',[$f['id'],$next,$note,lookupNow()]);
+    logEntry($db,'Tự động: đặt trạng thái '.$f['name'].' là '.LOOKUP_STATUS_LABELS[$next].($event==='reported'?' khi báo lỗi mail quản lý':' khi hoàn tất Fix lỗi'));
 }
 function lookupInviteMailBase(string $address): string {
     $at=strrpos($address,'@');if($at===false||$at===0)return '';$local=explode('+',substr($address,0,$at))[0];return $local===''?'':$local.substr($address,$at);
@@ -110,7 +120,7 @@ function lookupInviteMailBase(string $address): string {
 function lookupGenerateInviteMails(PDO $db,int $familyId,array $d): array {
     $f=lookupActiveFamily($db,$familyId);if(!$f)fail('Không tìm thấy Family đang hoạt động.',404);
     $count=$d['count']??null;if(!is_int($count)||$count<1||$count>LOOKUP_INVITE_MAIL_MAX)fail('Chọn từ 1 đến 5 mail mời.');
-    $base=lookupInviteMailBase(email($d['base_email']??''));if($base==='')fail('Nhập Gmail nhận lời mời, ví dụ tenban@gmail.com.');
+    $base=($d['base_email']??'')!==''?lookupInviteMailBase(email($d['base_email'])):LOOKUP_INVITE_MAIL_INBOX;if($base==='')fail('Gmail nhận lời mời không hợp lệ.');
     if($base===lookupInviteMailBase($f['manager_email']))fail('Gmail nhận lời mời phải khác mail chủ của Family này.');
     return transaction($db,function()use($db,$f,$count,$base){
         $taken=array_fill_keys(array_column(all($db,'SELECT email FROM invite_mails'),'email'),true);foreach(all($db,'SELECT label FROM family_invites') as $r)$taken[strtolower($r['label'])]=true;
@@ -120,7 +130,6 @@ function lookupGenerateInviteMails(PDO $db,int $familyId,array $d): array {
             $address=substr($base,0,$at).'+'.$tag.substr($base,$at);if(isset($taken[$address]))continue;$taken[$address]=true;$mails[]=$address;
         }
         $time=lookupNow();foreach($mails as $address)q($db,'INSERT INTO invite_mails(family_id,email,created_at) VALUES (?,?,?)',[$f['id'],$address,$time]);
-        lookupPutSetting($db,'invite_base_email',$base);
         logEntry($db,"Cá nhân: tạo $count mail mời cho {$f['name']}: ".implode(', ',$mails));
         return ['ok'=>true,'family_id'=>(int)$f['id'],'family_name'=>$f['name'],'base_email'=>$base,'mails'=>$mails];
     });
@@ -184,8 +193,11 @@ function lookupImportInvites(PDO $db,array $items): array {
         if($m['moved']!=='')$mismatched[$m['to']]=['email'=>$m['to'],'generated_for'=>$m['moved'],'invited_by'=>$f['name']];
         if(one($db,'SELECT id FROM family_invites WHERE url=?',[$m['url']])){$out['unchanged']++;continue;}
         $old=one($db,'SELECT * FROM family_invites WHERE family_id=? AND label=? ORDER BY id DESC LIMIT 1',[$f['id'],$m['to']]);
-        // A link someone joined with, or one ticked as sent to a customer, is kept as it is.
-        if($old&&$old['sent_at']===''&&lookupInviteHolder(lookupInviteRefs($db,(int)$old['id']))['state']!=='used'){
+        // A link someone joined with, or one ticked as sent by hand, is kept as it is. A link held
+        // for a customer (handed out on lookup or by a move) takes the newer link, so that customer
+        // keeps the same slot and sees a working link until they move to another group.
+        $holder=$old?lookupInviteHolder(lookupInviteRefs($db,(int)$old['id']))['state']:'';
+        if($old&&$holder!=='used'&&($holder==='assigned'||$old['sent_at']==='')){
             if($old['sent_on']!==''&&$old['sent_on']>$m['date']){$out['unchanged']++;continue;}
             q($db,'UPDATE family_invites SET url=?,sent_on=?,revision=revision+1,updated_at=? WHERE id=?',[$m['url'],$m['date'],lookupNow(),$old['id']]);
             logEntry($db,"Cá nhân: đổi link mời {$m['to']} của {$f['name']} theo thư mới trong Gmail");$out['updated']++;
@@ -301,23 +313,41 @@ function lookupAdminState(PDO $db): array {
     $codes=[];foreach(all($db,'SELECT DISTINCT email FROM members') as $r)$codes[$r['email']]=lookupCodeFor($db,$r['email'],$salt);
     // Gmail import needs the Google Sheet connection (same Apps Script). Plain query: no DDL inside the state audit.
     $gmail=false;$mailbox='';try{$gmail=(bool)one($db,"SELECT name FROM family_sheet_state WHERE name='config'");$row=one($db,"SELECT value FROM family_sheet_state WHERE name='gmail_mailbox'");$mailbox=$row?(string)json_decode($row['value'],true):'';}catch(Throwable $e){}
-    $base=lookupSetting($db,'invite_base_email');
-    return ['lookup_supported'=>true,'gmail_import'=>$gmail,'gmail_mailbox'=>$mailbox,'invite_base_email'=>$base!==''?$base:lookupInviteMailBase($mailbox),'invite_mails'=>array_map(fn($r)=>[...$r,'id'=>(int)$r['id'],'family_id'=>(int)$r['family_id']],all($db,'SELECT id,family_id,email,created_at FROM invite_mails ORDER BY id')),'lookup_settings'=>lookupSettings($db),'family_statuses'=>all($db,'SELECT family_id,status,note,updated_at,revision FROM family_statuses'),'invites'=>$invites,'moves'=>$moves,'lookup_codes'=>(object)$codes];
+    return ['lookup_supported'=>true,'gmail_import'=>$gmail,'gmail_mailbox'=>$mailbox,'invite_base_email'=>LOOKUP_INVITE_MAIL_INBOX,'invite_mails'=>array_map(fn($r)=>[...$r,'id'=>(int)$r['id'],'family_id'=>(int)$r['family_id']],all($db,'SELECT id,family_id,email,created_at FROM invite_mails ORDER BY id')),'lookup_settings'=>lookupSettings($db),'family_statuses'=>all($db,'SELECT family_id,status,note,updated_at,revision FROM family_statuses'),'invites'=>$invites,'moves'=>$moves,'lookup_codes'=>(object)$codes];
 }
 
 // ---- Public lookup (customer) ----
+// A customer of this Family who has not joined yet ("Đã mời, chưa vào" or "Mua mới") gets one
+// ready link of the Family's own pool the first time they look up their Gmail. The link is
+// held for them (never handed to anyone else) and ticked Đã gửi.
+function lookupJoinable(array $m): bool {return in_array($m['membership_status'],['invited','new'],true);}
+function lookupAllocateJoin(PDO $db,array $m,array $status,array $period): bool {
+    if(!lookupJoinable($m)||$status['status']!=='active'||$period['expiry_status']==='expired')return false;
+    if(one($db,"SELECT id FROM member_moves WHERE member_id=? AND to_family_id=? AND state<>'cancelled'",[$m['id'],$m['family_id']]))return false;
+    $f=lookupActiveFamily($db,(int)$m['family_id']);if(!$f)return false;$today=today();$invite=null;
+    foreach(all($db,"SELECT * FROM family_invites WHERE family_id=? AND sent_at='' ORDER BY CASE WHEN sent_on='' THEN 1 ELSE 0 END,sent_on,id",[$f['id']]) as $i)if(lookupInviteHolder(lookupInviteRefs($db,(int)$i['id']))['state']==='ready'&&($i['sent_on']===''||lookupInviteExpiry($i['sent_on'])>=$today)){$invite=$i;break;}
+    if(!$invite)return false;
+    $time=lookupNow();
+    q($db,"INSERT INTO member_moves(member_id,email,customer_name,from_family_id,from_family_name,from_status,from_note,to_family_id,to_family_name,invite_id,invite_label,state,created_at,updated_at) VALUES (?,?,?,NULL,'','active','',?,?,?,?,'assigned',?,?)",[$m['id'],$m['email'],$m['customer_name'],$f['id'],$f['name'],$invite['id'],$invite['label'],$time,$time]);
+    q($db,'UPDATE family_invites SET sent_at=?,revision=revision+1,updated_at=? WHERE id=?',[$time,$time,$invite['id']]);
+    logEntry($db,'Tự động: giao link mời '.($invite['label']?:'#'.$invite['id'])." của {$f['name']} cho {$m['email']} khi khách tra cứu");
+    return true;
+}
 function lookupResult(PDO $db,string $address): array {
     $items=[];
     foreach(all($db,"SELECT m.*,f.name AS family_name FROM members m JOIN families f ON f.id=m.family_id WHERE m.email=? AND f.archived_at='' ORDER BY m.id",[$address]) as $m){
-        $status=lookupStatusRow($db,(int)$m['family_id']);$period=expiry($m['expires_at']);
+        $status=lookupStatusRow($db,(int)$m['family_id']);$period=expiry($m['expires_at']);$allocated=lookupAllocateJoin($db,$m,$status,$period);
         $latest=one($db,"SELECT * FROM member_moves WHERE member_id=? AND state<>'cancelled' AND dismissed_at='' ORDER BY id DESC LIMIT 1",[$m['id']]);$move=null;
         if($latest&&$latest['to_family_id']!==null&&(int)$latest['to_family_id']===(int)$m['family_id']){
             $open=in_array($latest['state'],LOOKUP_OPEN_STATES,true);$invite=$open&&$latest['invite_id']!==null?one($db,'SELECT * FROM family_invites WHERE id=?',[$latest['invite_id']]):false;
+            // A link shown to its customer is ticked Đã gửi, so it is never handed to someone else.
+            if($invite&&$invite['sent_at']==='')q($db,'UPDATE family_invites SET sent_at=?,revision=revision+1,updated_at=? WHERE id=?',[lookupNow(),lookupNow(),$invite['id']]);
             $source=$latest['from_family_id']!==null&&lookupActiveFamily($db,(int)$latest['from_family_id'])?lookupStatusRow($db,(int)$latest['from_family_id']):null;
-            $move=['id'=>(int)$latest['id'],'state'=>$latest['state'],'from_family_name'=>$latest['from_family_name'],'from_status'=>$source?$source['status']:$latest['from_status'],'from_note'=>$source?$source['note']:$latest['from_note'],'invite_url'=>$invite?$invite['url']:'','invite_expires_on'=>$invite?lookupInviteExpiry($invite['sent_on']):'','report_reason'=>$latest['report_reason'],'reported_at'=>$latest['reported_at'],'opened_at'=>$latest['opened_at'],'joined_at'=>$latest['joined_at']];
+            $move=['id'=>(int)$latest['id'],'kind'=>$latest['from_family_id']===null&&$latest['from_family_name']===''?'join':'move','state'=>$latest['state'],'from_family_name'=>$latest['from_family_name'],'from_status'=>$source?$source['status']:$latest['from_status'],'from_note'=>$source?$source['note']:$latest['from_note'],'invite_url'=>$invite?$invite['url']:'','invite_expires_on'=>$invite?lookupInviteExpiry($invite['sent_on']):'','report_reason'=>$latest['report_reason'],'reported_at'=>$latest['reported_at'],'opened_at'=>$latest['opened_at'],'joined_at'=>$latest['joined_at']];
         }
-        $view=$move&&in_array($move['state'],LOOKUP_OPEN_STATES,true)?'move':(in_array($status['status'],LOOKUP_PROBLEM_STATUSES,true)?($period['expiry_status']==='expired'?'expired':'incident'):($period['expiry_status']==='expired'?'expired':'normal'));
-        $items[]=['customer_name'=>$m['customer_name'],'family_name'=>$m['family_name'],'plan_months'=>(int)$m['plan_months'],'expires_at'=>$m['expires_at'],...$period,'membership_status'=>$m['membership_status'],'status'=>$status['status'],'status_note'=>$status['note'],'status_updated_at'=>$status['updated_at'],'view'=>$view,'move'=>$move];
+        $waiting=!$allocated&&!$move&&lookupJoinable($m)&&$status['status']==='active'&&$period['expiry_status']!=='expired';
+        $view=$move&&in_array($move['state'],LOOKUP_OPEN_STATES,true)?'move':(in_array($status['status'],LOOKUP_PROBLEM_STATUSES,true)?($period['expiry_status']==='expired'?'expired':'incident'):($period['expiry_status']==='expired'?'expired':($waiting?'waiting':'normal')));
+        $items[]=['family_name'=>$m['family_name'],'plan_months'=>(int)$m['plan_months'],'expires_at'=>$m['expires_at'],...$period,'membership_status'=>$m['membership_status'],'status'=>$status['status'],'status_note'=>$status['note'],'status_updated_at'=>$status['updated_at'],'view'=>$view,'move'=>$move];
     }
     return ['email'=>$address,'today'=>today(),'shop'=>lookupSettings($db),'items'=>$items];
 }

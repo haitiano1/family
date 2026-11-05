@@ -10,7 +10,7 @@ Khi mail chủ Family gặp sự cố (bị quét, bị vô hiệu hoá…), kh�
 
 ## Trang cho khách
 
-Địa chỉ: `https://tên-miền-của-bạn/tra-cuu.html`. Trang này không cần mật khẩu truy cập website. Khách chỉ thấy thông tin của chính mình: tên Family, trạng thái, lời nhắn của shop, hạn dùng và link vào nhóm mới. Trang không hiện mail chủ Family hay mail của khách khác.
+Địa chỉ: `https://tên-miền-của-bạn/tra-cuu.html`. Trang này không cần mật khẩu truy cập website. Khách chỉ thấy thông tin của chính mình: lời chào kèm Gmail, tên Family, trạng thái, lời nhắn của shop, hạn dùng và link vào nhóm. Trang không hiện tên khách bạn đặt trong web, mail chủ Family hay mail của khách khác.
 
 Mỗi Gmail khách có một **mã tra cứu 6 ký tự** cố định. Từ 0.22.0, mã hiện ngay dưới Gmail của khách, kèm nút copy. Tab Google Sheet `FamilySync_MaTraCuu` liệt kê mã của từng khách và đồng bộ hai chiều (xem integrations/google-sheets/MA-TRA-CUU-VA-GMAIL.md). Menu **…** của khách → **Copy link tra cứu** vẫn copy tin nhắn đầy đủ. Nội dung copy gồm link riêng có sẵn mã (`/tra-cuu.html#ma=…`), Gmail và mã. Nên gửi cho khách lúc bán hoặc gia hạn, để khi nhóm lỗi khách tự vào xem.
 
@@ -20,9 +20,19 @@ Mỗi Gmail khách có một **mã tra cứu 6 ký tự** cố định. Từ 0.2
 
 Vào **Thêm → Tra cứu khách → Sửa thông tin** để đặt tên shop, link liên hệ (Messenger, Zalo…) và ghi chú hiển thị cho khách.
 
+## Khách mới tự nhận link (0.24.0)
+
+- Khách có trạng thái thành viên **Đã mời, chưa vào** hoặc **Mua mới** trong một Family đang hoạt động, còn hạn, tra cứu Gmail trên `/tra-cuu.html` sẽ tự nhận **một** link *Sẵn sàng* trong **Link mời vào Family này** của chính Family đó.
+- Web chọn link còn hạn có ngày gửi sớm nhất. Link được giữ cho khách đó: chưa vào được ngay (kể cả khi bấm *Tôi không vào được*) thì lần tra cứu sau vẫn là link đó, cho tới khi khách được chuyển sang nhóm mới. Link không bao giờ giao cho khách khác. Google gửi lại thư mời cho đúng mail của link đó thì Lấy link mời thay link mới vào chỗ của khách. Link tự được tick **Đã gửi**; trang Family hiện khách trong mục **Khách nhận link vào Family này**.
+- Khách bấm **Tôi đã vào được** (hoặc bạn bấm **Đã vào**) thì khách chuyển sang *Đã vào* và link thành *Đã dùng*.
+- Family hết link thì khách thấy "Shop đang chuẩn bị link vào nhóm". Thêm link (Gen mail mời → Lấy link mời) là khách tra cứu lại sẽ nhận được.
+- Khách đang ở nhóm (*Đã vào*), khách hết hạn hoặc Family đang có sự cố thì không nhận link tự động.
+- Mọi link khách đã xem trên trang tra cứu, kể cả link chuyển nhóm, đều tự tick **Đã gửi**. Thu hồi link đó thì link giữ dấu Đã gửi; bỏ tick nếu chắc khách chưa dùng.
+
 ## Khi Family gặp sự cố
 
-1. Mở Family lỗi → **Đổi trạng thái**: chọn *Đang kiểm tra*, *Bị quét* hoặc *Bị vô hiệu hoá* và viết lời nhắn cho khách. Ô lời nhắn có sẵn câu mẫu khi còn trống.
+0. Từ 0.24.0, **Báo lỗi** cho mail quản lý ở mục Fix lỗi sẽ tự đặt Family thành **Bị quét** kèm lời nhắn mẫu, nên khách thấy ngay trên trang tra cứu. Khi case chuyển sang **Đã fix** (đổi sang mail mới hoặc giữ mail), Family tự về **Đang hoạt động**. Mở lại case thì Family lại thành Bị quét. Báo lỗi mail khách không đổi trạng thái Family. Nếu bạn đã tự đặt trạng thái khác (ví dụ *Bị vô hiệu hoá*), báo lỗi không ghi đè trạng thái đó.
+1. Muốn chọn trạng thái hoặc lời nhắn khác: mở Family lỗi → **Đổi trạng thái**, chọn *Đang kiểm tra*, *Bị quét* hoặc *Bị vô hiệu hoá* và viết lời nhắn cho khách. Ô lời nhắn có sẵn câu mẫu khi còn trống.
 2. Ở Family mới: gửi lời mời từ tài khoản chủ tới các mail của bạn (ví dụ `mail+1@gmail.com`, `mail+2@gmail.com`…). Trong email của Google, chuột phải nút **Chấp nhận lời mời** → sao chép link, rồi bấm **+ Thêm link mời** và dán link vào. Nhập ngày gửi để web nhắc khi lời mời sắp hết hạn (Google cho 2 tuần).
 3. Quay lại Family lỗi → **Chuyển khách sang nhóm mới**. Chọn Family mới; web tự ghép mỗi khách còn hạn với một link sẵn sàng. Khách quá hạn mặc định *Không chuyển* và trên trang tra cứu chỉ thấy lời nhắc gia hạn. Có thể đổi link hoặc bỏ chuyển từng khách trước khi xác nhận.
 4. Khách được chuyển ở trạng thái **Đã mời, chưa vào**. Gói, ngày mua, hạn, Contact, thanh toán và lịch sử giữ nguyên. Case Fix lỗi gắn với mail khách được xóa như khi Chuyển Family. Nhật ký ghi thao tác vào nhóm **Chuyển Family**.

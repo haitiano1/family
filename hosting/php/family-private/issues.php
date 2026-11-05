@@ -71,7 +71,7 @@ function saveIssue(PDO $db,?int $id,array $d): array {
     if(!$old){
         if($status!=='todo')fail('Lỗi mới bắt đầu ở Chờ fix.');$f=one($db,'SELECT * FROM families WHERE id=?',[(int)($d['family_id']??0)]);if(!$f||$f['archived_at'])fail('Chọn Family đang tồn tại.');requireNoOpenIssue($db,$f['id']);$type=$d['target_type']??'manager';if(!in_array($type,['manager','member'],true))fail('Chọn mail gặp lỗi.');
         $target=$type==='manager'?one($db,'SELECT * FROM accounts WHERE id=?',[$f['manager_id']]):one($db,'SELECT * FROM members WHERE id=? AND family_id=?',[(int)($d['target_id']??0),$f['id']]);if(!$target)fail('Mail khách không thuộc Family này.');
-        q($db,'INSERT INTO issues(family_id,family_name,target_type,target_id,subject_email,original_email,title,note,created_at,updated_at,trial_date,reported_on) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)',[$f['id'],$f['name'],$type,$target['id'],$target['email'],$target['email'],$title,$note,$now,$now,$f['trial_date'],today()]);$new=(int)$db->lastInsertId();logEntry($db,"Cá nhân: báo lỗi {$target['email']}: $title");return ['id'=>$new];
+        q($db,'INSERT INTO issues(family_id,family_name,target_type,target_id,subject_email,original_email,title,note,created_at,updated_at,trial_date,reported_on) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)',[$f['id'],$f['name'],$type,$target['id'],$target['email'],$target['email'],$title,$note,$now,$now,$f['trial_date'],today()]);$new=(int)$db->lastInsertId();logEntry($db,"Cá nhân: báo lỗi {$target['email']}: $title");if($type==='manager'&&function_exists('lookupIssueStatus'))lookupIssueStatus($db,(int)$f['id'],'reported');return ['id'=>$new];
     }
     if($old['status']==='done'&&$status!=='done')requireNoOpenIssue($db,$old['family_id'],$old['id']);
     $subject=$old['subject_email'];$resolution=$old['resolution'];$resolved=$old['resolution_email'];$resolutionNote=$old['resolution_note'];$done=$old['done_at'];
@@ -88,7 +88,9 @@ function saveIssue(PDO $db,?int $id,array $d): array {
         $resolved=$subject;$done=$now;
     }elseif($status!=='done'){$resolution='';$resolved='';$resolutionNote='';$done='';}
     if($status!==$old['status'])issueOrderForget($db,$old['id'],$old['created_at']);
-    q($db,'UPDATE issues SET title=?,note=?,status=?,subject_email=?,resolution=?,resolution_email=?,resolution_note=?,done_at=?,updated_at=?,revision=revision+1 WHERE id=?',[$title,$note,$status,$subject,$resolution,$resolved,$resolutionNote,$done,$now,$id]);logEntry($db,"Cá nhân: lỗi #$id → $status".($resolutionNote?' · '.$resolutionNote:''));return ['ok'=>true];
+    q($db,'UPDATE issues SET title=?,note=?,status=?,subject_email=?,resolution=?,resolution_email=?,resolution_note=?,done_at=?,updated_at=?,revision=revision+1 WHERE id=?',[$title,$note,$status,$subject,$resolution,$resolved,$resolutionNote,$done,$now,$id]);logEntry($db,"Cá nhân: lỗi #$id → $status".($resolutionNote?' · '.$resolutionNote:''));
+    if($old['target_type']==='manager'&&($status==='done')!==($old['status']==='done')&&function_exists('lookupIssueStatus'))lookupIssueStatus($db,(int)$old['family_id'],$status==='done'?'resolved':'reported');
+    return ['ok'=>true];
 }
 function deleteIssue(PDO $db,int $id,array $d): array {
     $old=one($db,'SELECT * FROM issues WHERE id=?',[$id]);if(!$old)fail('Không tìm thấy case lỗi.',404);if(!is_int($d['revision']??null)||$d['revision']!==$old['revision']||($d['expected_created_at']??null)!==$old['created_at'])fail('Case đã thay đổi. Tải lại rồi thử lại.',409);if($old['status']!=='done')fail('Chỉ xóa case ở cột Đã fix.');issueOrderForget($db,$old['id'],$old['created_at']);q($db,'DELETE FROM issues WHERE id=?',[$id]);logEntry($db,"Cá nhân: xóa case đã fix {$old['subject_email']} #$id");return ['ok'=>true];
