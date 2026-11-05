@@ -45,7 +45,7 @@ Nếu bước 2.3 báo lỗi Gmail: ở cột trái của Apps Script bấm **Se
 
 1. **Tạo mail mời**: khi **+ Thêm Family**, chọn số mail ở ô **Gen mail mời** (1–5); mail được tạo ngay khi lưu. Với Family đã có, mở Family → **Gen mail mời** → bấm số mail (1–5) là tạo luôn. Từ 0.24.0, Gmail nhận lời mời cố định là `haihoangrr@gmail.com`.
 2. Web hiện các mail vừa tạo, ví dụ `haihoangrr+k7p2qx@gmail.com`. Đuôi sau dấu + là ngẫu nhiên. Web lưu mọi mail đã tạo nên không bao giờ tạo trùng, kể cả với tên các link đã có. Bấm **Copy tất cả mail**.
-3. Đăng nhập tài khoản chủ Family, mời các mail vừa copy. Trang Family hiện khung **mail chờ lấy link** cho tới khi có link.
+3. Đăng nhập tài khoản chủ Family, mời các mail vừa copy. Trang Family hiện khung **mail chờ lấy link** cho tới khi có link. Tạo nhầm thì bấm × cạnh mail đó hoặc **Xóa tất cả** (từ 0.24.1); chỉ xóa được mail chưa có link.
 4. Quay lại Family → **Lấy link mời**. Web đọc thư mời trong Gmail và hiện bảng **Mail mời · Link mời · Trạng thái**: tạo 4 mail và mời đủ thì có đủ 4 link. Mail chưa có thư thì ghi **Chưa thấy thư mời**; đợi một chút rồi bấm lại. Link được lưu luôn vào **Link mời vào Family này**.
 
 Vẫn mời được các Gmail tự đặt như `hai+1@gmail.com`; nút **Lấy link từ Gmail** ở **Thêm → Tra cứu khách** lấy link cho mọi Family. Khi website đang mở, web tự kiểm tra Gmail 10 phút một lần.

@@ -136,6 +136,21 @@ export function initLookup(db, { fail, email, text, calendarDate, log }) {
     });
   }
 
+  // Remove addresses made by mistake. Only addresses still waiting for their link can go;
+  // one that already has a link is managed in the invite table.
+  function deleteInviteMails(familyId, data) {
+    const family = activeFamily(familyId); if (!family) fail('Không tìm thấy Family đang hoạt động.', 404);
+    const ids = data.ids; if (!Array.isArray(ids) || !ids.length || ids.length > 50 || ids.some(id => !Number.isSafeInteger(id))) fail('Chọn mail mời cần xóa.');
+    const rows = ids.map(id => one('SELECT * FROM invite_mails WHERE id=? AND family_id=?', id, family.id));
+    if (rows.some(row => !row)) fail('Mail mời đã thay đổi. Tải lại trang rồi thử lại.', 409);
+    const linked = rows.find(row => one('SELECT id FROM family_invites WHERE lower(label)=?', row.email));
+    if (linked) fail(`${linked.email} đã có link mời. Xóa link đó trong bảng link mời nếu không dùng.`, 409);
+    return atomic('invite_mails_delete', () => {
+      for (const row of rows) run('DELETE FROM invite_mails WHERE id=?', row.id);
+      log(`Cá nhân: xóa ${rows.length} mail mời của ${family.name}: ${rows.map(row => row.email).join(', ')}`);
+      return { ok: true, deleted: rows.length };
+    });
+  }
   function markInviteSent(id, data) {
     const invite = one('SELECT * FROM family_invites WHERE id=?', id); if (!invite) fail('Không tìm thấy link mời.', 404);
     const family = activeFamily(invite.family_id); if (!family) fail('Không tìm thấy Family đang hoạt động.', 404);
@@ -401,5 +416,5 @@ export function initLookup(db, { fail, email, text, calendarDate, log }) {
     return result(address);
   }
 
-  return { adminState, settings, saveSettings, rotateCode, generateInviteMails, markInviteSent, issueStatus, saveStatus, saveInvite, deleteInvite, bulkMove, updateMove, result, verify, sessionEmail, logout, customerOpen, customerJoined, customerReport };
+  return { adminState, settings, saveSettings, rotateCode, generateInviteMails, deleteInviteMails, markInviteSent, issueStatus, saveStatus, saveInvite, deleteInvite, bulkMove, updateMove, result, verify, sessionEmail, logout, customerOpen, customerJoined, customerReport };
 }

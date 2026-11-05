@@ -1,4 +1,6 @@
-# Hải Premium — Quản lý khách hàng 0.24.0
+# Hải Premium — Quản lý khách hàng 0.24.1
+
+Bản 0.24.1 thêm nút xóa trong khung **mail chờ lấy link**: nút × cạnh từng mail và nút **Xóa tất cả** để bỏ mail tạo nhầm.
 
 Bản 0.24.0: **Gen mail mời** luôn dùng Gmail nhận lời mời `haihoangrr@gmail.com` và tạo ngay khi chọn số lượng (1–5). **Fix lỗi** tự cập nhật trạng thái cho khách: báo lỗi mail quản lý thì Family thành **Bị quét**, case chuyển sang Đã fix thì Family về **Đang hoạt động**. Khách **Đã mời, chưa vào** hoặc **Mua mới** tra cứu Gmail sẽ tự nhận một link riêng trong kho link của Family mình (không trùng ai), và link khách đã xem tự được tick **Đã gửi**. Xem [hướng dẫn](hosting/php/TRA-CUU-CHUYEN-NHOM.md).
 

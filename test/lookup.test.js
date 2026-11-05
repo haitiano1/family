@@ -419,3 +419,21 @@ test('new customers get one link of their own Family on lookup, never shared, an
     assert.equal((await f.customer()('verify', 'POST', { email: 'gia@example.com', code: gia })).items[0].view, 'incident');
   } finally { await f.close(); }
 });
+
+test('mail mời made by mistake can be deleted while it still waits for its link', async () => {
+  const f = await server(); try {
+    const a = f.admin, { oldFamily, newFamily } = await incident(a);
+    const made = (await a(`families/${newFamily.id}/invite-mails`, 'POST', { count: 3 }, 201)).mails;
+    const other = (await a(`families/${oldFamily.id}/invite-mails`, 'POST', { count: 1 }, 201)).mails;
+    let state = await a('state');
+    const id = address => state.invite_mails.find(m => m.email === address).id;
+    await a(`families/${newFamily.id}/invites`, 'POST', { label: made[2], url: inviteUrl(90), sent_on: day(0) }, 201);
+    for (const bad of [{}, { ids: [] }, { ids: ['1'] }]) await a(`families/${newFamily.id}/invite-mails`, 'DELETE', bad, 400);
+    await a(`families/${newFamily.id}/invite-mails`, 'DELETE', { ids: [id(other[0])] }, 409);
+    await a(`families/${newFamily.id}/invite-mails`, 'DELETE', { ids: [id(made[2])] }, 409);
+    assert.deepEqual(await a(`families/${newFamily.id}/invite-mails`, 'DELETE', { ids: [id(made[0]), id(made[1])] }), { ok: true, deleted: 2 });
+    state = await a('state');
+    assert.deepEqual(state.invite_mails.map(m => m.email).sort(), [made[2], other[0]].sort());
+    assert.ok((await a('journal')).entries.some(e => e.action === 'Xóa mail mời' && e.message.includes(made[0])));
+  } finally { await f.close(); }
+});
