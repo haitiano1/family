@@ -1,3 +1,7 @@
+# 0.27.0 — Đã fix gọn hơn, Báo lỗi không cần nội dung
+
+Dùng **Cập nhật một chạm**. Không đổi schema, SQL hay Apps Script. Hộp Đã fix chỉ còn Giữ nguyên mail và Đổi sang Gmail chủ mới; Báo lỗi để trống nội dung thì ghi là Bị quét.
+
 # 0.26.0 — Đổi chủ ngay trên Family cũ, khách quá hạn vẫn nhận link
 
 Dùng **Cập nhật một chạm**. Không cần đổi Apps Script, SQL hay config.php; cột mới cho link của chủ cũ tự thêm khi website mở lần đầu. Khi có đợt quét: Báo lỗi → Đã fix → Đổi sang mail mới (chọn số mail mời) → mời các mail đó từ chủ mới → Lấy link mời. Xem TRA-CUU-CHUYEN-NHOM.md.

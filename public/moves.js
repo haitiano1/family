@@ -155,7 +155,7 @@ export function familyLookupSections(ctx, family) {
   const stored = (state.invites || []).filter(i => i.family_id === family.id), invites = stored.filter(i => i.holder_state !== 'retired');
   const ready = invites.filter(i => i.holder_state === 'ready').length, retired = stored.length - invites.length;
   const incoming = (state.moves || []).filter(m => m.to_family_id === family.id);
-  const callout = problem(status.status) && members.length ? `<div class="notice lookup-callout"><div><strong>Nhóm đang có sự cố.</strong> Đã có Gmail chủ mới thì vào Fix lỗi → Đã fix → Đổi sang mail mới: ${members.length} khách giữ nguyên trong Family này và tự nhận link mới khi tra cứu. Muốn dồn khách sang Family khác thì bấm nút bên cạnh.</div>${btn('move-open', 'Chuyển khách sang nhóm mới', 'primary', `data-id="${family.id}"`)}</div>` : '';
+  const callout = problem(status.status) && members.length ? `<div class="notice lookup-callout"><div><strong>Nhóm đang có sự cố.</strong> Đã có Gmail chủ mới thì vào Fix lỗi → Đã fix → Đổi sang Gmail chủ mới: ${members.length} khách giữ nguyên trong Family này và tự nhận link mới khi tra cứu. Muốn dồn khách sang Family khác thì bấm nút bên cạnh.</div>${btn('move-open', 'Chuyển khách sang nhóm mới', 'primary', `data-id="${family.id}"`)}</div>` : '';
   return `<section class="card lookup-card"><div class="section-heading"><div><h2>Trạng thái cho khách</h2><p>Khách thấy trạng thái và lời nhắn này trên trang tra cứu.</p></div><div class="row-actions">${btn('family-status', 'Đổi trạng thái', 'secondary', `data-id="${family.id}"`)}</div></div><div class="lookup-status"><span class="badge ${statusColors[status.status]}">${escape(familyStatusLabels[status.status])}</span>${status.updated_at ? `<span class="subtext">Cập nhật ${ctx.date(status.updated_at)}</span>` : ''}<p>${escape(status.note || 'Chưa có lời nhắn cho khách.')}</p></div>${callout}</section>`
     + (problem(status.status) && !invites.length ? '' : `<section class="card lookup-card"><div class="section-heading"><div><h2>Link mời vào Family này <span class="section-count">${ready}/${invites.length}</span></h2><p>Khách <strong>Đã mời, chưa vào</strong>, <strong>Mua mới</strong> hoặc đang chờ link (sau khi đổi chủ hay chuyển nhóm) tra cứu Gmail sẽ tự nhận một link Sẵn sàng, kể cả khách đã quá hạn. Link đã đưa cho khách tự có tag <strong>Đã gửi</strong> và không giao cho ai khác.${retired ? ` Đã bỏ ${retired} link của chủ cũ.` : ''} ${state.gmail_import ? 'Google gửi thư mời mới thì bấm Lấy link mời; web tự thay link chưa dùng của đúng Gmail nhận thư.' : 'Google đổi link thì bấm Sửa và dán link mới.'}</p></div><div class="row-actions">${genMenu(ctx, family)}${state.gmail_import ? btn('invite-mails-fetch', 'Lấy link mời', 'primary', `data-id="${family.id}" title="Đọc thư mời trong Gmail và hiện link của từng mail đã tạo"`) : ''}${btn('invite-add', '+ Thêm link mời', 'secondary', `data-id="${family.id}"`)}</div></div>${pendingNotice(ctx, family)}${inviteTable(ctx, invites)}</section>`)
     + (incoming.length ? `<section class="card lookup-card"><div class="section-heading"><div><h2>Khách nhận link vào Family này</h2><p>Khách chuyển đến và khách mới tự nhận link khi tra cứu. Khách bấm "Tôi đã vào được" hoặc bạn bấm Đã vào để chuyển khách sang đang ở nhóm.</p></div></div>${moveTable(ctx, incoming)}</section>` : '');
@@ -172,7 +172,7 @@ export function lookupPage(ctx) {
     + `<section class="card"><div class="section-heading"><div><h2>Family có sự cố</h2><p>Đặt trạng thái trong trang chi tiết Family.</p></div></div>${incidents.length ? `<div class="table-wrap"><table class="lookup-table"><thead><tr><th scope="col">FAMILY</th><th scope="col">TRẠNG THÁI</th><th scope="col">KHÁCH</th><th scope="col"></th></tr></thead><tbody>${incidents.map(f => { const s = familyStatus(state, f.id); return `<tr><td data-column="family"><a class="email-link" href="#family/${f.id}">${escape(f.name)}</a><span class="subtext">${escape(f.manager_email)}</span></td><td data-column="state"><span class="badge ${statusColors[s.status]}">${escape(familyStatusLabels[s.status])}</span><span class="subtext">${escape(s.note)}</span></td><td data-column="members">${familyOccupancy(state.members, f.id).label}</td><td data-column="actions"><a class="primary link-button tiny" href="#family/${f.id}">Mở Family</a></td></tr>`; }).join('')}</tbody></table></div>` : '<p class="muted">Tất cả Family đang hoạt động bình thường.</p>'}</section>`
     + `<section class="card"><div class="section-heading"><div><h2>Khách đang chuyển nhóm</h2><p>Thứ tự mới nhất trước. Ẩn các lượt đã xong để danh sách gọn.</p></div></div>${moveTable(ctx, moves, true)}</section>`
     + `<section class="card"><div class="section-heading"><div><h2>Thông tin hiển thị cho khách</h2><p>Tên shop và link liên hệ xuất hiện trên trang tra cứu.</p></div><div class="row-actions">${btn('lookup-settings', 'Sửa thông tin', 'secondary')}</div></div><div class="list-item"><strong>Tên shop</strong><p>${escape(settings.shop_name || 'Chưa đặt')}</p></div><div class="list-item"><strong>Link liên hệ</strong><p>${settings.contact_url ? `<a class="contact-link" href="${escape(settings.contact_url)}" target="_blank" rel="noopener noreferrer">${escape(settings.contact_label || settings.contact_url)}</a>` : 'Chưa đặt'}</p></div><div class="list-item"><strong>Ghi chú cho khách</strong><p>${escape(settings.help_text || 'Chưa có')}</p></div></section>`
-    + `<section class="card"><h2>Cách dùng</h2><ol class="lookup-steps"><li>Gửi mỗi khách link tra cứu riêng (menu … của khách → <strong>Copy link tra cứu</strong>), ví dụ lúc bán hoặc gia hạn.</li><li>Khi mail chủ bị quét: <strong>Fix lỗi → Báo lỗi</strong>. Family tự thành Bị quét và khách thấy lời nhắn.</li><li>Có Gmail chủ mới: <strong>Đã fix → Đổi sang mail mới</strong>, chọn số mail mời. Khách ở lại Family và chờ link của chủ mới.</li><li>Mời các mail vừa tạo từ Gmail chủ mới, rồi bấm <strong>Lấy link mời</strong>${state.gmail_import ? '' : ' (cần kết nối Google Sheet; hoặc <strong>+ Thêm link mời</strong> để dán tay)'}.</li><li>Khách mở link tra cứu, nhập Gmail để thấy link vào nhóm mới; theo dõi tiến độ tại đây.</li></ol></section>`;
+    + `<section class="card"><h2>Cách dùng</h2><ol class="lookup-steps"><li>Gửi mỗi khách link tra cứu riêng (menu … của khách → <strong>Copy link tra cứu</strong>), ví dụ lúc bán hoặc gia hạn.</li><li>Khi mail chủ bị quét: <strong>Fix lỗi → Báo lỗi</strong>. Family tự thành Bị quét và khách thấy lời nhắn.</li><li>Có Gmail chủ mới: <strong>Đã fix → Đổi sang Gmail chủ mới</strong>, chọn số mail mời. Khách ở lại Family và chờ link của chủ mới.</li><li>Mời các mail vừa tạo từ Gmail chủ mới, rồi bấm <strong>Lấy link mời</strong>${state.gmail_import ? '' : ' (cần kết nối Google Sheet; hoặc <strong>+ Thêm link mời</strong> để dán tay)'}.</li><li>Khách mở link tra cứu, nhập Gmail để thấy link vào nhóm mới; theo dõi tiến độ tại đây.</li></ol></section>`;
 }
 
 function statusFields(ctx, family, status) {
@@ -196,11 +196,15 @@ function mappingRows(ctx, source, targetId) {
   }).join('');
   return `<div class="table-wrap"><table class="lookup-table"><thead><tr><th scope="col">KHÁCH</th><th scope="col">HẠN DÙNG</th><th scope="col">LINK MỜI Ở FAMILY MỚI</th></tr></thead><tbody>${rows}</tbody></table></div>${invites.length ? '' : '<p class="error-box">Family này chưa có link mời sẵn sàng. Mở Family mới và bấm + Thêm link mời trước.</p>'}`;
 }
-function updateMoveSummary() {
+// A Google Family holds the owner and 5 members: warn before the new Family would go over.
+function updateMoveSummary(state) {
   const selects = [...document.querySelectorAll('#move-mapping select[data-move-member]')];
   const chosen = selects.map(s => s.value).filter(Boolean), duplicate = chosen.length !== new Set(chosen).size;
-  $('#move-summary').textContent = duplicate ? 'Một link đang được chọn cho nhiều khách. Mỗi link chỉ giao cho một khách.' : `Chuyển ${chosen.length} khách · giữ lại ${selects.length - chosen.length} khách ở Family cũ.`;
-  $('#move-summary').classList.toggle('lookup-warning', duplicate);
+  const targetId = Number($('#move-target')?.value), already = state ? state.members.filter(m => m.family_id === targetId).length : 0, total = already + chosen.length;
+  const over = !duplicate && total > 5;
+  $('#move-summary').textContent = duplicate ? 'Một link đang được chọn cho nhiều khách. Mỗi link chỉ giao cho một khách.'
+    : `Chuyển ${chosen.length} khách · giữ lại ${selects.length - chosen.length} khách ở Family cũ.` + (over ? ` Family mới sẽ có ${total} khách (đang có ${already}), quá 5 chỗ của Google Family. Bỏ chuyển bớt ${total - 5} khách hoặc chọn Family khác.` : '');
+  $('#move-summary').classList.toggle('lookup-warning', duplicate || over);
 }
 function openBulkMove(ctx, sourceId) {
   const { state, escape } = ctx;
@@ -223,9 +227,9 @@ function openBulkMove(ctx, sourceId) {
       return { route: 'family/' + result.family_id };
     }, 'Chuyển khách');
   const dialog = $('#modal'); dialog.classList.add('lookup-wide'); dialog.addEventListener('close', () => dialog.classList.remove('lookup-wide'), { once: true });
-  const render = () => { $('#move-mapping').innerHTML = mappingRows(ctx, source, Number($('#move-target').value)); updateMoveSummary(); };
+  const render = () => { $('#move-mapping').innerHTML = mappingRows(ctx, source, Number($('#move-target').value)); updateMoveSummary(ctx.state); };
   $('#move-target').addEventListener('change', render);
-  $('#move-mapping').addEventListener('change', updateMoveSummary);
+  $('#move-mapping').addEventListener('change', () => updateMoveSummary(ctx.state));
   render();
 }
 

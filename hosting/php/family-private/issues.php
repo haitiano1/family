@@ -67,7 +67,8 @@ function saveIssue(PDO $db,?int $id,array $d): array {
     $old=$id?one($db,'SELECT * FROM issues WHERE id=?',[$id]):null;if($id&&!$old)fail('Không tìm thấy lỗi.',404);
     if($old&&(!is_int($d['revision']??null)||$d['revision']!==$old['revision']))fail('Lỗi đã thay đổi. Tải lại rồi thử lại.',409);
     if($old&&array_key_exists('expected_created_at',$d)&&$d['expected_created_at']!==$old['created_at'])fail('Case đã thay đổi. Tải lại rồi thử lại.',409);
-    $title=text($d['title']??$old['title']??'',200);if(!$title)fail('Nhập nội dung lỗi.');$note=text($d['note']??$old['note']??'');$status=$d['status']??$old['status']??'todo';if(!in_array($status,['todo','doing','done'],true))fail('Trạng thái lỗi không hợp lệ.');$now=stamp();
+    // Most cases are a scanned account, so an empty title means "Bị quét".
+    $title=text($d['title']??$old['title']??'',200);if($title==='')$title='Bị quét';$note=text($d['note']??$old['note']??'');$status=$d['status']??$old['status']??'todo';if(!in_array($status,['todo','doing','done'],true))fail('Trạng thái lỗi không hợp lệ.');$now=stamp();
     if(!$old){
         if($status!=='todo')fail('Lỗi mới bắt đầu ở Chờ fix.');$f=one($db,'SELECT * FROM families WHERE id=?',[(int)($d['family_id']??0)]);if(!$f||$f['archived_at'])fail('Chọn Family đang tồn tại.');requireNoOpenIssue($db,$f['id']);$type=$d['target_type']??'manager';if(!in_array($type,['manager','member'],true))fail('Chọn mail gặp lỗi.');
         $target=$type==='manager'?one($db,'SELECT * FROM accounts WHERE id=?',[$f['manager_id']]):one($db,'SELECT * FROM members WHERE id=? AND family_id=?',[(int)($d['target_id']??0),$f['id']]);if(!$target)fail('Mail khách không thuộc Family này.');

@@ -56,7 +56,7 @@ Vẫn mời được các Gmail tự đặt như `hai+1@gmail.com`; nút **Lấy
 - Link Đã gửi không có trong danh sách chọn khi chuyển nhóm hay đổi link, và không giao cho khách khác.
 - Khách vào nhóm bằng link nào thì dòng đó hiện **Gmail của khách** thay cho mail haihoangrr+…, kèm dòng nhỏ *Mail mời: …* và trạng thái **Đã dùng**.
 - **Thu hồi link** đưa link về **Sẵn sàng**. Link cũ sau khi **Đổi link** vẫn giữ tag Đã gửi; nếu chắc chưa ai dùng, bấm **Đưa lại vào kho**.
-- Từ 0.26.0, khi **Đã fix → Đổi sang mail mới**, link của chủ cũ được giữ ẩn (không giao cho khách). Lấy link mời gặp lại thư cũ của các link đó thì bỏ qua; thư mời mới của chủ mới được lưu bình thường.
+- Từ 0.26.0, khi **Đã fix → Đổi sang Gmail chủ mới**, link của chủ cũ được giữ ẩn (không giao cho khách). Lấy link mời gặp lại thư cũ của các link đó thì bỏ qua; thư mời mới của chủ mới được lưu bình thường.
 
 ## Nếu web báo lỗi
 
