@@ -140,7 +140,7 @@ function normalView(item) {
 function resultView(focus = true) {
   const items = data.items || [];
   const views = { move: moveView, incident: incidentView, expired: expiredView, waiting: waitingView, normal: normalView };
-  show(`<div class="intro"><h1>Xin chào${items[0]?.customer_name ? ', ' + escape(items[0].customer_name) : ''}</h1><p>${escape(data.email)}</p></div>`
+  show(`<div class="intro"><h1>Xin chào</h1><p>${escape(data.email)}</p></div>`
     + (items.length ? items.map(item => (views[item.view] || normalView)(item)).join('') : `<section class="card"><h2>Chưa tìm thấy nhóm đang hoạt động</h2><p class="muted">Gmail này không còn trong nhóm nào của shop.</p>${contactLink()}</section>`), focus);
 }
 function render(value, focus = true) { data = value; resultView(focus); }

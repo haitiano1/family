@@ -347,7 +347,7 @@ function lookupResult(PDO $db,string $address): array {
         }
         $waiting=!$allocated&&!$move&&lookupJoinable($m)&&$status['status']==='active'&&$period['expiry_status']!=='expired';
         $view=$move&&in_array($move['state'],LOOKUP_OPEN_STATES,true)?'move':(in_array($status['status'],LOOKUP_PROBLEM_STATUSES,true)?($period['expiry_status']==='expired'?'expired':'incident'):($period['expiry_status']==='expired'?'expired':($waiting?'waiting':'normal')));
-        $items[]=['customer_name'=>$m['customer_name'],'family_name'=>$m['family_name'],'plan_months'=>(int)$m['plan_months'],'expires_at'=>$m['expires_at'],...$period,'membership_status'=>$m['membership_status'],'status'=>$status['status'],'status_note'=>$status['note'],'status_updated_at'=>$status['updated_at'],'view'=>$view,'move'=>$move];
+        $items[]=['family_name'=>$m['family_name'],'plan_months'=>(int)$m['plan_months'],'expires_at'=>$m['expires_at'],...$period,'membership_status'=>$m['membership_status'],'status'=>$status['status'],'status_note'=>$status['note'],'status_updated_at'=>$status['updated_at'],'view'=>$view,'move'=>$move];
     }
     return ['email'=>$address,'today'=>today(),'shop'=>lookupSettings($db),'items'=>$items];
 }

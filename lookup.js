@@ -336,7 +336,7 @@ export function initLookup(db, { fail, email, text, calendarDate, log }) {
       }
       const waiting = !allocated && !move && joinable(member) && status.status === 'active' && period.expiry_status !== 'expired';
       const view = move && openMoveStates.includes(move.state) ? 'move' : problemStatuses.includes(status.status) ? (period.expiry_status === 'expired' ? 'expired' : 'incident') : period.expiry_status === 'expired' ? 'expired' : waiting ? 'waiting' : 'normal';
-      return { customer_name: member.customer_name, family_name: member.family_name, plan_months: member.plan_months, expires_at: member.expires_at, ...period, membership_status: member.membership_status, status: status.status, status_note: status.note, status_updated_at: status.updated_at, view, move };
+      return { family_name: member.family_name, plan_months: member.plan_months, expires_at: member.expires_at, ...period, membership_status: member.membership_status, status: status.status, status_note: status.note, status_updated_at: status.updated_at, view, move };
     });
     return { email: address, today: current, shop: settings(), items };
   }

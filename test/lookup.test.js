@@ -389,6 +389,7 @@ test('new customers get one link of their own Family on lookup, never shared, an
     await a(`invites/${manual.id}/sent`, 'PATCH', { sent: true, revision: 0 });
     const codes = (await a('state')).lookup_codes, look = async address => (await f.customer()('verify', 'POST', { email: address, code: codes[address] })).items[0];
     const anItem = await look('an@example.com');
+    assert.equal('customer_name' in anItem, false, 'the shop label for a customer is never sent to the lookup page');
     assert.deepEqual([anItem.view, anItem.move.kind, anItem.move.invite_url], ['move', 'join', inviteUrl(81)], 'oldest valid link first, the expired one skipped');
     assert.equal((await look('an@example.com')).move.invite_url, inviteUrl(81), 'same link again');
     assert.equal((await look('binh@example.com')).move.invite_url, inviteUrl(82), 'Mua mới gets the next link');

@@ -10,7 +10,7 @@ Khi mail chủ Family gặp sự cố (bị quét, bị vô hiệu hoá…), kh�
 
 ## Trang cho khách
 
-Địa chỉ: `https://tên-miền-của-bạn/tra-cuu.html`. Trang này không cần mật khẩu truy cập website. Khách chỉ thấy thông tin của chính mình: tên Family, trạng thái, lời nhắn của shop, hạn dùng và link vào nhóm mới. Trang không hiện mail chủ Family hay mail của khách khác.
+Địa chỉ: `https://tên-miền-của-bạn/tra-cuu.html`. Trang này không cần mật khẩu truy cập website. Khách chỉ thấy thông tin của chính mình: lời chào kèm Gmail, tên Family, trạng thái, lời nhắn của shop, hạn dùng và link vào nhóm. Trang không hiện tên khách bạn đặt trong web, mail chủ Family hay mail của khách khác.
 
 Mỗi Gmail khách có một **mã tra cứu 6 ký tự** cố định. Từ 0.22.0, mã hiện ngay dưới Gmail của khách, kèm nút copy. Tab Google Sheet `FamilySync_MaTraCuu` liệt kê mã của từng khách và đồng bộ hai chiều (xem integrations/google-sheets/MA-TRA-CUU-VA-GMAIL.md). Menu **…** của khách → **Copy link tra cứu** vẫn copy tin nhắn đầy đủ. Nội dung copy gồm link riêng có sẵn mã (`/tra-cuu.html#ma=…`), Gmail và mã. Nên gửi cho khách lúc bán hoặc gia hạn, để khi nhóm lỗi khách tự vào xem.
 
