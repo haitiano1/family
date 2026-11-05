@@ -50,6 +50,7 @@ aside, .app-sidebar { position: fixed; inset: 0 auto 0 0; width: var(--sidebar-w
 .brand { display: flex; align-items: center; gap: 11px; padding: 0 8px 28px; }
 .brand strong { display: block; font-size: 17px; letter-spacing: -.5px; color: var(--ink-strong); }
 .brand small { display: block; font-size: 10px; color: var(--muted); margin-top: 3px; }
+.brand-accent { color: var(--blue); }
 .logo, .brand-logo { display: grid; place-items: center; width: 42px; height: 42px; flex: 0 0 auto; color: #fff; background: var(--blue); border-radius: 13px; font-size: 26px; box-shadow: 0 4px 12px rgb(37 93 225 / 18%); }
 .logo.youtube-logo { background: #fff2f2; box-shadow: none; border: 1px solid #ffe4e2; }
 .brand-logo svg, .logo svg { flex-shrink: 0; }
@@ -592,6 +593,7 @@ code { background: #f0f4fa; color: #3c5679; padding: 3px 6px; border-radius: 5px
 @media (min-width: 761px) {
   .app-sidebar { background: linear-gradient(165deg, #162f55, #112541 70%); border-right-color: #132c4d; }
   .app-sidebar .brand strong { color: #fff; }
+  .app-sidebar .brand-accent { color: #5aa9ff; }
   .app-sidebar .brand small { color: #b0c0d8; }
   .app-sidebar .nav-label { color: #92a7c5; font-size: 9px; }
   .app-sidebar nav a, .app-sidebar .nav-more > summary { color: #c2cfe1; }
@@ -701,6 +703,15 @@ code { background: #f0f4fa; color: #3c5679; padding: 3px 6px; border-radius: 5px
 .lookup-family-badge { display: inline-flex; margin-left: 8px; vertical-align: middle; }
 .lookup-warning { color: var(--red); }
 .lookup-steps { margin: 10px 0 0; padding-left: 20px; line-height: 1.85; font-size: 13px; }
+.lookup-mail-list { display: grid; gap: 2px; margin: 8px 0 10px; }
+.lookup-mail-list .info-text { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 13px; overflow-wrap: anywhere; }
+.lookup-pending-mails { align-items: flex-start; margin: 0 0 16px; }
+.lookup-pending-mails .subtext { margin-top: 2px; }
+.lookup-sent-row { margin-top: 8px; }
+.lookup-sent { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 600; color: var(--ink-strong); white-space: nowrap; cursor: pointer; padding: 4px 8px; border: 1px solid #d9e2ef; border-radius: 8px; background: #fff; }
+.lookup-sent input { width: 16px; height: 16px; margin: 0; accent-color: #b45309; }
+.lookup-sent:has(input:checked) { background: #fff7e6; border-color: #f3c77a; color: #8a4b00; }
+.lookup-sent:has(input:disabled) { opacity: .5; cursor: not-allowed; }
 #move-mapping select { min-width: 220px; }
 #move-summary { font-weight: 650; margin: 12px 0 6px; }
 #move-mapping .error-box { margin-top: 12px; padding: 14px; font-size: 13px; }

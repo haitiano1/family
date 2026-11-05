@@ -94,6 +94,8 @@ async function handle(req, res) {
       res.setHeader('Set-Cookie','fam_access=; HttpOnly; Secure; SameSite=Strict; Path=/; Max-Age=0');return send(res,200,{ok:true});
     }
     if(req.method==='PATCH'&&/^\/api\/families\/\d+\/status$/.test(url.pathname))return send(res,200,lookup.saveStatus(Number(url.pathname.split('/')[3]),await body(req)));
+    if(req.method==='PATCH'&&/^\/api\/invites\/\d+\/sent$/.test(url.pathname))return send(res,200,lookup.markInviteSent(Number(url.pathname.split('/')[3]),await body(req)));
+    if(req.method==='POST'&&/^\/api\/families\/\d+\/invite-mails$/.test(url.pathname))return send(res,201,lookup.generateInviteMails(Number(url.pathname.split('/')[3]),await body(req)));
     if(req.method==='POST'&&/^\/api\/families\/\d+\/invites$/.test(url.pathname))return send(res,201,lookup.saveInvite(Number(url.pathname.split('/')[3]),null,await body(req)));
     if(['PATCH','DELETE'].includes(req.method)&&/^\/api\/invites\/\d+$/.test(url.pathname)){const id=Number(url.pathname.split('/')[3]);return send(res,200,req.method==='PATCH'?lookup.saveInvite(null,id,await body(req)):lookup.deleteInvite(id,await body(req)));}
     if(req.method==='POST'&&url.pathname==='/api/moves')return send(res,200,lookup.bulkMove(await body(req)));

@@ -737,5 +737,15 @@ test('PHP lookup page: Family status, invite pool, bulk move, Gmail + code sign-
  state=await a('state');assert.equal(state.members[0].membership_status,'active');assert.equal(state.invites[0].holder_state,'used');
  const backup=await a('backup');assert.equal(backup.version,10);assert.equal(backup.tables.member_moves.length,1);assert.equal(backup.tables.family_invites.length,1);assert.ok(backup.tables.lookup_settings.some(r=>r.name==='code_salt'));assert.equal('lookup_sessions' in backup.tables,false);
  const target=await fixture();await target.login();await target.req('restore','POST',backup);const restored=await target.req('state');assert.equal(restored.lookup_codes['minhanh@example.com'],code);assert.equal(restored.moves[0].state,'joined');
+ // Gen mail mời and Đã gửi on MySQL, then the 0.21 → 0.22 upgrade of an existing lookup schema.
+ const made=await a('families/'+next.id+'/invite-mails','POST',{count:3,base_email:'HaiHoangrr+cu@Gmail.com'},201);assert.equal(made.mails.length,3);assert.equal(new Set(made.mails).size,3);for(const x of made.mails)assert.match(x,/^haihoangrr\+[a-hj-km-np-z2-9]{6}@gmail\.com$/);
+ await a('families/'+next.id+'/invite-mails','POST',{count:6,base_email:'haihoangrr@gmail.com'},400);await a('families/'+next.id+'/invite-mails','POST',{count:1,base_email:'owner09+x@example.com'},400);
+ const spare=await a('families/'+next.id+'/invites','POST',{label:made.mails[0],url:'https://families.google.com/join/promo/php-2',sent_on:''},201);
+ state=await a('state');assert.deepEqual(state.invite_mails.map(x=>x.email),made.mails);assert.equal(state.invite_mails[0].family_id,next.id);assert.equal(state.invite_base_email,'haihoangrr@gmail.com');
+ await a('invites/'+spare.id+'/sent','PATCH',{sent:true,revision:state.invites.find(i=>i.id===spare.id).revision});state=await a('state');assert.equal(state.invites.find(i=>i.id===spare.id).holder_state,'sent');
+ await a('invites/'+invite.id+'/sent','PATCH',{sent:true,revision:state.invites.find(i=>i.id===invite.id).revision},409);assert.ok((await a('journal')).entries.some(e=>e.action==='Đánh dấu link đã gửi'));
+ const fresh=await a('backup');assert.equal(fresh.version,10);assert.equal(fresh.tables.invite_mails.length,3);assert.ok(fresh.tables.family_invites.every(i=>'sent_at' in i));
+ sql(`ALTER TABLE ${f.db}.family_invites DROP COLUMN sent_at`);sql(`DROP TABLE ${f.db}.invite_mails`);sql(`UPDATE ${f.db}.app_meta SET value='1' WHERE name='lookup_schema'`);
+ state=await a('state');assert.equal(state.invite_mails.length,0);assert.ok(state.invites.every(i=>i.sent_at===''));assert.equal(sql(`SELECT value FROM ${f.db}.app_meta WHERE name='lookup_schema'`),'2');
  await lookup('logout','POST',{},200,signed.cookie);assert.deepEqual((await lookup('me','GET',undefined,200,signed.cookie)).body,{signed_in:false});
 });

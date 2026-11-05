@@ -233,6 +233,8 @@ function familyParseInvite(id,message){
 function familyInviteCache(){try{return typeof CacheService==='undefined'?null:CacheService.getScriptCache();}catch(error){return null;}}
 function familyCacheGet(cache,key){try{return cache?cache.get(key):null;}catch(error){return null;}}
 function familyCachePut(cache,key,value){try{if(cache)cache.put(key,value,FAMILY_INVITE_CACHE_SECONDS);}catch(error){/* optional */}}
+// The Gmail address this script reads (Gen mail mời on the website builds its + addresses on it).
+function familyMailbox(){try{return String(Gmail.Users.getProfile('me').emailAddress||'').toLowerCase();}catch(error){return '';}}
 function familyGmailError(error){
   const text=String(error&&error.message||'');
   if(text==='gmail_service'||/is not defined|has not been used|is disabled|not enabled/i.test(text))return 'gmail_service';
@@ -347,7 +349,7 @@ function doPost(event) {
     authenticated=true;
     if(request.scope==='invites'&&request.action==='read'){
       // Gmail only: no Sheet lock is taken and nothing in Gmail is changed.
-      stage='read_gmail';return reply({ok:true,script_version:FAMILY_SYNC_VERSION,gmail_invites:FAMILY_GMAIL_INVITES,invites:familyGmailInvites()});
+      stage='read_gmail';return reply({ok:true,script_version:FAMILY_SYNC_VERSION,gmail_invites:FAMILY_GMAIL_INVITES,mailbox:familyMailbox(),invites:familyGmailInvites()});
     }
     if(!['core','vault'].includes(request.scope)||!['read','write'].includes(request.action))return reply({ok:false,code:'request'});
     onStage('wait_lock');lock.waitLock(20000);

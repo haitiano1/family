@@ -7,7 +7,16 @@ export const familyStatuses = ['active', 'checking', 'scanned', 'disabled'];
 export const problemStatuses = ['checking', 'scanned', 'disabled'];
 export const openMoveStates = ['assigned', 'opened', 'failed'];
 export const reportReasons = ['twelve_months', 'invite_used', 'other_family', 'other'];
-export const lookupBackupTables = ['family_statuses', 'family_invites', 'member_moves', 'lookup_codes', 'lookup_settings'];
+export const lookupBackupTables = ['family_statuses', 'family_invites', 'member_moves', 'lookup_codes', 'lookup_settings', 'invite_mails'];
+// invite_mails joined backup version 10 in 0.22.0; earlier version-10 files simply have none.
+export const optionalBackupTables = ['invite_mails'];
+// Gen mail mời: random tag after "+" on the shop's Gmail, e.g. haihoangrr+k7p2qx@gmail.com.
+export const inviteMailAlphabet = 'abcdefghjkmnpqrstuvwxyz23456789';
+export const inviteMailMax = 5;
+export function inviteMailBase(address) {
+  const at = address.lastIndexOf('@'), local = address.slice(0, at).split('+')[0];
+  return local && at > 0 ? local + address.slice(at) : '';
+}
 export const codeAlphabet = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
 export const lookupLimits = { window: 15 * 60000, email: 8, ip: 40, session: 60 * 60000, moves: 50 };
 const settingNames = ['shop_name', 'contact_url', 'contact_label', 'help_text'];
@@ -53,6 +62,8 @@ export function initLookup(db, { fail, email, text, calendarDate, log }) {
   const revision = (value, message = 'Dữ liệu đã thay đổi. Tải lại trang rồi thử lại.') => { if (!Number.isInteger(value)) fail(message); return value; };
   const activeFamily = id => Number.isSafeInteger(id) && id > 0 ? one("SELECT f.*,a.email AS manager_email FROM families f JOIN accounts a ON a.id=f.manager_id WHERE f.id=? AND f.archived_at=''", id) : undefined;
   const statusRow = familyId => one('SELECT * FROM family_statuses WHERE family_id=?', familyId) || { family_id: familyId, status: 'active', note: '', updated_at: '', revision: 0 };
+  // A ready link the owner ticked as sent by hand is not handed out again.
+  const inviteState = invite => { const state = inviteHolder(inviteRefs(invite.id)).state; return state === 'ready' && invite.sent_at ? 'sent' : state; };
   const inviteRefs = inviteId => all("SELECT mv.id,mv.state,mv.email,mv.customer_name,mv.to_family_id,mv.member_id,m.family_id AS member_family_id FROM member_moves mv LEFT JOIN members m ON m.id=mv.member_id WHERE mv.invite_id=? AND mv.state!='cancelled' ORDER BY mv.id", inviteId);
 
   function settings() {
@@ -98,6 +109,46 @@ export function initLookup(db, { fail, email, text, calendarDate, log }) {
       log(`Cá nhân: đổi mã tra cứu của ${address}`);
       return { ok: true, email: address, code };
     });
+  }
+
+  function setting(name) { return one('SELECT value FROM lookup_settings WHERE name=?', name)?.value || ''; }
+  function putSetting(name, value) {
+    if (one('SELECT id FROM lookup_settings WHERE name=?', name)) run('UPDATE lookup_settings SET value=? WHERE name=?', value, name);
+    else run('INSERT INTO lookup_settings(name,value) VALUES (?,?)', name, value);
+  }
+  // Every generated address is remembered, so a tag is never handed out twice, and no
+  // address collides with a label already in an invite pool.
+  function generateInviteMails(familyId, data) {
+    const family = activeFamily(familyId); if (!family) fail('Không tìm thấy Family đang hoạt động.', 404);
+    const count = data.count; if (!Number.isInteger(count) || count < 1 || count > inviteMailMax) fail('Chọn từ 1 đến 5 mail mời.');
+    const base = inviteMailBase(email(data.base_email)); if (!base) fail('Nhập Gmail nhận lời mời, ví dụ tenban@gmail.com.');
+    if (base === inviteMailBase(family.manager_email)) fail('Gmail nhận lời mời phải khác mail chủ của Family này.');
+    return atomic('invite_mails_generate', () => {
+      const taken = new Set([...all('SELECT email FROM invite_mails').map(r => r.email), ...all('SELECT label FROM family_invites').map(r => String(r.label).toLowerCase())]);
+      const at = base.lastIndexOf('@'), mails = [];
+      while (mails.length < count) {
+        let tag = ''; for (let i = 0; i < 6; i++) tag += inviteMailAlphabet[randomInt(inviteMailAlphabet.length)];
+        const address = base.slice(0, at) + '+' + tag + base.slice(at);
+        if (!taken.has(address)) { taken.add(address); mails.push(address); }
+      }
+      const time = now();
+      for (const address of mails) run('INSERT INTO invite_mails(family_id,email,created_at) VALUES (?,?,?)', family.id, address, time);
+      putSetting('invite_base_email', base);
+      log(`Cá nhân: tạo ${count} mail mời cho ${family.name}: ${mails.join(', ')}`);
+      return { ok: true, family_id: family.id, family_name: family.name, base_email: base, mails };
+    });
+  }
+
+  function markInviteSent(id, data) {
+    const invite = one('SELECT * FROM family_invites WHERE id=?', id); if (!invite) fail('Không tìm thấy link mời.', 404);
+    const family = activeFamily(invite.family_id); if (!family) fail('Không tìm thấy Family đang hoạt động.', 404);
+    if (revision(data.revision) !== invite.revision) fail('Link mời vừa được sửa ở nơi khác. Tải lại rồi thử lại.', 409);
+    if (typeof data.sent !== 'boolean') fail('Thiếu trạng thái đã gửi.');
+    const state = inviteHolder(inviteRefs(invite.id)).state;
+    if (data.sent && state !== 'ready') fail(state === 'used' ? 'Link này đã có khách dùng.' : 'Link đang giao cho khách trong lượt chuyển nhóm.', 409);
+    run('UPDATE family_invites SET sent_at=?,revision=revision+1,updated_at=? WHERE id=?', data.sent ? now() : '', now(), invite.id);
+    log(`Cá nhân: ${data.sent ? 'đánh dấu đã gửi' : 'bỏ đánh dấu đã gửi'} link mời ${invite.label || '#' + invite.id} của ${family.name}`);
+    return { ok: true };
   }
 
   function saveStatus(familyId, data) {
@@ -166,7 +217,7 @@ export function initLookup(db, { fail, email, text, calendarDate, log }) {
       if (one('SELECT id FROM members WHERE family_id=? AND email=?', to.id, member.email)) fail(`Email ${member.email} đã có trong Family mới.`, 409);
       const invite = one('SELECT * FROM family_invites WHERE id=?', item.invite_id);
       if (!invite || invite.family_id !== to.id || invite.revision !== item.invite_revision) fail('Link mời đã thay đổi. Tải lại rồi chọn lại.', 409);
-      if (inviteHolder(inviteRefs(invite.id)).state !== 'ready') fail(`Link ${invite.label || '#' + invite.id} đã được giao hoặc đã dùng. Chọn link khác.`, 409);
+      if (inviteState(invite) !== 'ready') fail(`Link ${invite.label || '#' + invite.id} đã được giao, đã gửi hoặc đã dùng. Chọn link khác.`, 409);
       checked.push({ member, invite });
     }
     const source = statusRow(from.id);
@@ -209,7 +260,7 @@ export function initLookup(db, { fail, email, text, calendarDate, log }) {
         const invite = Number.isSafeInteger(data.invite_id) ? one('SELECT * FROM family_invites WHERE id=?', data.invite_id) : null;
         if (!invite || invite.family_id !== move.to_family_id || !Number.isInteger(data.invite_revision) || invite.revision !== data.invite_revision) fail('Link mời đã thay đổi. Tải lại rồi chọn lại.', 409);
         if (invite.id === move.invite_id) fail('Chọn link khác link hiện tại.');
-        if (inviteHolder(inviteRefs(invite.id)).state !== 'ready') fail('Link mời đã được giao hoặc đã dùng. Chọn link khác.', 409);
+        if (inviteState(invite) !== 'ready') fail('Link mời đã được giao, đã gửi hoặc đã dùng. Chọn link khác.', 409);
         if (move.invite_id) run('UPDATE family_invites SET revision=revision+1,updated_at=? WHERE id=?', stamp, move.invite_id);
         run('UPDATE family_invites SET revision=revision+1,updated_at=? WHERE id=?', stamp, invite.id);
         run("UPDATE member_moves SET invite_id=?,invite_label=?,state='assigned',report_reason='',report_note='',reported_at='',opened_at='',updated_at=?,revision=revision+1 WHERE id=?", invite.id, invite.label, stamp, id);
@@ -227,7 +278,7 @@ export function initLookup(db, { fail, email, text, calendarDate, log }) {
     const refs = all("SELECT mv.id,mv.invite_id,mv.state,mv.email,mv.customer_name,mv.to_family_id,mv.member_id,m.family_id AS member_family_id FROM member_moves mv LEFT JOIN members m ON m.id=mv.member_id WHERE mv.invite_id IS NOT NULL AND mv.state!='cancelled' ORDER BY mv.id");
     const invites = all('SELECT * FROM family_invites ORDER BY family_id,id').map(invite => {
       const holder = inviteHolder(refs.filter(r => r.invite_id === invite.id));
-      return { ...invite, expires_on: inviteExpiry(invite.sent_on), holder_state: holder.state, holder_move_id: holder.move?.id ?? null, holder_email: holder.move?.email ?? '', holder_name: holder.move?.customer_name ?? '' };
+      return { ...invite, expires_on: inviteExpiry(invite.sent_on), holder_state: holder.state === 'ready' && invite.sent_at ? 'sent' : holder.state, holder_move_id: holder.move?.id ?? null, holder_email: holder.move?.email ?? '', holder_name: holder.move?.customer_name ?? '' };
     });
     const moves = all("SELECT mv.*,m.family_id AS member_family_id FROM member_moves mv LEFT JOIN members m ON m.id=mv.member_id WHERE mv.dismissed_at='' ORDER BY mv.id DESC LIMIT 500").map(move => {
       const live = move.member_family_id != null && move.member_family_id === move.to_family_id;
@@ -236,7 +287,8 @@ export function initLookup(db, { fail, email, text, calendarDate, log }) {
     return {
       lookup_supported: true, lookup_settings: settings(),
       family_statuses: all('SELECT family_id,status,note,updated_at,revision FROM family_statuses'),
-      invites, moves, lookup_codes: Object.fromEntries(all('SELECT DISTINCT email FROM members').map(r => [r.email, codeFor(r.email, key)]))
+      invites, moves, lookup_codes: Object.fromEntries(all('SELECT DISTINCT email FROM members').map(r => [r.email, codeFor(r.email, key)])),
+      invite_mails: all('SELECT id,family_id,email,created_at FROM invite_mails ORDER BY id'), invite_base_email: setting('invite_base_email')
     };
   }
 
@@ -319,5 +371,5 @@ export function initLookup(db, { fail, email, text, calendarDate, log }) {
     return result(address);
   }
 
-  return { adminState, settings, saveSettings, rotateCode, saveStatus, saveInvite, deleteInvite, bulkMove, updateMove, result, verify, sessionEmail, logout, customerOpen, customerJoined, customerReport };
+  return { adminState, settings, saveSettings, rotateCode, generateInviteMails, markInviteSent, saveStatus, saveInvite, deleteInvite, bulkMove, updateMove, result, verify, sessionEmail, logout, customerOpen, customerJoined, customerReport };
 }

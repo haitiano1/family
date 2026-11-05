@@ -6,7 +6,7 @@ import { prepareSheet, suggestMapping, importFields } from './csv.js';
 import { contactParts } from './contacts.js';
 import {mountVault,unmountVault} from './vault.js';
 import {mountStatistics,unmountStatistics} from './statistics.js';
-import {familyLookupSections,lookupPage,handleLookupAction,customerLookupAction,familyStatusBadge} from './moves.js';
+import {familyLookupSections,lookupPage,handleLookupAction,customerLookupAction,familyStatusBadge,inviteMailFields,createInviteMails,showInviteMails} from './moves.js';
 const $ = selector => document.querySelector(selector);
 const escape = value => String(value ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const uiIcon = name => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${({clock:'<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',alert:'<path d="m10.3 4.9-8 14a1.5 1.5 0 0 0 1.3 2.2h16.8a1.5 1.5 0 0 0 1.3-2.2l-8-14a2 2 0 0 0-3.4 0Z"/><path d="M12 9v4m0 4h.01"/>',calendar:'<rect x="3" y="5" width="18" height="16" rx="3"/><path d="M16 3v4M8 3v4M3 11h18m-10 5h2"/>',wallet:'<path d="M20 8V6a2 2 0 0 0-2-2H6a3 3 0 0 0 0 6h14v10H6a3 3 0 0 1-3-3V7"/><path d="M20 13h-4v4h4"/>',arrow:'<path d="M5 12h14m-5-5 5 5-5 5"/>',spark:'<path d="m12 3 2.5 6.5L21 12l-6.5 2.5L12 21l-2.5-6.5L3 12l6.5-2.5z"/>',grid:'<rect x="3" y="3" width="7" height="7" rx="2"/><rect x="14" y="3" width="7" height="7" rx="2"/><rect x="3" y="14" width="7" height="7" rx="2"/><rect x="14" y="14" width="7" height="7" rx="2"/>',users:'<circle cx="9" cy="8" r="3"/><path d="M3 21v-2a6 6 0 0 1 12 0v2m1-16a3 3 0 0 1 0 6m2 5a5 5 0 0 1 3 5"/>',search:'<circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 5 5"/>',check:'<path d="m5 12 4 4L19 6"/>',chart:'<path d="M4 4v16h16M8 15l4-4 4 2 4-7"/>',shield:'<path d="m12 3 8 3v6c0 5-8 9-8 9s-8-4-8-9V6z"/><path d="m8 12 3 3 5-6"/>'})[name]||''}</svg>`;
@@ -148,7 +148,7 @@ function memberFields(m = {}) {
 }
 $('#modal-form').addEventListener('submit', async event => {
   event.preventDefault(); const submit = event.submitter; submit.disabled = true;
-  try {const result=await submitModal(Object.fromEntries(new FormData(event.currentTarget)));$('#modal').close();await refresh(false);if(result?.route)location.hash=result.route;draw();}
+  try {const result=await submitModal(Object.fromEntries(new FormData(event.currentTarget)));$('#modal').close();await refresh(false);if(result?.route)location.hash=result.route;draw();if(typeof result?.after==='function')result.after();}
   catch (error) { $('#form-error').textContent = error.message; }
   finally { submit.disabled = false; }
 });
@@ -231,7 +231,16 @@ document.addEventListener('click', async event => {
       const f=state.archived_families.find(f=>f.id===Number(id));modal('Khôi phục Family',`<p>${escape(f.name)} · ${escape(f.manager_email)}</p><p>Khôi phục hồ sơ Family, ngày trial, ghi chú và ${f.customers} khách còn lưu trữ cùng Family.</p>`,async()=>{await post('archived-families/'+id+'/restore',{});toast('Đã khôi phục Family và khách.');return {route:'family/'+id};},'Khôi phục');
     } else if (['add-family','edit-family'].includes(action)) {
       const f=action==='edit-family' ? state.families.find(f=>f.id===Number(id)) : null;
-      modal(f ? 'Sửa Family' : 'Thêm Family',input('name','Tên Family','text',f?.name,true,'maxlength="200"')+input('manager_email','Email quản lý Family','email',f?.manager_email,true,'maxlength="254"')+(f?'<p>Đổi email quản lý sẽ ngắt liên kết thông tin Kho của mail cũ. Mail mới không dùng lại mật khẩu hoặc 2FA cũ; bạn có thể bổ sung sau trong Kho.</p>':'')+input('trial_date','Ngày trial','date',f?.trial_date||'')+'<p>Nhập ngày bắt đầu trial của mail quản lý. Khi báo lỗi, ứng dụng lưu ngày này để tính số ngày đã sử dụng.</p>'+noteField(f?.note),async data=>{await(f ? patch('families/'+id,{...data,service:f.service}) : post('families',{...data,service:'youtube'}));toast('Đã lưu Family.');});
+      modal(f ? 'Sửa Family' : 'Thêm Family',input('name','Tên Family','text',f?.name,true,'maxlength="200"')+input('manager_email','Email quản lý Family','email',f?.manager_email,true,'maxlength="254"')+(f?'<p>Đổi email quản lý sẽ ngắt liên kết thông tin Kho của mail cũ. Mail mới không dùng lại mật khẩu hoặc 2FA cũ; bạn có thể bổ sung sau trong Kho.</p>':'')+input('trial_date','Ngày trial','date',f?.trial_date||'')+'<p>Nhập ngày bắt đầu trial của mail quản lý. Khi báo lỗi, ứng dụng lưu ngày này để tính số ngày đã sử dụng.</p>'+noteField(f?.note)+(!f&&state.lookup_supported?inviteMailFields(lookupContext,null,true):''),async data=>{
+        const {invite_count,invite_base_email,...family}=data;
+        if(f){await patch('families/'+id,{...family,service:f.service});toast('Đã lưu Family.');return;}
+        if(Number(invite_count)&&!String(invite_base_email||'').trim())throw Error('Nhập Gmail nhận lời mời để tạo mail mời, hoặc chọn Không tạo.');
+        const created=await post('families',{...family,service:'youtube'});toast('Đã lưu Family.');
+        if(!Number(invite_count))return;
+        // The Family exists now; a failed address batch is reported without losing it.
+        try{const result=await createInviteMails(lookupContext,created.id,{invite_count,invite_base_email});return {route:'family/'+created.id,after:()=>showInviteMails(lookupContext,result)};}
+        catch(error){toast('Đã tạo Family, chưa tạo được mail mời: '+error.message,10000);return {route:'family/'+created.id};}
+      });
     } else if (action==='add-member') {
       if (!state.families.length) return toast('Thêm Family trước, rồi thêm khách vào nhóm.');
       const familyField=id ? '' : select('family_id','Family nhận khách',Object.fromEntries(state.families.map(f=>[f.id,f.name+' · '+f.manager_email])),state.families[0].id);

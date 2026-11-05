@@ -361,7 +361,7 @@ test('Mã tra cứu tab stays untouched by older websites and rejects damaged la
 
 const mailPart=(mimeType,text)=>({mimeType,body:{data:Buffer.from(text).toString('base64url')}});
 function inviteMail(id,to,html,date='2026-11-03T09:00:00Z'){return {id,internalDate:String(Date.parse(date)),payload:{mimeType:'multipart/alternative',headers:[{name:'From',value:'Google <families-noreply@google.com>'},{name:'To',value:to}],parts:[mailPart('text/plain','Lời mời tham gia nhóm gia đình'),mailPart('text/html',html)]}};}
-function gmail(s,messages,calls=[]){s.context.Gmail={Users:{Messages:{list:(user,options)=>{calls.push(['list',user,options]);return {messages:messages.map(m=>({id:m.id,threadId:'t'+m.id}))};},get:(user,id,options)=>{calls.push(['get',user,id,options.format]);return messages.find(m=>m.id===id);}}}};return calls;}
+function gmail(s,messages,calls=[]){s.context.Gmail={Users:{getProfile:user=>({emailAddress:'ShopCuaBan@gmail.com'}),Messages:{list:(user,options)=>{calls.push(['list',user,options]);return {messages:messages.map(m=>({id:m.id,threadId:'t'+m.id}))};},get:(user,id,options)=>{calls.push(['get',user,id,options.format]);return messages.find(m=>m.id===id);}}}};return calls;}
 test('Gmail invites: read-only search of the last 14 days returns the Accept invitation link and the inviter',()=>{
  const s=script(),calls=gmail(s,[
   inviteMail('m1','"Shop" <shopcuaban+f09s1@gmail.com>','<p>Nguyễn Văn A (owner09@gmail.com) mời bạn tham gia nhóm gia đình.</p><a href="https://families.google.com/join/promo/AbC_12-x?hl=vi&amp;utm=1">Chấp nhận lời mời</a><a href="https://g.co/yourfamily">Tìm hiểu thêm</a> families-noreply@google.com'),
@@ -370,7 +370,7 @@ test('Gmail invites: read-only search of the last 14 days returns the Accept inv
   inviteMail('m4','shopcuaban+f10s2@gmail.com','<a href="https://evil.example/join">Accept invitation</a> owner10@gmail.com'),
   {...inviteMail('m5','','<a href="https://families.google.com/join/promo/R5">Chấp nhận lời mời</a>'),payload:{...inviteMail('m5','','<a href="https://families.google.com/join/promo/R5">Chấp nhận lời mời</a>').payload,headers:[{name:'Delivered-To',value:'Hai+2@gmail.com'},{name:'Reply-To',value:'Chủ nhóm <owner11@gmail.com>'}]}},
  ]);
- const reply=s.request({action:'read',scope:'invites'});assert.equal(reply.ok,true,JSON.stringify(reply));assert.equal(reply.gmail_invites,'v1');
+ const reply=s.request({action:'read',scope:'invites'});assert.equal(reply.ok,true,JSON.stringify(reply));assert.equal(reply.gmail_invites,'v1');assert.equal(reply.mailbox,'shopcuaban@gmail.com','the Gmail the script reads');
  assert.deepEqual(JSON.parse(JSON.stringify(calls[0])),['list','me',{q:'from:families-noreply@google.com newer_than:14d',maxResults:100,includeSpamTrash:true}]);assert.ok(calls.slice(1).every(call=>call[0]==='get'&&call[3]==='full'));
  assert.deepEqual(reply.invites,[
   {id:'m1',to:'shopcuaban+f09s1@gmail.com',date:'2026-11-03',sent_at:'2026-11-03T09:00:00.000Z',url:'https://families.google.com/join/promo/AbC_12-x',emails:['owner09@gmail.com']},
