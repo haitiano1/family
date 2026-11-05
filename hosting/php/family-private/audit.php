@@ -1,6 +1,6 @@
 <?php
 declare(strict_types=1);
-const TRACKED_TABLES=['accounts','families','members','archived_customers','renewal_history','other_purchases','issues','new_purchase_history','family_statuses','family_invites','member_moves'];
+const TRACKED_TABLES=['accounts','families','members','archived_customers','renewal_history','other_purchases','issues','new_purchase_history','family_statuses','family_invites','member_moves','customer_reports'];
 function snapshot(PDO $db): array {return array_combine(TRACKED_TABLES,array_map(fn($t)=>all($db,"SELECT * FROM `$t` ORDER BY id"),TRACKED_TABLES));}
 function beginAudit(PDO $db,string $action,string $actor='Cá nhân'): void {
     $db->beginTransaction();$GLOBALS['audit_scope']=['db'=>$db,'action'=>$action,'actor'=>$actor,'before'=>snapshot($db),'messages'=>[]];

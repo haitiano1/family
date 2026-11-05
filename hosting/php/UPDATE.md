@@ -1,3 +1,7 @@
+# 0.28.0 — Trang tra cứu có tiến trình, khách báo mất Premium, Telegram
+
+Dùng **Cập nhật một chạm**. Bảng báo lỗi của khách tự tạo khi website mở lần đầu; không cần đổi Apps Script, SQL hay config.php. Muốn nhận tin Telegram: Thêm → Tra cứu khách → Thông báo Telegram. Xem TRA-CUU-CHUYEN-NHOM.md.
+
 # 0.27.0 — Đã fix gọn hơn, Báo lỗi không cần nội dung
 
 Dùng **Cập nhật một chạm**. Không đổi schema, SQL hay Apps Script. Hộp Đã fix chỉ còn Giữ nguyên mail và Đổi sang Gmail chủ mới; Báo lỗi để trống nội dung thì ghi là Bị quét.

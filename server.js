@@ -66,6 +66,7 @@ async function lookupRequest(req,res,url){
   if(req.method==='POST'&&route==='/api/lookup/open')return send(res,200,lookup.customerOpen(address,await body(req)));
   if(req.method==='POST'&&route==='/api/lookup/joined')return send(res,200,lookup.customerJoined(address,await body(req)));
   if(req.method==='POST'&&route==='/api/lookup/report')return send(res,200,lookup.customerReport(address,await body(req)));
+  if(req.method==='POST'&&route==='/api/lookup/problem')return send(res,200,lookup.customerProblem(address,await body(req),(process.env.PUBLIC_ORIGIN||process.env.RENDER_EXTERNAL_URL||(req.headers.host?'http://'+req.headers.host:'')).replace(/\/$/,'')));
   fail('Không tìm thấy.',404);
 }
 function send(res, status, value) { if(res.famCapture){res.famPending={status,value};return;}  res.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' }); res.end(JSON.stringify(value)); }
@@ -104,6 +105,10 @@ async function handle(req, res) {
     if(req.method==='PATCH'&&/^\/api\/moves\/\d+$/.test(url.pathname))return send(res,200,lookup.updateMove(Number(url.pathname.split('/')[3]),await body(req)));
     if(req.method==='PATCH'&&url.pathname==='/api/lookup-settings')return send(res,200,lookup.saveSettings(await body(req)));
     if(req.method==='POST'&&url.pathname==='/api/lookup-codes')return send(res,200,lookup.rotateCode(await body(req)));
+    if(req.method==='PATCH'&&/^\/api\/customer-reports\/\d+$/.test(url.pathname))return send(res,200,lookup.handleReport(Number(url.pathname.split('/')[3]),await body(req)));
+    if(req.method==='POST'&&url.pathname==='/api/telegram')return send(res,200,await lookup.connectTelegram(await body(req)));
+    if(req.method==='POST'&&url.pathname==='/api/telegram/test')return send(res,200,await lookup.testTelegram());
+    if(req.method==='DELETE'&&url.pathname==='/api/telegram')return send(res,200,lookup.disconnectTelegram());
     if(url.pathname.startsWith('/api/vault/'))return send(res,200,await vaultRoute(req,res,url.pathname,['GET','HEAD'].includes(req.method)?{}:await body(req)));
     if(req.method==='GET'&&url.pathname==='/api/statistics')return send(res,200,renewalStatistics(db,Object.fromEntries(url.searchParams)));
     if(req.method==='GET'&&url.pathname==='/api/journal')return send(res,200,journal(db,url.searchParams));

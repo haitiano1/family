@@ -228,4 +228,31 @@ $o17=one($db,'SELECT * FROM issues WHERE id=?',[$c17]);
 beginAudit($db,'Fix thử');$r17=saveIssue($db,$c17,['revision'=>(int)$o17['revision'],'status'=>'done','resolution'=>'replace','replacement_email'=>'owner18@example.com','expected_email'=>'owner17@example.com']);finishAudit();
 check($r17['waiting_customers']===1&&!isset($r17['invite_mails'])&&(int)one($db,'SELECT family_id FROM family_invites WHERE id=?',[$donorLink])['family_id']===$s17&&(int)one($db,'SELECT COUNT(*) AS n FROM invite_mails WHERE family_id=?',[$s17])['n']===1,'donor links and Gen mail come along');
 $p3=lookupVerify($db,['email'=>'p3@example.com','code'=>((array)lookupAdminState($db)['lookup_codes'])['p3@example.com']],'1.1.6.3')['result']['items'][0];check($p3['move']['invite_url']==='https://families.google.com/join/promo/f18a','customer gets the prepared link');
+// ---- Khách báo mất Premium + Telegram ----
+$tg=[];$tgUpdates=[];$GLOBALS['family_telegram_transport']=function(string $method,array $params,string $token)use(&$tg,&$tgUpdates){$tg[]=[$method,$params];if($token!=='123456789:AAEgoodtokengoodtokengoodtoken12')return [401,'{"ok":false,"description":"Unauthorized"}'];return [200,json_encode(['ok'=>true,'result'=>$method==='getMe'?['username'=>'haishop_bot']:($method==='getUpdates'?$tgUpdates:[])])];};
+try{lookupConnectTelegram($db,['token'=>'bad']);check(false,'bad token');}catch(FamilyError $e){check($e->status===400,'bad token refused');}
+try{lookupConnectTelegram($db,['token'=>'123456789:AAEgoodtokengoodtokengoodtoken12']);check(false,'no start');}catch(FamilyError $e){check($e->status===409&&str_contains($e->getMessage(),'@haishop_bot'),'asks for /start');}
+$tgUpdates=[['update_id'=>1,'message'=>['chat'=>['id'=>777,'first_name'=>'Hải'],'text'=>'/start']]];
+beginAudit($db,'Telegram');$on=lookupConnectTelegram($db,['token'=>'123456789:AAEgoodtokengoodtokengoodtoken12']);finishAudit();
+check($on['telegram']===['enabled'=>true,'bot'=>'haishop_bot','chat'=>'Hải']&&end($tg)[0]==='sendMessage'&&end($tg)[1]['chat_id']===777,'connected with a test message');
+check(!str_contains(json_encode(lookupAdminState($db)),'AAEgoodtoken')&&!str_contains(json_encode(lookupSettings($db)),'AAEgoodtoken'),'token stays on the server');
+beginAudit($db,'Dữ liệu giả');$s40=saveFamilyRecord($db,null,['name'=>'Family 40','manager_email'=>'owner40@example.com'])['id'];finishAudit();
+q($db,"INSERT INTO members(family_id,email,customer_name,expires_at,plan_months,membership_status) VALUES (?,?,?,?,1,'active')",[$s40,'lan40@example.com','Lan','2099-01-01']);
+$code40=((array)lookupAdminState($db)['lookup_codes'])['lan40@example.com'];
+$lan=lookupVerify($db,['email'=>'lan40@example.com','code'=>$code40],'1.1.4.0')['result']['items'][0];check($lan['view']==='normal'&&$lan['problem']===null&&is_int($lan['member_ref']),'normal before the report');
+try{lookupCustomerProblem($db,'lan40@example.com',['member'=>$lan['member_ref']+999,'reason'=>'lost_premium']);check(false,'other member');}catch(FamilyError $e){check($e->status===404,'other member refused');}
+beginAudit($db,'Khách báo mất Premium','Khách tra cứu');$after=lookupCustomerProblem($db,'lan40@example.com',['member'=>$lan['member_ref'],'reason'=>'lost_premium','note'=>'Mất từ sáng'])['items'][0];finishAudit();
+check($after['view']==='reported'&&$after['problem']['state']==='open','reported view');
+check(str_contains(end($tg)[1]['text'],"Khách báo mất Premium\nGmail: lan40@example.com\nFamily: Family 40 (owner40@example.com)")&&str_contains(end($tg)[1]['text'],'Ghi chú: Mất từ sáng'),'Telegram message: '.json_encode(end($tg)));
+try{lookupCustomerProblem($db,'lan40@example.com',['member'=>$lan['member_ref'],'reason'=>'other']);check(false,'twice');}catch(FamilyError $e){check($e->status===409,'one open report');}
+$rep=array_values(array_filter(lookupAdminState($db)['customer_reports'],fn($r)=>$r['email']==='lan40@example.com'))[0];
+try{lookupHandleReport($db,$rep['id'],['revision'=>$rep['revision']+1]);check(false,'stale');}catch(FamilyError $e){check($e->status===409,'stale revision refused');}
+beginAudit($db,'Xử lý');lookupHandleReport($db,$rep['id'],['revision'=>$rep['revision'],'note'=>'Đã mời lại']);finishAudit();
+$lan=lookupResult($db,'lan40@example.com')['items'][0];check($lan['view']==='normal'&&$lan['problem']['handled_note']==='Đã mời lại','handled with a note');
+beginAudit($db,'Khách báo mất Premium','Khách tra cứu');lookupCustomerProblem($db,'lan40@example.com',['member'=>$lan['member_ref'],'reason'=>'left_family']);finishAudit();
+beginAudit($db,'Báo lỗi thử');saveIssue($db,null,['family_id'=>$s40,'target_type'=>'manager']);finishAudit();
+$lan=lookupResult($db,'lan40@example.com')['items'][0];check($lan['view']==='incident'&&$lan['problem']['state']==='handled','incident closes the report');
+beginAudit($db,'Telegram');lookupDisconnectTelegram($db);finishAudit();check(lookupTelegramState($db)['enabled']===false,'Telegram off');
+$GLOBALS['family_telegram_transport']=function(){check(false,'nothing sent after off');};lookupTelegramNotify($db,'x');
+check(count(all($db,'SELECT id FROM customer_reports WHERE email=?',['lan40@example.com']))===2,'both reports kept');
 echo "Sheet codes and Gmail invite checks passed\n";

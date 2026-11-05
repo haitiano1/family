@@ -27,11 +27,12 @@ function exportBackup(databaseFile, outputFile) {
       vault_items:{id:null,payload:'',revision:0,created_at:'',updated_at:'',family_id:null},
       new_purchase_history:{id:null,member_id:null,archive_id:null,email:'',customer_name:'',contact:'',family_name:'',joined_at:'',expires_at:'',plan_months:0,payment_status:'unpaid',amount:0,note:'',created_at:''},
       family_statuses:{id:null,family_id:null,status:'active',note:'',updated_at:'',revision:0},
-      family_invites:{id:null,family_id:null,label:'',url:'',sent_on:'',revision:0,created_at:'',updated_at:'',sent_at:''},
+      family_invites:{id:null,family_id:null,label:'',url:'',sent_on:'',revision:0,created_at:'',updated_at:'',sent_at:'',retired_at:''},
       member_moves:{id:null,member_id:null,email:'',customer_name:'',from_family_id:null,from_family_name:'',from_status:'active',from_note:'',to_family_id:null,to_family_name:'',invite_id:null,invite_label:'',state:'assigned',report_reason:'',report_note:'',created_at:'',updated_at:'',opened_at:'',joined_at:'',reported_at:'',dismissed_at:'',revision:0},
       lookup_codes:{id:null,email:'',code:'',created_at:''},
       lookup_settings:{id:null,name:'',value:''},
-      invite_mails:{id:null,family_id:null,email:'',created_at:''}
+      invite_mails:{id:null,family_id:null,email:'',created_at:''},
+      customer_reports:{id:null,member_id:null,email:'',family_id:null,family_name:'',reason:'',note:'',created_at:'',handled_at:'',handled_note:'',revision:0}
     };
     const tables={};
     for (const [table,base] of Object.entries(defaults)) {
