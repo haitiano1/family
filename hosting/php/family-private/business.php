@@ -143,7 +143,7 @@ function restoreBackup(PDO $db,array $d): array {
     if (($d['format']??'')!=='family-customer-backup' || !in_array($d['version']??null,[1,2,3,4,5,6,7,8,9,10],true) || !is_array($d['tables']??null)) fail('File sao lưu khách hàng không hợp lệ.');
     // Lookup tables (statuses, invites, moves, codes, page settings) exist from backup v10.
     if($d['version']<10)foreach(['family_statuses','family_invites','member_moves','lookup_codes','lookup_settings','invite_mails'] as $t)$d['tables'][$t]=[];
-    // invite_mails joined version 10 in 0.22.0; earlier version-10 files simply have none.
+    // invite_mails joined version 10 in 0.23.0; earlier version-10 files simply have none.
     if(!array_key_exists('invite_mails',$d['tables']))$d['tables']['invite_mails']=[];
     if($d['version']<8&&!empty($d['tables']['new_purchase_history']))fail('Lịch sử mua mới cần sao lưu phiên bản 8.');
     if($d['version']<8)$d['tables']['new_purchase_history']=[];

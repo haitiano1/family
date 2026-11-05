@@ -1,6 +1,8 @@
-# YouTube Family — Quản lý khách hàng 0.22.0
+# Hải Premium — Quản lý khách hàng 0.23.0
 
-Bản 0.22.0 (tiêu đề web **Hải Premium**) hiện **mã tra cứu ngay dưới Gmail khách** (có nút copy), thêm tab **FamilySync_MaTraCuu** đồng bộ hai chiều với Google Sheet (Tên khách · Mail khách · Mã tra cứu), **Gen mail mời** (1–5 Gmail có dấu + ngẫu nhiên, không trùng), **Lấy link mời**: Apps Script đọc thư mời Family (chỉ đọc) và hiện link của từng mail, và ô **Đã gửi** trên từng link để không gửi nhầm cho khách khác. Cần cập nhật cả website và Code.gs/appsscript.json; xem [hướng dẫn](integrations/google-sheets/MA-TRA-CUU-VA-GMAIL.md).
+Bản 0.23.0 đổi tiêu đề web thành **Hải Premium**, thêm **Gen mail mời** (khi Thêm Family hoặc trong trang Family: 1–5 Gmail có dấu + với đuôi ngẫu nhiên, không bao giờ trùng), nút **Lấy link mời** hiện link của từng mail đã tạo và lưu vào kho link của Family, và ô **Đã gửi** trên từng link để link đã gửi tay không bị giao cho khách khác. Xem [hướng dẫn](integrations/google-sheets/MA-TRA-CUU-VA-GMAIL.md).
+
+Bản 0.22.0 hiện **mã tra cứu ngay dưới Gmail khách** (có nút copy), thêm tab **FamilySync_MaTraCuu** đồng bộ hai chiều với Google Sheet (Tên khách · Mail khách · Mã tra cứu), và nút **Lấy link từ Gmail**: Apps Script đọc thư mời Family gửi tới các Gmail có dấu + (chỉ đọc) và xếp link vào đúng Family. Cần cập nhật cả website và Code.gs/appsscript.json.
 
 Bản 0.21.0 thêm **Tra cứu khách & chuyển nhóm**: trạng thái Family hiển thị cho khách, kho link mời theo Family, chuyển hàng loạt khách sang nhóm mới với mỗi khách một link, theo dõi tiến độ, và trang `/tra-cuu.html` để khách nhập Gmail + mã tra cứu tự lấy link vào nhóm mới. Giữ schema 8 nên cài được bằng Cập nhật một chạm; sao lưu lên phiên bản 10. Xem [hướng dẫn](hosting/php/TRA-CUU-CHUYEN-NHOM.md).
 
