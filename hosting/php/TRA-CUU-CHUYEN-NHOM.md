@@ -27,7 +27,17 @@ Vào **Thêm → Tra cứu khách → Sửa thông tin** để đặt tên shop,
 - Khách bấm **Tôi đã vào được** (hoặc bạn bấm **Đã vào**) thì khách chuyển sang *Đã vào* và link thành *Đã dùng*.
 - Family hết link thì khách thấy "Shop đang chuẩn bị link vào nhóm". Thêm link (Gen mail mời → Lấy link mời) là khách tra cứu lại sẽ nhận được.
 - Khách đang ở nhóm (*Đã vào*), khách hết hạn hoặc Family đang có sự cố thì không nhận link tự động.
-- Mọi link khách đã xem trên trang tra cứu, kể cả link chuyển nhóm, đều tự tick **Đã gửi**. Thu hồi link đó thì link giữ dấu Đã gửi; bỏ tick nếu chắc khách chưa dùng.
+- Link đã đưa cho khách tự có tag **Đã gửi** (từ 0.25.0 không còn ô tick). Khách vào nhóm bằng link nào thì dòng đó hiện Gmail của khách thay cho mail haihoangrr+…. **Thu hồi link** đưa link về Sẵn sàng; link cũ sau **Đổi link** giữ tag Đã gửi, bấm **Đưa lại vào kho** nếu chắc chưa ai dùng.
+
+## Đã fix · Cho khách vào (0.25.0)
+
+Khi đã có Family mới thay cho Family bị quét, ở trang Fix lỗi bấm **Đã fix** trên case mail quản lý → chọn **Cho khách vào Family mới** → chọn Family mới → bấm **Cho khách vào**.
+
+- Web lấy **toàn bộ** khách của Family cũ (kể cả khách hết hạn) và chuyển sang Family mới, giữ nguyên tên, Contact, gói, ngày mua, hạn, thanh toán và lịch sử.
+- Nếu Family mới đã có hồ sơ cùng Gmail (ví dụ bạn đã thêm tay), hồ sơ đó bị **ghi đè** bằng hồ sơ ở Family cũ.
+- Khách chuyển sang trạng thái **Đã mời, chưa vào**. Khách còn hạn tra cứu Gmail sẽ tự nhận một link Sẵn sàng của Family mới (link tự có tag Đã gửi). Nên Gen mail mời → mời → Lấy link mời ở Family mới trước hoặc ngay sau đó.
+- Case chuyển sang Đã fix, Family cũ giữ **Bị quét** (không còn khách), web mở trang Family mới.
+- Web dừng và không chuyển ai nếu một khách trùng Gmail chủ Family mới, hoặc Family cũ không còn khách.
 
 ## Khi Family gặp sự cố
 

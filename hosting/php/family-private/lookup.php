@@ -224,6 +224,29 @@ function lookupDeleteInviteMails(PDO $db,int $familyId,array $d): array {
         return ['ok'=>true,'deleted'=>count($rows)];
     });
 }
+// Cho khách vào: every customer of the old Family, with all their details, moves into the new
+// Family as "Đã mời, chưa vào" (they then get their own link on lookup). A record of the same
+// Gmail already in the new Family is replaced by the old Family's record.
+function lookupHandOver(PDO $db,int $fromId,array $d): array {
+    $from=lookupActiveFamily($db,$fromId);if(!$from)fail('Không tìm thấy Family cũ đang hoạt động.',404);
+    $to=lookupActiveFamily($db,$d['to_family_id']??null);if(!$to||(int)$to['id']===(int)$from['id'])fail('Chọn Family mới đang hoạt động.');
+    if($to['manager_email']!==email($d['expected_manager_email']??''))fail('Mail chủ Family mới đã thay đổi. Tải lại rồi chọn lại.',409);
+    $members=all($db,'SELECT * FROM members WHERE family_id=? ORDER BY id',[$from['id']]);
+    if(!$members)fail("{$from['name']} không còn khách để chuyển.",409);
+    foreach($members as $m)if($m['email']===$to['manager_email'])fail("Email {$m['email']} trùng mail chủ {$to['name']}.",409);
+    return transaction($db,function()use($db,$from,$to,$members){
+        $time=lookupNow();$replaced=0;
+        foreach($members as $m){
+            $duplicate=one($db,'SELECT id FROM members WHERE family_id=? AND email=?',[$to['id'],$m['email']]);
+            if($duplicate){foreach(['member_moves','renewal_history','new_purchase_history'] as $t)q($db,"UPDATE `$t` SET member_id=NULL WHERE member_id=?",[$duplicate['id']]);q($db,"DELETE FROM issues WHERE family_id=? AND target_type='member' AND target_id=?",[$to['id'],$duplicate['id']]);q($db,'DELETE FROM members WHERE id=?',[$duplicate['id']]);$replaced++;}
+            q($db,"UPDATE member_moves SET state='cancelled',updated_at=?,revision=revision+1 WHERE member_id=? AND state IN ('assigned','opened','failed')",[$time,$m['id']]);
+            q($db,"UPDATE members SET family_id=?,membership_status='invited',renewal_revision=renewal_revision+1 WHERE id=?",[$to['id'],$m['id']]);
+            q($db,"DELETE FROM issues WHERE family_id=? AND target_type='member' AND target_id=?",[$from['id'],$m['id']]);
+        }
+        logEntry($db,'Cá nhân: cho '.count($members)." khách của {$from['name']} ({$from['manager_email']}) vào {$to['name']} ({$to['manager_email']})".($replaced?", ghi đè $replaced hồ sơ trùng Gmail":'').': '.implode(', ',array_column($members,'email')));
+        return ['ok'=>true,'moved'=>count($members),'replaced'=>$replaced,'family_id'=>(int)$to['id'],'family_name'=>$to['name']];
+    });
+}
 function lookupMarkInviteSent(PDO $db,int $id,array $d): array {
     $i=one($db,'SELECT * FROM family_invites WHERE id=?',[$id]);if(!$i)fail('Không tìm thấy link mời.',404);
     $f=lookupActiveFamily($db,(int)$i['family_id']);if(!$f)fail('Không tìm thấy Family đang hoạt động.',404);
@@ -298,7 +321,7 @@ function lookupUpdateMove(PDO $db,int $id,array $d): array {
         }elseif($action==='release'){
             if(!$open)fail('Chỉ thu hồi được link chưa dùng.',409);
             q($db,"UPDATE member_moves SET state='cancelled',updated_at=?,revision=revision+1 WHERE id=?",[$now,$id]);
-            if($mv['invite_id']!==null)q($db,'UPDATE family_invites SET revision=revision+1,updated_at=? WHERE id=?',[$now,$mv['invite_id']]);
+            if($mv['invite_id']!==null)q($db,"UPDATE family_invites SET sent_at='',revision=revision+1,updated_at=? WHERE id=?",[$now,$mv['invite_id']]);
             logEntry($db,"Cá nhân: thu hồi link {$mv['invite_label']} của {$mv['email']}, trả về kho {$mv['to_family_name']}");
         }elseif($action==='reassign'){
             if(!$open||!$live)fail('Chỉ đổi link cho khách đang chờ vào Family mới.',409);
@@ -436,6 +459,7 @@ function lookupRequest(PDO $db,array $c,string $route,string $method): never {
 function lookupAdminRequest(PDO $db,string $route,string $method): void {
     if(preg_match('~^/api/families/(\d+)/status$~D',$route,$p)&&$method==='PATCH')reply(lookupSaveStatus($db,(int)$p[1],body()));
     if(preg_match('~^/api/invites/(\d+)/sent$~D',$route,$p)&&$method==='PATCH')reply(lookupMarkInviteSent($db,(int)$p[1],body()));
+    if(preg_match('~^/api/families/(\d+)/hand-over$~D',$route,$p)&&$method==='POST')reply(lookupHandOver($db,(int)$p[1],body()));
     if(preg_match('~^/api/families/(\d+)/invite-mails$~D',$route,$p)&&$method==='DELETE')reply(lookupDeleteInviteMails($db,(int)$p[1],body()));
     if(preg_match('~^/api/families/(\d+)/invite-mails$~D',$route,$p)&&$method==='POST')reply(lookupGenerateInviteMails($db,(int)$p[1],body()),201);
     if(preg_match('~^/api/families/(\d+)/invites$~D',$route,$p)&&$method==='POST')reply(lookupSaveInvite($db,(int)$p[1],null,body()),201);
@@ -451,6 +475,7 @@ function lookupAuditAction(string $method,string $route): string {
     if(preg_match('~^/api/families/\d+/invites$~D',$route))return 'Thêm link mời';
     if(preg_match('~^/api/families/\d+/invite-mails$~D',$route))return $method==='DELETE'?'Xóa mail mời':'Tạo mail mời';
     if(preg_match('~^/api/invites/\d+/sent$~D',$route))return 'Đánh dấu link đã gửi';
+    if(preg_match('~^/api/families/\d+/hand-over$~D',$route))return 'Cho khách vào Family mới';
     if(preg_match('~^/api/invites/\d+$~D',$route))return $method==='DELETE'?'Xóa link mời':'Sửa link mời';
     if($route==='/api/moves')return 'Chuyển Family';
     if(preg_match('~^/api/moves/\d+$~D',$route))return 'Sửa chuyển nhóm';

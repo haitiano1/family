@@ -179,4 +179,16 @@ $first=lookupResult($db,'newbie@example.com')['items'][0]['move'];check($first['
 $gmailReply['invites'][]=$mail($heldMail,'https://families.google.com/join/promo/h2',['owner10-new@example.com'],'2026-11-05T04:00:00.000Z');
 $r=$gmail();check($r['updated']===1&&$r['added']===0,'held link updated in place');
 $again=lookupResult($db,'newbie@example.com')['items'][0]['move'];check($again['id']===$first['id']&&$again['invite_url']==='https://families.google.com/join/promo/h2','same slot, newer link for the same customer');
+// Đã fix · Chuyển khách sang Family mới: the case closes and the broken Family stays Bị quét.
+beginAudit($db,'Dữ liệu giả');$b=saveFamilyRecord($db,null,['name'=>'Family 15','manager_email'=>'owner15@example.com'])['id'];finishAudit();
+beginAudit($db,'Báo lỗi thử');$moving=saveIssue($db,null,['family_id'=>$b,'target_type'=>'manager','title'=>'Bị quét']);finishAudit();check($statusOf($b)==='scanned','reported');
+$open=one($db,'SELECT * FROM issues WHERE id=?',[$moving['id']]);
+try{beginAudit($db,'Fix thử');saveIssue($db,$moving['id'],['revision'=>(int)$open['revision'],'status'=>'done','resolution'=>'move','move_family_id'=>$b]);finishAudit();check(false,'same Family refused');}catch(FamilyError $e){finishAudit(false);check($e->status===400,'same Family refused');}
+q($db,"INSERT INTO members(family_id,email,customer_name,expires_at,plan_months,membership_status) VALUES (?,?,?,?,1,'active')",[$b,'old1@example.com','Khách cũ','2099-01-01']);q($db,"INSERT INTO members(family_id,email,customer_name,expires_at,plan_months,membership_status) VALUES (?,?,?,?,1,'active')",[$ten,'old1@example.com','Bản trùng','2026-01-01']);
+$tenOwner=lookupActiveFamily($db,$ten)['manager_email'];
+$over=lookupHandOver($db,$b,['to_family_id'=>$ten,'expected_manager_email'=>$tenOwner]);check($over['moved']===1&&$over['replaced']===1,'hand-over with overwrite');
+$moved=all($db,'SELECT * FROM members WHERE email=?',['old1@example.com']);check(count($moved)===1&&(int)$moved[0]['family_id']===$ten&&$moved[0]['customer_name']==='Khách cũ'&&$moved[0]['membership_status']==='invited','old record wins as Đã mời, chưa vào');
+try{lookupHandOver($db,$b,['to_family_id'=>$ten,'expected_manager_email'=>$tenOwner]);check(false,'empty Family refused');}catch(FamilyError $e){check($e->status===409,'empty Family refused');}
+beginAudit($db,'Fix thử');saveIssue($db,$moving['id'],['revision'=>(int)$open['revision'],'status'=>'done','resolution'=>'move','move_family_id'=>$ten]);finishAudit();
+check(one($db,'SELECT resolution_note FROM issues WHERE id=?',[$moving['id']])['resolution_note']==='Đã chuyển khách sang Family 10.'&&$statusOf($b)==='scanned','move keeps Bị quét');
 echo "Sheet codes and Gmail invite checks passed\n";

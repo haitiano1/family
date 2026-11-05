@@ -6,7 +6,7 @@
 - **Tab FamilySync_MaTraCuu trong Google Sheet** có 3 cột: Tên khách · Mail khách · Mã tra cứu. Cột ID nằm ẩn ở cột D. Tab đồng bộ hai chiều với web.
 - **Gen mail mời** (0.23.0): web tạo 1–5 Gmail có dấu + với đuôi ngẫu nhiên (ví dụ `haihoangrr+k7p2qx@gmail.com`), không bao giờ trùng, để bạn mời từ tài khoản chủ Family.
 - **Lấy link mời** (0.23.0; 0.22.0 có nút Lấy link từ Gmail): web tự lấy link nút **Accept invitation / Chấp nhận lời mời** trong thư mời gửi tới các Gmail đó, hiện link của từng mail và lưu vào kho link của Family.
-- **Tick Đã gửi** (0.23.0) trên từng link: link đã gửi tay cho khách sẽ không bị giao cho khách khác.
+- **Tag Đã gửi** (tự động từ 0.25.0): link đã đưa cho khách tự có tag Đã gửi và không bị giao cho khách khác.
 - Tiêu đề web đổi thành **Hải Premium** (0.23.0).
 
 ## Cập nhật (làm một lần)
@@ -50,27 +50,12 @@ Nếu bước 2.3 báo lỗi Gmail: ở cột trái của Apps Script bấm **Se
 
 Vẫn mời được các Gmail tự đặt như `hai+1@gmail.com`; nút **Lấy link từ Gmail** ở **Thêm → Tra cứu khách** lấy link cho mọi Family. Khi website đang mở, web tự kiểm tra Gmail 10 phút một lần.
 
-## Tick Đã gửi (0.23.0)
+## Tag Đã gửi (tự động từ 0.25.0)
 
-Từ 0.24.0, web tự tick **Đã gửi** khi khách xem link trên trang tra cứu. Khách **Đã mời, chưa vào** / **Mua mới** tra cứu Gmail sẽ tự nhận một link riêng của Family mình (xem TRA-CUU-CHUYEN-NHOM.md). Ô tick vẫn dùng được cho link bạn gửi tay.
-
-- Mỗi link trong **Link mời vào Family này** có ô **Đã gửi**. Gửi link cho khách bằng tay (Zalo, Messenger…) thì tick ô này.
-- Link đã tick hiện **Đã gửi** kèm giờ tick. Link này không có trong danh sách chọn khi **Chuyển khách sang nhóm mới** hoặc **Đổi link**, và Lấy link mời không thay link này.
-- Bỏ tick thì link quay lại **Sẵn sàng**. Link đang giao trong lượt chuyển nhóm hoặc đã có khách vào nhóm thì không cần tick.
-- Nhật ký ghi mỗi lần tick hoặc bỏ tick.
-
-Cách web xử lý thư mời:
-
-- Web đọc thư từ `families-noreply@google.com` trong 14 ngày gần nhất, kể cả thư bị vào Spam, và lấy link nút **Chấp nhận lời mời**.
-- Mỗi link mang đúng Gmail đã nhận thư: thư gửi tới `hai+1@gmail.com` cho dòng **hai+1@gmail.com**, thư gửi tới `+2` cho dòng **hai+2@gmail.com**. Ngày gửi lấy theo ngày thư; web nhắc khi lời mời sắp hết hạn 14 ngày.
-- Web biết thư thuộc Family nào bằng cách so Gmail người mời có trong thư với mail chủ Family trên web. Mail tạo bằng Gen mail mời thì web còn biết Family đã tạo mail đó. Nếu hai thông tin khác nhau, link theo Family của người mời (vì link dẫn vào nhóm của người đó) và web báo lại.
-- Thư không khớp Family nào thì web chỉ báo "chưa khớp", không tự gán, để không giao nhầm link sang Family khác. Khi đó bạn dán link tay như trước.
-- Google gửi thư mời mới cho cùng một Gmail:
-  - Link cũ chưa ai dùng: web thay bằng link mới. Khách đang được giao link đó sẽ thấy link mới khi tra cứu lại.
-  - Link cũ đang giữ cho một khách (khách đã nhận khi tra cứu hoặc khi chuyển nhóm): web thay link mới vào đúng chỗ, khách thấy link mới khi tra cứu lại.
-  - Link cũ đã có khách vào nhóm, hoặc bạn tự tick **Đã gửi** khi gửi tay: web giữ nguyên dòng cũ và thêm một dòng mới.
-- Link bạn dán tay có ngày gửi mới hơn thư thì web giữ nguyên.
-- Script chỉ đọc thư. Script không bấm link, không đánh dấu đã đọc, không xóa và không gửi thư.
+- Không còn ô tick. Link nào web đã đưa cho khách (khách tra cứu Gmail, hoặc khi chuyển khách sang nhóm mới) tự có tag **Đã gửi**, kèm tên khách và giờ khách xem.
+- Link Đã gửi không có trong danh sách chọn khi chuyển nhóm hay đổi link, và không giao cho khách khác.
+- Khách vào nhóm bằng link nào thì dòng đó hiện **Gmail của khách** thay cho mail haihoangrr+…, kèm dòng nhỏ *Mail mời: …* và trạng thái **Đã dùng**.
+- **Thu hồi link** đưa link về **Sẵn sàng**. Link cũ sau khi **Đổi link** vẫn giữ tag Đã gửi; nếu chắc chưa ai dùng, bấm **Đưa lại vào kho**.
 
 ## Nếu web báo lỗi
 
@@ -83,7 +68,7 @@ Cách web xử lý thư mời:
 
 ## Lưu ý
 
-- Chỉ bản Hostinger (PHP) có tab Mã tra cứu và Lấy link mời. Bản Windows/Node vẫn có mã dưới Gmail khách, Gen mail mời và tick Đã gửi; link thì dán tay.
+- Chỉ bản Hostinger (PHP) có tab Mã tra cứu và Lấy link mời. Bản Windows/Node vẫn có mã dưới Gmail khách, Gen mail mời và tag Đã gửi; link thì dán tay.
 - Sao lưu vẫn là phiên bản 10, có thêm danh sách mail mời đã tạo và dấu Đã gửi. Bản sao lưu cũ vẫn khôi phục được.
 - Gmail nhận lời mời phải là tài khoản Google đang chạy Apps Script đồng bộ Sheet.
 - Website 0.21 vẫn dùng được với Code.gs mới; tab Mã tra cứu chỉ được ghi khi website đã lên 0.22.0.

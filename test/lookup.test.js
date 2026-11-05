@@ -437,3 +437,35 @@ test('mail mời made by mistake can be deleted while it still waits for its lin
     assert.ok((await a('journal')).entries.some(e => e.action === 'Xóa mail mời' && e.message.includes(made[0])));
   } finally { await f.close(); }
 });
+
+test('Đã fix · Cho khách vào moves every customer with their details and keeps the old Family Bị quét', async () => {
+  const f = await server(); try {
+    const a = f.admin, { oldFamily, newFamily, calm, minh, huy, bao } = await incident(a);
+    const created = await a('issues', 'POST', { family_id: oldFamily.id, target_type: 'manager', title: 'Bị quét' }, 201);
+    const stale = await a('members', 'POST', { family_id: newFamily.id, email: 'minhanh@example.com', customer_name: 'Bản cũ', expires_at: day(1) }, 201);
+    await a(`families/${newFamily.id}/invites`, 'POST', { label: 'slot', url: inviteUrl(70), sent_on: day(0) }, 201);
+    await a(`families/${oldFamily.id}/hand-over`, 'POST', { to_family_id: oldFamily.id, expected_manager_email: 'owner04@example.com' }, 400);
+    await a(`families/${oldFamily.id}/hand-over`, 'POST', { to_family_id: newFamily.id, expected_manager_email: 'changed@example.com' }, 409);
+    assert.deepEqual(await a(`families/${oldFamily.id}/hand-over`, 'POST', { to_family_id: newFamily.id, expected_manager_email: 'owner09@example.com' }), { ok: true, moved: 3, replaced: 1, family_id: newFamily.id, family_name: 'Family 09' });
+    let state = await a('state');
+    const moved = state.members.filter(m => m.family_id === newFamily.id).sort((x, y) => x.id - y.id);
+    assert.deepEqual(moved.map(m => [m.id, m.email, m.customer_name, m.membership_status]), [[minh.id, 'minhanh@example.com', 'Minh Anh', 'invited'], [huy.id, 'giahuy@example.com', 'Gia Huy', 'invited'], [bao.id, 'quocbao@example.com', 'Quốc Bảo', 'invited']], 'old records win, all details kept');
+    assert.equal(state.members.some(m => m.id === stale.id), false, 'duplicate in the new Family replaced');
+    assert.equal(state.members.some(m => m.family_id === oldFamily.id), false);
+    assert.equal(member(state, minh.id).expires_at, day(38), 'dates kept');
+    // Customers now get the new Family's links on lookup.
+    const item = (await f.customer()('verify', 'POST', { email: 'minhanh@example.com', code: state.lookup_codes['minhanh@example.com'] })).items[0];
+    assert.deepEqual([item.family_name, item.view, item.move.kind, item.move.invite_url], ['Family 09', 'move', 'join', inviteUrl(70)]);
+    let issue = state.issues.find(i => i.id === created.id);
+    await a(`issues/${created.id}`, 'PATCH', { revision: issue.revision, status: 'done', resolution: 'move', move_family_id: oldFamily.id }, 400);
+    await a(`issues/${created.id}`, 'PATCH', { revision: issue.revision, status: 'done', resolution: 'move', move_family_id: newFamily.id });
+    state = await a('state'); issue = state.issues.find(i => i.id === created.id);
+    assert.equal(issue.resolution_note, 'Đã chuyển khách sang Family 09.');
+    assert.equal(state.family_statuses.find(x => x.family_id === oldFamily.id).status, 'scanned', 'old Family stays Bị quét');
+    await a(`families/${oldFamily.id}/hand-over`, 'POST', { to_family_id: newFamily.id, expected_manager_email: 'owner09@example.com' }, 409);
+    assert.ok((await a('journal')).entries.some(e => e.action === 'Cho khách vào Family mới'));
+    // A customer whose Gmail is the new owner's blocks the hand-over.
+    const ownerClash = await a('families', 'POST', { name: 'Family 20', manager_email: 'hoangnam@example.com' }, 201);
+    await a(`families/${calm.id}/hand-over`, 'POST', { to_family_id: ownerClash.id, expected_manager_email: 'hoangnam@example.com' }, 409);
+  } finally { await f.close(); }
+});

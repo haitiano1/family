@@ -1,4 +1,6 @@
-# Hải Premium — Quản lý khách hàng 0.24.1
+# Hải Premium — Quản lý khách hàng 0.25.0
+
+Bản 0.25.0: tag **Đã gửi** hoàn toàn tự động (bỏ ô tick); link khách đã vào nhóm hiện Gmail của khách thay cho mail haihoangrr+…; hộp **Đã fix** ở Fix lỗi có thêm nút **Cho khách vào**: chuyển toàn bộ khách của Family bị quét sang Family mới (ghi đè hồ sơ trùng Gmail), khách tra cứu sẽ nhận link của Family mới. Xem [hướng dẫn](hosting/php/TRA-CUU-CHUYEN-NHOM.md).
 
 Bản 0.24.1 thêm nút xóa trong khung **mail chờ lấy link**: nút × cạnh từng mail và nút **Xóa tất cả** để bỏ mail tạo nhầm.
 
