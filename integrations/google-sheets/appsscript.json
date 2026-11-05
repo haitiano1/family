@@ -3,6 +3,16 @@
   "runtimeVersion": "V8",
   "exceptionLogging": "NONE",
   "oauthScopes": [
-    "https://www.googleapis.com/auth/spreadsheets"
-  ]
+    "https://www.googleapis.com/auth/spreadsheets",
+    "https://www.googleapis.com/auth/gmail.readonly"
+  ],
+  "dependencies": {
+    "enabledAdvancedServices": [
+      {
+        "userSymbol": "Gmail",
+        "version": "v1",
+        "serviceId": "gmail"
+      }
+    ]
+  }
 }

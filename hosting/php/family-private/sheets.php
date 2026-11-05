@@ -18,24 +18,51 @@ function sheetsSettings(PDO $db,array $c): array {
     $encrypted=sheetsMeta($db,'config',null);if(!$encrypted)return [];
     try{return json_decode(vaultOpen($encrypted,sheetsKey($c),'family-sheets-config-v1'),true,512,JSON_THROW_ON_ERROR);}catch(Throwable $e){fail('Không đọc được kết nối Sheet. Kết nối lại sau khi đổi cấu hình website.',503);}
 }
-function sheetsSchema(string $scope,bool $withTrial=false): array {
+function sheetsSchema(string $scope,bool $withTrial=false,bool $withCodes=false): array {
     return $scope==='core'?[
         'families'=>['id','name','manager_email','trial_date','service','note'],
         'members'=>['id','family_id','email','customer_name','contact','joined_at','expires_at','payment_status','amount','plan_months','membership_status','note','renewal_status','renewal_amount','renewal_paid_at','renewal_note'],
+        ...($withCodes?['codes'=>['id','customer_name','email','code']]:[]),
     ]:['vault'=>array_merge(['id','family_id','email','password','totp','recovery_email','label','note'],$withTrial?['trial_date']:[])];
+}
+// Mã tra cứu tab (Apps Script v5.8+): one row per customer Gmail in an active Family,
+// in the same order as the customer tab. The row ID is derived from the Gmail.
+function sheetsCodeId(string $address): string {return 'L'.substr(hash('sha256',"family-lookup-row\0".$address),0,24);}
+function sheetsCodeRows(PDO $db): array {
+    $salt=lookupSalt($db);$overrides=array_column(all($db,'SELECT email,code FROM lookup_codes'),'code','email');$rows=[];
+    foreach(all($db,"SELECT m.email,m.customer_name FROM members m JOIN families f ON f.id=m.family_id WHERE f.archived_at='' ORDER BY f.id,m.id") as $m){
+        $id=sheetsCodeId($m['email']);
+        if(isset($rows[$id])){if($rows[$id]['customer_name']==='')$rows[$id]['customer_name']=(string)$m['customer_name'];continue;}
+        $rows[$id]=['id'=>$id,'customer_name'=>(string)$m['customer_name'],'email'=>$m['email'],'code'=>$overrides[$m['email']]??lookupDerivedCode($salt,$m['email'])];
+    }return $rows;
+}
+// Only the code cell is read back. Name and Gmail always come from the website by the
+// hidden ID; a blank cell keeps the current code and unknown rows are dropped on write.
+function sheetsApplyCodes(PDO $db,array $local,array $merged): void {
+    foreach($merged as $id=>$data){
+        $current=$local[$id]??null;if(!$current||$data===$current||trim($data['code'])==='')continue;
+        $address=$current['email'];$code=lookupNormalizeCode($data['code']);
+        if($code==='')fail('Mã tra cứu của '.$address.' trong tab FamilySync_MaTraCuu cần đúng 6 ký tự: chữ A–Z trừ I, L, O và số 2–9. Sửa ô Mã tra cứu rồi đồng bộ lại.',409);
+        if($code===$current['code'])continue;
+        if(one($db,'SELECT id FROM lookup_codes WHERE email=?',[$address]))q($db,'UPDATE lookup_codes SET code=?,created_at=? WHERE email=?',[$code,stamp(),$address]);
+        else q($db,'INSERT INTO lookup_codes(email,code,created_at) VALUES (?,?,?)',[$address,$code,stamp()]);
+        q($db,'DELETE FROM lookup_sessions WHERE email=?',[$address]);
+        logEntry($db,"Cá nhân: đổi mã tra cứu của $address từ Sheet");
+    }
 }
 function sheetsCanonical(array $data): string {ksort($data);return json_encode($data,JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES|JSON_THROW_ON_ERROR);}
 function sheetsHash(?array $row,array $c): ?string {return $row===null?null:hash_hmac('sha256',sheetsCanonical($row),sheetsKey($c));}
 function sheetsBirth(string $type,array $row): string {return $type.':'.$row['id'].':'.($row['created_at']??'');}
 function sheetsId(string $type,array $row,array $ids): string {return $ids[sheetsBirth($type,$row)]??strtoupper(substr($type,0,1)).$row['id'].'_'.substr(hash('sha256',(string)($row['created_at']??$type)),0,12);}
 function sheetsProject(array $row,array $fields): array {return array_combine($fields,array_map(fn($f)=>(string)($row[$f]??''),$fields));}
-function sheetsSnapshot(PDO $db,string $scope,?string $key=null,bool $withTrial=false): array {
+function sheetsSnapshot(PDO $db,string $scope,?string $key=null,bool $withTrial=false,bool $withCodes=false): array {
     $ids=sheetsMeta($db,'ids');$schema=sheetsSchema($scope,$withTrial);$families=all($db,"SELECT f.*,a.email AS manager_email FROM families f JOIN accounts a ON a.id=f.manager_id WHERE f.archived_at='' ORDER BY f.id");
     $familyIds=[];$trials=[];foreach($families as $f){$familyIds[$f['id']]=sheetsId('family',$f,$ids);$trials[$f['id']]=$f['trial_date'];}
     if($scope==='core'){
         $result=['families'=>[],'members'=>[]];
         foreach($families as $f){$id=$familyIds[$f['id']];$result['families'][$id]=sheetsProject([...$f,'id'=>$id],$schema['families']);}
         foreach(all($db,'SELECT * FROM members ORDER BY id') as $m){if(!isset($familyIds[$m['family_id']]))continue;$id=sheetsId('member',$m,$ids);$result['members'][$id]=sheetsProject([...$m,'id'=>$id,'family_id'=>$familyIds[$m['family_id']]],$schema['members']);}
+        if($withCodes)$result['codes']=sheetsCodeRows($db);
         return $result;
     }
     $GLOBALS['vault_db']=$db;$result=['vault'=>[]];$bound=[];
@@ -49,9 +76,11 @@ function sheetsSnapshot(PDO $db,string $scope,?string $key=null,bool $withTrial=
     foreach($families as $f){$fid=$familyIds[$f['id']];if(isset($bound[$fid]))continue;$id='K_'.$fid;$result['vault'][$id]=sheetsProject(['id'=>$id,'family_id'=>$fid,'email'=>$f['manager_email'],'trial_date'=>$f['trial_date']],$schema['vault']);}
     return $result;
 }
-function sheetsValidateRemote(mixed $data,string $scope,bool $withTrial=false): array {
+function sheetsValidateRemote(mixed $data,string $scope,bool $withTrial=false,bool $withCodes=false): array {
     if(!is_array($data))fail('Phản hồi Sheet không hợp lệ.',502);$out=[];
-    foreach(sheetsSchema($scope,$withTrial) as $tab=>$fields){
+    // A Sheet without the Mã tra cứu tab yet reports no codes; the next write creates it.
+    if($withCodes&&!array_key_exists('codes',$data))$data['codes']=[];
+    foreach(sheetsSchema($scope,$withTrial,$withCodes) as $tab=>$fields){
         $rows=$data[$tab]??null;if(!is_array($rows)||!array_is_list($rows)||count($rows)>10000)fail('Sheet vượt giới hạn hoặc sai định dạng.',502);$out[$tab]=[];
         foreach($rows as $row){
             if(!is_array($row)||count($row)!==count($fields))fail('Cột Sheet không đúng mẫu.',502);
@@ -85,7 +114,7 @@ function sheetsCheckRemoteReply(mixed $result): void {
     if($code==='auth')fail('Apps Script báo sai mã kết nối [auth]. Kiểm tra FAMILY_TOKEN trong đúng dự án của URL /exec đang dùng.',502);
     if($code==='unavailable'){
         $diagnostic=is_array($result['diagnostic']??null)?$result['diagnostic']:[];
-        $stages=['wait_lock'=>'chờ khóa đồng bộ','open_book'=>'mở file Sheet','read_families'=>'đọc Family','read_members'=>'đọc Khách','read_vault'=>'đọc Kho','revision'=>'đối chiếu phiên bản dữ liệu','validate_output'=>'kiểm tra dữ liệu gửi sang Sheet','write_families'=>'ghi Family','write_members'=>'ghi Khách','write_vault'=>'ghi Kho','prepare_members'=>'chuẩn bị nhóm Khách','resize_members'=>'điều chỉnh số hàng/cột Khách','write_member_cells'=>'ghi ô dữ liệu Khách','style_members'=>'định dạng Khách','freeze_members'=>'cố định hàng Khách','style_member_rows'=>'định dạng ngày và dòng Khách','resize_member_columns'=>'chỉnh độ rộng/ẩn cột Khách','flush_write'=>'Google áp dụng các lệnh ghi/định dạng trước đó','verify_vault'=>'xác nhận bố cục Kho','response_metadata'=>'đọc thông tin bố cục sau xử lý'];
+        $stages=['wait_lock'=>'chờ khóa đồng bộ','open_book'=>'mở file Sheet','read_families'=>'đọc Family','read_members'=>'đọc Khách','read_codes'=>'đọc Mã tra cứu','read_vault'=>'đọc Kho','revision'=>'đối chiếu phiên bản dữ liệu','validate_output'=>'kiểm tra dữ liệu gửi sang Sheet','write_families'=>'ghi Family','write_members'=>'ghi Khách','write_codes'=>'ghi Mã tra cứu','write_vault'=>'ghi Kho','prepare_members'=>'chuẩn bị nhóm Khách','resize_members'=>'điều chỉnh số hàng/cột Khách','write_member_cells'=>'ghi ô dữ liệu Khách','style_members'=>'định dạng Khách','freeze_members'=>'cố định hàng Khách','style_member_rows'=>'định dạng ngày và dòng Khách','resize_member_columns'=>'chỉnh độ rộng/ẩn cột Khách','flush_write'=>'Google áp dụng các lệnh ghi/định dạng trước đó','verify_vault'=>'xác nhận bố cục Kho','response_metadata'=>'đọc thông tin bố cục sau xử lý'];
         $reasons=['table_column'=>'Google báo thao tác không phù hợp kiểu cột của bảng.','table'=>'Lỗi Google có nhắc tới bảng; cần kiểm tra cấu trúc Google Table.','protected'=>'Google báo vùng được bảo vệ.','permission'=>'Google báo thiếu quyền truy cập hoặc cấp phép.','quota'=>'Google báo giới hạn dịch vụ.','lock'=>'Không lấy được khóa đồng bộ; có thể đang có lượt khác chạy.'];
         $stage=$diagnostic['stage']??null;$reason=$diagnostic['reason']??null;$line=$diagnostic['line']??null;
         $detail=is_string($stage)&&isset($stages[$stage])?' Bước: '.$stages[$stage].' ['.$stage.'].':'';
@@ -94,6 +123,9 @@ function sheetsCheckRemoteReply(mixed $result): void {
         fail('Apps Script gặp lỗi xử lý Sheet [unavailable].'.($detail?:' Kiểm tra quyền đọc/ghi file, bảng Google Table, vùng được bảo vệ hoặc lượt chạy đang bận.').' Đây không phải phản hồi sai token.',502);
     }
     if($code==='request')fail('Apps Script không nhận dạng yêu cầu đồng bộ [request]. Kiểm tra URL /exec và phiên bản đang triển khai.',502);
+    if($code==='gmail_permission')fail('Apps Script chưa được cấp quyền đọc Gmail [gmail_permission]. Mở dự án Apps Script, chọn hàm capQuyenGmail, bấm Chạy và cho phép, rồi thử lại.',502);
+    if($code==='gmail_service')fail('Apps Script chưa bật Gmail API [gmail_service]. Dán appsscript.json mới (hoặc Dịch vụ + → Gmail API → Thêm), chạy capQuyenGmail rồi triển khai New version.',502);
+    if($code==='gmail_unavailable')fail('Google chưa đọc được Gmail lúc này [gmail_unavailable]. Thử lại sau ít phút.',502);
     if($code==='limit')fail('Dữ liệu vượt giới hạn đồng bộ [limit]. Kiểm tra số dòng và độ dài nội dung ô.',409);
     if($code==='data')fail('Apps Script báo dữ liệu đồng bộ không hợp lệ [data]. Kiểm tra ngày, gói mua và liên kết Family của khách.',409);
     if($code==='vault_date')fail('Ngày trial cần đủ ngày/tháng/năm (dd/mm/yyyy).'.$at,409);
@@ -137,6 +169,7 @@ function sheetsApplyCore(PDO $db,array $local,array $merged): void {
         $changed=false;foreach(['renewal_status','renewal_amount','renewal_paid_at','renewal_note'] as $field)if((string)$row[$field]!==$data[$field])$changed=true;
         if($changed)renew($db,$number,['revision'=>$row['renewal_revision'],'status'=>$data['renewal_status'],'amount'=>$data['renewal_amount'],'paid_at'=>$data['renewal_paid_at'],'note'=>$data['renewal_note'],'apply_now'=>false],false);
     }
+    if(isset($merged['codes']))sheetsApplyCodes($db,$local['codes']??[],$merged['codes']);
     sheetsPut($db,'ids',$ids);
 }
 // Upgrade legacy vault fingerprints only when the newly introduced date agrees.
@@ -272,7 +305,8 @@ function sheetsTraceChanges(array &$trace,string $direction,array $before,array 
         // A reconnect may revisit one row; count that affected record once.
         $all[$tab][$id]=$previous==='added'&&$action==='updated'?'added':($previous==='deleted'&&$action==='added'?'updated':$action);
     }
-    $trace[$key]=$all;$counts=sheetsCountSet($trace['scope']);foreach($all as $tab=>$changes)foreach($changes as $action)if(isset($counts[$tab][$action]))$counts[$tab][$action]++;
+    $trace[$key]=$all;$counts=sheetsCountSet($trace['scope']);
+    foreach($all as $tab=>$changes){if(!$changes)continue;$counts[$tab]??=['added'=>0,'updated'=>0,'deleted'=>0];foreach($changes as $action)if(isset($counts[$tab][$action]))$counts[$tab][$action]++;}
     $trace['counts'][$direction]=$counts;if($direction==='sheet_to_web')$trace['import_applied']=array_sum(array_map('array_sum',$counts))>0;
 }
 function sheetsErrorReport(Throwable $error,string $stage): array {
@@ -404,8 +438,10 @@ function sheetsSyncRun(PDO &$db,array $c,string $scope,array $options=[],?string
     if($scope==='vault'&&($key===null||!vaultAuthorize($db,$c)))fail('Mở khóa Kho để đồng bộ tài khoản từ Sheet.',423);
     $send=$transport??fn($payload)=>sheetsRemote($settings,$payload);
     $onStage('read_remote');$remote=sheetsWaitForGoogle($db,$c,fn()=>$send(['action'=>'read','scope'=>$scope]));
-    $onStage('validate_remote');$withTrial=$scope==='vault'&&($remote['vault_schema']??'')==='trial-date-v1';$rows=sheetsValidateRemote($remote['data']??null,$scope,$withTrial);if($scope==='vault'&&!vaultAuthorize($db,$c))fail('Kho đã khóa trong lúc đồng bộ. Mở lại Kho để tiếp tục.',423);
-    $onStage('snapshot_local');$local=sheetsSnapshot($db,$scope,$key,$withTrial);$base=sheetsMeta($db,'base_'.$scope);
+    $onStage('validate_remote');$withTrial=$scope==='vault'&&($remote['vault_schema']??'')==='trial-date-v1';
+    $withCodes=$scope==='core'&&($remote['lookup_codes']??'')==='v1'&&function_exists('lookupDerivedCode');
+    $rows=sheetsValidateRemote($remote['data']??null,$scope,$withTrial,$withCodes);if($scope==='vault'&&!vaultAuthorize($db,$c))fail('Kho đã khóa trong lúc đồng bộ. Mở lại Kho để tiếp tục.',423);
+    $onStage('snapshot_local');$local=sheetsSnapshot($db,$scope,$key,$withTrial,$withCodes);$base=sheetsMeta($db,'base_'.$scope);
     $pendingBinding=false;
     $onStage('normalize_vault');
     if($withTrial){foreach($rows['vault'] as $id=>&$row){
@@ -425,7 +461,7 @@ function sheetsSyncRun(PDO &$db,array $c,string $scope,array $options=[],?string
     $onStage('begin_import');beginAudit($db,$scope==='vault'?'Đồng bộ Kho từ Sheet':'Đồng bộ dữ liệu từ Sheet');
     try{$onStage($scope==='core'?'apply_core':'apply_vault');if($scope==='core')sheetsApplyCore($db,$local,$merge['data']);else sheetsApplyVault($db,$local,$merge['data'],$key,$withTrial);$onStage('commit_import');finishAudit();if($trace!==null){$trace['import_applied']=true;$trace['counts']['sheet_to_web']=null;}}catch(Throwable $e){finishAudit(false);throw $e;}
     if($scope==='vault'&&($key===null||!vaultAuthorize($db,$c)))fail('Kho đã khóa trong lúc đồng bộ. Mở lại Kho để tiếp tục.',423);
-    $onStage('snapshot_output');$out=sheetsSnapshot($db,$scope,$key,$withTrial);if($trace!==null)sheetsTraceChanges($trace,'sheet_to_web',$local,$out);$payload=[];foreach($out as $tab=>$records)$payload[$tab]=array_values($records);
+    $onStage('snapshot_output');$out=sheetsSnapshot($db,$scope,$key,$withTrial,$withCodes);if($trace!==null)sheetsTraceChanges($trace,'sheet_to_web',$local,$out);$payload=[];foreach($out as $tab=>$records)$payload[$tab]=array_values($records);
     // Freeze the acknowledged snapshot, not any newer web edits made while
     // Google is writing. Those newer edits will be sent on the next sync.
     $fingerprints=sheetsFingerprints($out,$c);
@@ -447,6 +483,7 @@ function sheetsSyncRun(PDO &$db,array $c,string $scope,array $options=[],?string
 function sheetsRuntime(PDO $db,array $response): void {
     $version=$response['script_version']??'legacy';if(!is_string($version)||!preg_match('/^[A-Za-z0-9._-]{1,80}$/D',$version))$version='unknown';
     sheetsPut($db,'script_version',$version);$layout=$response['customer_layout']??'unknown';sheetsPut($db,'customer_layout',in_array($layout,['flat','grouped'],true)?$layout:'unknown');
+    sheetsPut($db,'lookup_codes',($response['lookup_codes']??'')==='v1');sheetsPut($db,'gmail_invites',($response['gmail_invites']??'')==='v1');
 }
 function sheetsSaveSettings(PDO $db,array $c,array $d,?callable $probe=null): void {
     if(!sheetsTryLock($db,$c))fail('Một lượt đồng bộ Sheet đang chạy. Chờ hoàn tất rồi đổi link kết nối.',409);
@@ -465,15 +502,29 @@ function sheetsSaveSettingsRun(PDO &$db,array $c,array $d,?callable $probe=null)
     sheetsPut($db,'config',vaultSeal(json_encode($settings,JSON_THROW_ON_ERROR),sheetsKey($c),'family-sheets-config-v1'));
     sheetsPut($db,'url',$target);sheetsRuntime($db,$test);
 }
+// Lấy link mời từ Gmail through the same Apps Script (v5.8+, read-only Gmail scope). The app
+// lock is released while Google reads the mailbox; the import itself is one audited transaction.
+function sheetsGmailInvites(PDO &$db,array $c,?callable $transport=null): array {
+    $settings=sheetsSettings($db,$c);if(!$settings)fail('Kết nối Google Sheet trước (nút Đồng bộ Sheet), rồi mới lấy link từ Gmail.',409);
+    $send=$transport??fn($payload)=>sheetsRemote($settings,$payload);
+    try{$reply=sheetsWaitForGoogle($db,$c,fn()=>$send(['action'=>'read','scope'=>'invites']));sheetsCheckRemoteReply($reply);}
+    catch(FamilyError $e){if(str_contains($e->getMessage(),'[request]'))fail('Apps Script đang chạy bản cũ nên chưa lấy được link từ Gmail. Dán Code.gs và appsscript.json mới, chạy capQuyenGmail rồi triển khai New version.',409);throw $e;}
+    $items=$reply['invites']??null;if(!is_array($items)||!array_is_list($items)||count($items)>500)fail('Apps Script trả danh sách thư mời không hợp lệ.',502);
+    sheetsPut($db,'gmail_invites',true);
+    beginAudit($db,'Lấy link mời từ Gmail');
+    try{$result=lookupImportInvites($db,$items);finishAudit();}catch(Throwable $e){finishAudit(false);throw $e;}
+    return ['ok'=>true,...$result];
+}
 function sheetsEndpointUrl(PDO $db,array $c): string {try{return sheetsSettings($db,$c)['url']??'';}catch(Throwable $e){return '';}}
 function sheetsRequest(PDO $db,array $c,string $route,string $method): never {
-    if($route==='/api/sheets/status'&&$method==='GET')reply(['configured'=>(bool)sheetsMeta($db,'config',null),'last_core'=>sheetsMeta($db,'last_core',null),'last_vault'=>sheetsMeta($db,'last_vault',null),'sheet_url'=>sheetsMeta($db,'url',''),'script_url'=>sheetsEndpointUrl($db,$c),'customer_layout'=>sheetsMeta($db,'customer_layout','unknown'),'script_version'=>sheetsMeta($db,'script_version','unknown'),'health'=>sheetsHealth($db,$c),'history_available'=>true]);
+    if($route==='/api/sheets/status'&&$method==='GET')reply(['configured'=>(bool)sheetsMeta($db,'config',null),'last_core'=>sheetsMeta($db,'last_core',null),'last_vault'=>sheetsMeta($db,'last_vault',null),'sheet_url'=>sheetsMeta($db,'url',''),'script_url'=>sheetsEndpointUrl($db,$c),'customer_layout'=>sheetsMeta($db,'customer_layout','unknown'),'script_version'=>sheetsMeta($db,'script_version','unknown'),'lookup_codes'=>sheetsMeta($db,'lookup_codes',false)===true,'gmail_invites'=>sheetsMeta($db,'gmail_invites',false)===true,'health'=>sheetsHealth($db,$c),'history_available'=>true]);
     if($route==='/api/sheets/history'&&$method==='GET')reply(sheetsHistoryPage($db,$c,$_GET));
     if($route==='/api/sheets/config'&&$method==='POST'){
         sheetsSaveSettings($db,$c,body());reply(['ok'=>true]);
     }
     if($route==='/api/sheets/config'&&$method==='DELETE'){if(!sheetsTryLock($db,$c))fail('Một lượt đồng bộ Sheet đang chạy. Chờ hoàn tất rồi ngắt kết nối.',409);try{sheetsStore($db);q($db,"DELETE FROM family_sheet_state WHERE name NOT IN ('history')");}finally{sheetsReleaseLock($db,$c);}reply(['ok'=>true]);}
     if($route==='/api/sheets/sync'&&$method==='POST')reply(sheetsSync($db,$c,'core',body()));
+    if($route==='/api/sheets/gmail-invites'&&$method==='POST')reply(sheetsGmailInvites($db,$c));
     fail('Không tìm thấy.',404);
 }
 function sheetsVaultRequest(PDO $db,array $c): never {

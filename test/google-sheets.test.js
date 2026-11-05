@@ -8,12 +8,12 @@ function script(){
  function tab(name){const grid=[];let columns=26;return {name,grid,paints:[],formats:[],getParent:()=>book,getSheetId:()=>3,getName(){return this.name;},setName(next){tabs.delete(this.name);this.name=next;tabs.set(next,this);return this;},hideSheet(){this.hidden=true;return this;},copyTo(book){const copy=book.insertSheet('copy_'+(++serial));this.grid.forEach((row,i)=>{copy.grid[i]=row.map(cell=>cell?{...cell}:cell);});return copy;},getMaxRows:()=>1000,getMaxColumns:()=>columns,insertColumnsAfter(_after,count){columns+=count;},deleteColumns(start,count){columns-=count;grid.forEach(row=>row.splice(start-1,count));},showColumns(start,count){this.visibleColumns={start,count};},getLastRow:()=>{let n=grid.length;while(n&&(!grid[n-1]||grid[n-1].every(c=>!c?.value&&!c?.formula)))n--;return n;},getLastColumn:()=>Math.max(0,...grid.map(r=>r.length)),setFrozenRows(){},setColumnWidths(){},setColumnWidth(){},hideColumns(start,count){this.hiddenColumns={start,count};},insertRowsAfter(){},getRangeList(addresses){const ranges=addresses.map(address=>{const match=/^([A-Z]+)(\d+)(?::([A-Z]+)(\d+))?$/.exec(address);const col=letters=>[...letters].reduce((n,c)=>n*26+c.charCodeAt(0)-64,0);return this.getRange(Number(match[2]),col(match[1]),Number(match[4]||match[2])-Number(match[2])+1,col(match[3]||match[1])-col(match[1])+1);});const list={};for(const method of ['setBackground','setFontColor','setFontWeight','setFormula','setNumberFormat'])list[method]=value=>{ranges.forEach(range=>range[method](value));return list;};return list;},getRange(r,c,h=1,w=1){if(c+w-1>columns)throw Error('range outside Sheet');const sheet=this;const range={setNumberFormat(format){sheet.formats.push({r,c,h,w,format});return range;},setFontWeight(){return range;},setFontSize(){return range;},setFontColor(){return range;},setVerticalAlignment(){return range;},setFormula(formula){for(let i=0;i<h;i++){grid[r-1+i]??=[];for(let j=0;j<w;j++)grid[r-1+i][c-1+j]={value:'',formula};}return range;},setBackground(color){sheet.paints.push({r,c,h,w,color});return range;},setNote(){return range;},getValues:()=>Array.from({length:h},(_,i)=>Array.from({length:w},(_,j)=>grid[r-1+i]?.[c-1+j]?.date||grid[r-1+i]?.[c-1+j]?.value||'')),getDisplayValues:()=>Array.from({length:h},(_,i)=>Array.from({length:w},(_,j)=>grid[r-1+i]?.[c-1+j]?.value||'')),getFormulas:()=>Array.from({length:h},(_,i)=>Array.from({length:w},(_,j)=>grid[r-1+i]?.[c-1+j]?.formula||'')),setValues(values){values.forEach((row,i)=>row.forEach((value,j)=>{grid[r-1+i]??=[];const isDate=Object.prototype.toString.call(value)==='[object Date]';const text=isDate?value.toISOString().slice(0,10).split('-').reverse().join('/'):String(value);const quoted=!isDate&&text.startsWith("'");grid[r-1+i][c-1+j]={value:quoted?text.slice(1):text,formula:!quoted&&text.startsWith('=')?text:'',date:isDate?value:null};}));return range;},setValue(value){return range.setValues([[value]]);},clearContent(){return range.setValues(Array.from({length:h},()=>Array(w).fill('')));}};return range;}};}
  const book={getSpreadsheetTimeZone:()=> 'Asia/Ho_Chi_Minh',setActiveSheet(sheet){this.activeSheet=sheet;},getId:()=> 'test-sheet',getUrl:()=> 'https://docs.google.com/spreadsheets/d/test-sheet/edit',getSheetByName:n=>tabs.get(n),insertSheet:n=>{const sheet=tab(n);tabs.set(n,sheet);return sheet;}};
  let locked=false;
- const context=vm.createContext({console:{log:s=>logs.push(s)},PropertiesService:{getScriptProperties:()=>({getProperty:k=>properties.get(k),setProperty:(k,v)=>properties.set(k,v)})},SpreadsheetApp:{create:()=>book,openById:()=>book,flush(){}},Utilities:{parseDate:(value,zone,format)=>{assert.equal(zone,'Asia/Ho_Chi_Minh');assert.equal(format,'yyyy-MM-dd');return new Date(value+'T00:00:00Z');},formatDate:(value,zone,format)=>{assert.equal(zone,'Asia/Ho_Chi_Minh');assert.equal(format,'yyyy-MM-dd');return value.toISOString().slice(0,10);},getUuid:()=>String(++serial).padStart(8,'0')+'-0000-4000-8000-000000000000',DigestAlgorithm:{SHA_256:'sha256'},Charset:{UTF_8:'utf8'},computeDigest:(_a,s)=>[...createHash('sha256').update(s).digest()]},LockService:{getScriptLock:()=>({waitLock(){locked=true;},hasLock:()=>locked,releaseLock(){locked=false;}})},ContentService:{MimeType:{JSON:'json'},createTextOutput:raw=>({raw,setMimeType(){return this;}})}});
+ const context=vm.createContext({console:{log:s=>logs.push(s)},PropertiesService:{getScriptProperties:()=>({getProperty:k=>properties.get(k),setProperty:(k,v)=>properties.set(k,v)})},SpreadsheetApp:{create:()=>book,openById:()=>book,flush(){}},Utilities:{parseDate:(value,zone,format)=>{assert.equal(zone,'Asia/Ho_Chi_Minh');assert.equal(format,'yyyy-MM-dd');return new Date(value+'T00:00:00Z');},formatDate:(value,zone,format)=>{assert.equal(zone,'Asia/Ho_Chi_Minh');assert.equal(format,'yyyy-MM-dd');return value.toISOString().slice(0,10);},getUuid:()=>String(++serial).padStart(8,'0')+'-0000-4000-8000-000000000000',DigestAlgorithm:{SHA_256:'sha256'},Charset:{UTF_8:'utf8'},computeDigest:(_a,s)=>[...createHash('sha256').update(s).digest()],base64DecodeWebSafe:s=>[...Buffer.from(s,'base64url')],newBlob:bytes=>({getDataAsString:()=>Buffer.from(bytes).toString('utf8')})},LockService:{getScriptLock:()=>({waitLock(){locked=true;},hasLock:()=>locked,releaseLock(){locked=false;}})},ContentService:{MimeType:{JSON:'json'},createTextOutput:raw=>({raw,setMimeType(){return this;}})}});
  vm.runInContext(readFileSync(new URL('../integrations/google-sheets/Code.gs',import.meta.url),'utf8'),context);
  const run=s=>vm.runInContext(s,context);
  run('setupFamilySync()');const token=properties.get('FAMILY_TOKEN');
  const request=body=>{context.request=JSON.stringify({token,...body});return JSON.parse(run('doPost({postData:{contents:request}})').raw);};
- return {run,request,tabs,properties,logs,token,book};
+ return {run,request,tabs,properties,logs,token,book,context};
 }
 test('Apps Script setup is repeatable and auth/core scope never disclose vault data',()=>{
  const s=script();s.run('setupFamilySync()');assert.equal(s.tabs.size,3);assert.equal(s.properties.get('FAMILY_TOKEN'),s.token);assert.ok(s.logs.every(line=>!line.includes(s.token)));
@@ -127,7 +127,7 @@ test('legacy flat customer tab remains readable and migrates to grouped layout w
 });
 
 test('public Apps Script health identifies the deployed version without disclosing the token or Sheet',()=>{
- const s=script(),info=JSON.parse(s.run('doGet()').raw);assert.equal(info.script_version,'family-groups-compact-v5.7');assert.equal(info.service,'family-sync');assert.equal('token' in info,false);assert.equal('sheet_url' in info,false);assert.equal(JSON.stringify(info).includes(s.token),false);
+ const s=script(),info=JSON.parse(s.run('doGet()').raw);assert.equal(info.script_version,'family-ma-tra-cuu-v5.8');assert.equal(info.service,'family-sync');assert.equal('token' in info,false);assert.equal('sheet_url' in info,false);assert.equal(JSON.stringify(info).includes(s.token),false);
 });
 
 test('owner-run migration changes the existing customer tab directly, backs up the old layout and preserves all wire data',()=>{
@@ -324,4 +324,96 @@ test('a deferred presentation error is caught at its own flush after account dat
 test('a failed data flush remains fatal and prevents all presentation calls',()=>{
  const s=script(),tab=s.tabs.get('FamilySync_Kho'),read=s.request({action:'read',scope:'vault'});s.request({action:'write',scope:'vault',revision:read.revision,data:{vault:[vaultRow()]}});let presentationCalls=0;tab.setFrozenRows=()=>presentationCalls++;
  s.run('SpreadsheetApp.flush=function(){throw Error("failed account commit FAKE_PRIVATE_PASSWORD");};');assert.throws(()=>s.run('apDungBoCucKho()'),error=>{assert.match(error.message,/lưu dữ liệu Kho vào Google/);assert.doesNotMatch(error.message,/FAKE_PRIVATE_PASSWORD/);return true;});assert.equal(presentationCalls,0);assert.equal(s.logs.some(line=>line.startsWith('ĐÃ XÁC NHẬN BỐ CỤC MỚI')),false);
+});
+const codeRows=()=>[{id:'Lbbb',customer_name:'Gia Huy',email:'giahuy@example.com',code:'Q7M2KD'},{id:'Laaa',customer_name:'Minh Anh',email:'minhanh@example.com',code:'K7P2QX'}];
+test('Mã tra cứu tab: written by the website with three visible columns and only the code read back',()=>{
+ const s=script(),data=groupedData(s);let read=s.request({action:'read',scope:'core'});
+ assert.equal(read.lookup_codes,'v1');assert.equal('codes' in read.data,false,'no tab yet, so the website writes it');assert.equal(s.tabs.has('FamilySync_MaTraCuu'),false,'setup and reads do not create the tab');
+ const written=s.request({action:'write',scope:'core',revision:read.revision,data:{...data,codes:codeRows()}});assert.equal(written.ok,true,JSON.stringify(written));assert.equal(written.lookup_codes,'v1');
+ const tab=s.tabs.get('FamilySync_MaTraCuu');
+ assert.deepEqual(tab.getRange(1,1,1,4).getDisplayValues()[0],['Tên khách','Mail khách','Mã tra cứu','ID (không sửa)']);
+ assert.deepEqual(tab.getRange(2,1,2,4).getDisplayValues(),[['Gia Huy','giahuy@example.com','Q7M2KD','Lbbb'],['Minh Anh','minhanh@example.com','K7P2QX','Laaa']],'website order kept on the Sheet');
+ assert.deepEqual(tab.hiddenColumns,{start:4,count:1});assert.equal(tab.getMaxColumns(),4);
+ read=s.request({action:'read',scope:'core'});assert.deepEqual(read.data.codes,codeRows().sort((a,b)=>a.id.localeCompare(b.id)));assert.deepEqual(read.data.members,data.members);
+ // The owner types a new code; blank rows and rows without the hidden ID are skipped.
+ tab.getRange(3,3).setValue('k7p 2qz');tab.getRange(4,1,1,3).setValues([['Khách tự thêm','new@example.com','AAAAAA']]);tab.getRange(5,1,1,4).setValues([['','','','Lzzz']]);
+ read=s.request({action:'read',scope:'core'});assert.deepEqual(read.data.codes.map(r=>[r.id,r.code]),[['Laaa','k7p 2qz'],['Lbbb','Q7M2KD']]);
+ // A rotation on the website rewrites the tab; unchanged codes are not rewritten.
+ const rotated=codeRows();rotated[0].code='HX4N9T';let writes=0;const getRange=tab.getRange.bind(tab);
+ tab.getRange=(...args)=>{const range=getRange(...args),setValues=range.setValues;range.setValues=values=>{writes++;return setValues(values);};return range;};
+ assert.equal(s.request({action:'write',scope:'core',revision:read.revision,data:{...read.data,codes:rotated}}).ok,true);assert.ok(writes>0);
+ assert.deepEqual(tab.grid.slice(1).filter(row=>row?.some(c=>c?.value)).map(row=>row.map(c=>c?.value||'')),[['Gia Huy','giahuy@example.com','HX4N9T','Lbbb'],['Minh Anh','minhanh@example.com','K7P2QX','Laaa']],'stale and hand-added rows cleared');
+ read=s.request({action:'read',scope:'core'});writes=0;
+ assert.equal(s.request({action:'write',scope:'core',revision:read.revision,data:{...read.data,members:read.data.members.map((m,i)=>i?m:{...m,note:'Đổi ghi chú'})}}).ok,true);assert.equal(writes,0,'customer edit leaves an unchanged codes tab alone');
+});
+test('Mã tra cứu tab stays untouched by older websites and rejects damaged layouts or formulas',()=>{
+ const s=script(),data=groupedData(s);let read=s.request({action:'read',scope:'core'});
+ assert.equal(s.request({action:'write',scope:'core',revision:read.revision,data:{...data,codes:codeRows()}}).ok,true);
+ read=s.request({action:'read',scope:'core'});const old={families:read.data.families,members:read.data.members.map((m,i)=>i?m:{...m,note:'Website 0.21'})};
+ assert.equal(s.request({action:'write',scope:'core',revision:read.revision,data:old}).ok,true,'a write without codes is accepted');
+ assert.equal(s.tabs.get('FamilySync_MaTraCuu').getRange(2,3).getDisplayValues()[0][0],'Q7M2KD','older website leaves codes as they are');
+ const tab=s.tabs.get('FamilySync_MaTraCuu');tab.getRange(2,3).setValue('=CHAR(65)');assert.equal(s.request({action:'read',scope:'core'}).code,'formula');
+ tab.getRange(2,3).setValue('Q7M2KD');tab.getRange(1,3).setValue('Mã');assert.equal(s.request({action:'read',scope:'core'}).code,'schema');
+ tab.getRange(1,3).setValue('Mã tra cứu');tab.getRange(3,4).setValue('Lbbb');assert.equal(s.request({action:'read',scope:'core'}).code,'id','copied hidden ID is refused');
+ tab.getRange(3,4).setValue('Laaa');read=s.request({action:'read',scope:'core'});assert.equal(read.ok,true);
+ assert.equal(s.request({action:'write',scope:'core',revision:read.revision,data:{...read.data,codes:[{id:'Lbad',customer_name:'x',email:'x@example.com'}]}}).code,'data','malformed code rows refused before writing');
+});
+
+const mailPart=(mimeType,text)=>({mimeType,body:{data:Buffer.from(text).toString('base64url')}});
+function inviteMail(id,to,html,date='2026-11-03T09:00:00Z'){return {id,internalDate:String(Date.parse(date)),payload:{mimeType:'multipart/alternative',headers:[{name:'From',value:'Google <families-noreply@google.com>'},{name:'To',value:to}],parts:[mailPart('text/plain','Lời mời tham gia nhóm gia đình'),mailPart('text/html',html)]}};}
+function gmail(s,messages,calls=[]){s.context.Gmail={Users:{Messages:{list:(user,options)=>{calls.push(['list',user,options]);return {messages:messages.map(m=>({id:m.id,threadId:'t'+m.id}))};},get:(user,id,options)=>{calls.push(['get',user,id,options.format]);return messages.find(m=>m.id===id);}}}};return calls;}
+test('Gmail invites: read-only search of the last 14 days returns the Accept invitation link and the inviter',()=>{
+ const s=script(),calls=gmail(s,[
+  inviteMail('m1','"Shop" <shopcuaban+f09s1@gmail.com>','<p>Nguyễn Văn A (owner09@gmail.com) mời bạn tham gia nhóm gia đình.</p><a href="https://families.google.com/join/promo/AbC_12-x?hl=vi&amp;utm=1">Chấp nhận lời mời</a><a href="https://g.co/yourfamily">Tìm hiểu thêm</a> families-noreply@google.com'),
+  inviteMail('m2','shopcuaban+f09s2@gmail.com','<a href="https://notifications.googleapis.com/email/redirect?t=1&amp;r=https%3A%2F%2Ffamilies.google.com%2Fjoin%2Fpromo%2FZz9%3Fx%3D1">ACCEPT INVITATION</a> owner09@gmail.com'),
+  inviteMail('m3','shopcuaban+f10s1@gmail.com','<p>owner10@gmail.com</p><a href="https://myaccount.google.com/family/invitation/xyz">Accept invitation</a>'),
+  inviteMail('m4','shopcuaban+f10s2@gmail.com','<a href="https://evil.example/join">Accept invitation</a> owner10@gmail.com'),
+  {...inviteMail('m5','','<a href="https://families.google.com/join/promo/R5">Chấp nhận lời mời</a>'),payload:{...inviteMail('m5','','<a href="https://families.google.com/join/promo/R5">Chấp nhận lời mời</a>').payload,headers:[{name:'Delivered-To',value:'Hai+2@gmail.com'},{name:'Reply-To',value:'Chủ nhóm <owner11@gmail.com>'}]}},
+ ]);
+ const reply=s.request({action:'read',scope:'invites'});assert.equal(reply.ok,true,JSON.stringify(reply));assert.equal(reply.gmail_invites,'v1');
+ assert.deepEqual(JSON.parse(JSON.stringify(calls[0])),['list','me',{q:'from:families-noreply@google.com newer_than:14d',maxResults:100,includeSpamTrash:true}]);assert.ok(calls.slice(1).every(call=>call[0]==='get'&&call[3]==='full'));
+ assert.deepEqual(reply.invites,[
+  {id:'m1',to:'shopcuaban+f09s1@gmail.com',date:'2026-11-03',sent_at:'2026-11-03T09:00:00.000Z',url:'https://families.google.com/join/promo/AbC_12-x',emails:['owner09@gmail.com']},
+  {id:'m2',to:'shopcuaban+f09s2@gmail.com',date:'2026-11-03',sent_at:'2026-11-03T09:00:00.000Z',url:'https://families.google.com/join/promo/Zz9',emails:['owner09@gmail.com']},
+  {id:'m3',to:'shopcuaban+f10s1@gmail.com',date:'2026-11-03',sent_at:'2026-11-03T09:00:00.000Z',url:'https://myaccount.google.com/family/invitation/xyz',emails:['owner10@gmail.com']},
+  {id:'m5',to:'hai+2@gmail.com',date:'2026-11-03',sent_at:'2026-11-03T09:00:00.000Z',url:'https://families.google.com/join/promo/R5',emails:['owner11@gmail.com']},
+ ],'non-Google button links are ignored; Delivered-To and Reply-To are used when needed');
+ assert.equal(s.tabs.size,3,'reading Gmail never touches the Sheet');assert.ok(s.logs.every(line=>!/owner09|families\.google\.com\/join/.test(line)),'no links or Gmail addresses in logs');
+ const core=s.request({action:'read',scope:'core'});assert.equal(core.gmail_invites,'v1');
+});
+test('Gmail invites report a missing Gmail API or missing permission without leaking the Google error',()=>{
+ const s=script();assert.equal(s.request({action:'read',scope:'invites'}).code,'gmail_service','advanced service not added');
+ s.context.Gmail={Users:{Messages:{list:()=>{throw Error('Request had insufficient authentication scopes. FAKE_PRIVATE_MAIL');}}}};
+ const denied=s.request({action:'read',scope:'invites'});assert.equal(denied.code,'gmail_permission');assert.doesNotMatch(JSON.stringify(denied)+s.logs.join(' '),/FAKE_PRIVATE_MAIL/);
+ s.context.Gmail={Users:{Messages:{list:()=>{throw Error('GoogleJsonResponseException: Gmail API has not been used in project 123');}}}};assert.equal(s.request({action:'read',scope:'invites'}).code,'gmail_service');
+ assert.equal(s.request({action:'write',scope:'invites'}).code,'request','invites are read-only');assert.equal(s.request({action:'read',scope:'invites',token:'bad'}).code,'auth');
+ gmail(s,[inviteMail('m1','a+1@gmail.com','<a href="https://families.google.com/join/promo/k1">Accept invitation</a> owner@gmail.com')]);
+ assert.deepEqual(JSON.parse(JSON.stringify(s.run('capQuyenGmail()'))),{ok:true,invites:1});assert.match(s.logs.at(-1),/ĐÃ CÓ QUYỀN ĐỌC GMAIL/);assert.doesNotMatch(s.logs.at(-1),/owner@gmail|k1/);
+});
+
+test('Gmail invites accept byte bodies and reuse cached mails on the next check',()=>{
+ const s=script(),bytes=[...Buffer.from('<a href="https://families.google.com/join/promo/Bytes1">Chấp nhận lời mời</a> owner12@gmail.com')];
+ const mail=inviteMail('b1','hai+1@gmail.com','');mail.payload.parts=[{mimeType:'text/html',body:{data:bytes}},{mimeType:'image/png',body:{data:'AAAA'}}];
+ const store=new Map();s.context.CacheService={getScriptCache:()=>({get:key=>store.get(key)??null,put:(key,value,seconds)=>{assert.equal(seconds,21600);store.set(key,value);}})};
+ const calls=gmail(s,[mail,inviteMail('n1','hai+2@gmail.com','<p>Không có nút</p>')]);
+ const first=s.request({action:'read',scope:'invites'});assert.deepEqual(first.invites.map(i=>[i.to,i.url,i.emails]),[['hai+1@gmail.com','https://families.google.com/join/promo/Bytes1',['owner12@gmail.com']]]);
+ const reads=calls.filter(c=>c[0]==='get').length;assert.equal(reads,2);
+ assert.deepEqual(s.request({action:'read',scope:'invites'}).invites,first.invites,'same result from cache');assert.equal(calls.filter(c=>c[0]==='get').length,reads,'cached mails are not opened again');
+ s.context.CacheService={getScriptCache:()=>{throw Error('cache down');}};assert.equal(s.request({action:'read',scope:'invites'}).invites.length,1,'works without cache');
+});
+
+test('Gmail invites: the real "Join Karl\'s family group?" mail gives the button link, the +1 address and the owner',()=>{
+ const s=script();
+ const body=(href,to)=>`<div style="font-family:Google Sans,Roboto,Arial"><h1>Karl Vica wants you to join her family group</h1><table><tr><td><img src="https://www.gstatic.com/x.png"> ${to}</td></tr></table><p>Hi null,</p><p>You can join Karl's (vicakarl2@gmail.com) family group to connect with your family on Google and share the apps and services that are right for you.</p><p>Anyone who joins a family group can see the name, email, and profile picture of current group members.</p><table role="presentation"><tr><td align="center" style="${'padding:0;'.repeat(40)}"><a href="${href}" style="background-color:#1a73e8;border-radius:4px;color:#ffffff;display:inline-block;font-size:14px;padding:10px 24px;text-decoration:none" target="_blank"><span style="color:#ffffff">Accept invitation</span></a></td></tr></table><a href="https://g.co/YourFamily">Learn more</a></div>`;
+ gmail(s,[
+  inviteMail('k1','haihoangrr+1@gmail.com',body('https://families.google.com/join/promo/kArL_tOkEn-1?utm_source=gmail&amp;utm_medium=email','haihoangrr+1@gmail.com')),
+  inviteMail('k2','haihoangrr+2@gmail.com',body('https://notifications.googleapis.com/email/redirect?t=AFG8qyU&amp;r=https%3A%2F%2Ffamilies.google.com%2Fjoin%2Fpromo%2FkArL_tOkEn-2%3Futm_source%3Dgmail&amp;s=ALHZ2r','haihoangrr+2@gmail.com')),
+  inviteMail('k3','haihoangrr+3@gmail.com',body('https://www.google.com/url?q=https://accounts.google.com/AccountChooser?continue%3Dfamily&amp;sa=D','haihoangrr+3@gmail.com')),
+ ]);
+ const reply=s.request({action:'read',scope:'invites'});assert.equal(reply.ok,true);
+ assert.deepEqual(reply.invites.map(i=>[i.to,i.url,i.emails]),[
+  ['haihoangrr+1@gmail.com','https://families.google.com/join/promo/kArL_tOkEn-1',['vicakarl2@gmail.com']],
+  ['haihoangrr+2@gmail.com','https://families.google.com/join/promo/kArL_tOkEn-2',['vicakarl2@gmail.com']],
+  ['haihoangrr+3@gmail.com','https://www.google.com/url?q=https://accounts.google.com/AccountChooser?continue%3Dfamily&sa=D',['vicakarl2@gmail.com']],
+ ],'direct link, Google redirect and plain button href; recipient shown in the mail is not the owner');
 });

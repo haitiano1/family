@@ -647,11 +647,12 @@ test('PHP Sheet errors distinguish token rejection from script failures without 
 
 test('PHP Sheet sync validates/authenticates endpoints and merges real MySQL/vault data with conflicts, retries and encryption',async()=>{
  const f=await fixture();await f.req('sheets/status','GET',undefined,401);await f.login();assert.equal((await f.req('sheets/status')).configured,false);
+ await f.req('sheets/gmail-invites','POST',{},409);
  await f.req('sheets/config','POST',{url:'http://127.0.0.1/secret',token:'x'.repeat(64)},400);
  await f.req('vault/sheets-sync','POST',{},423);
  writeFileSync(f.folder+'/family-private/sheets-fixture.php',readFileSync(root+'/test/sheets-fixture.php'));chmodSync(f.folder+'/family-private/sheets-fixture.php',0o644);
  const result=docker('exec',f.name,'php','/var/www/family-private/sheets-fixture.php');assert.match(result,/integration checks passed/);
- const status=await f.req('sheets/status');assert.equal(status.configured,true);assert.ok(status.last_core);assert.ok(status.last_vault);assert.equal('token' in status,false);assert.equal(status.script_url,'https://script.google.com/macros/s/newest/exec');assert.equal(status.customer_layout,'grouped');assert.equal(status.script_version,'family-groups-ddmmyyyy-v2');
+ const status=await f.req('sheets/status');assert.equal(status.configured,true);assert.ok(status.last_core);assert.ok(status.last_vault);assert.equal('token' in status,false);assert.equal(status.script_url,'https://script.google.com/macros/s/newest/exec');assert.equal(status.customer_layout,'grouped');assert.equal(status.script_version,'family-ma-tra-cuu-v5.8');assert.equal(status.lookup_codes,true);assert.equal(status.gmail_invites,true);
  await f.req('sheets/config','DELETE');assert.equal((await f.req('sheets/status')).configured,false);
 });
 
