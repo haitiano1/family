@@ -22,8 +22,9 @@ Vào **Thêm → Tra cứu khách → Sửa thông tin** để đặt tên shop,
 
 ## Trang tra cứu có tiến trình (0.28.0)
 
-- Khách thấy một thẻ trạng thái với thanh tiến trình màu xanh và nhân vật chibi đội mũ chữ N chạy tới đúng bước đang xử lý. Các bước khi nhóm gặp sự cố: **Báo lỗi → Tiếp nhận → Nhóm mới → Vào nhóm → Hoàn tất**. Khách mới: **Đăng ký → Chuẩn bị → Vào nhóm → Hoàn tất**.
-- Bên dưới là **Chi tiết tiến trình**: bước đã xong có dấu tích và giờ, bước hiện tại ghi *Đang làm* hoặc *Đến lượt bạn*. Hướng dẫn và nút **Vào nhóm mới** nằm ngay trong bước Vào nhóm.
+- Khách thấy một thẻ trạng thái với thanh tiến trình màu xanh và nhân vật chibi đội mũ chữ N chạy tới đúng bước đang xử lý. Các bước khi nhóm gặp sự cố: **Báo lỗi → Tiếp nhận → Đang xử lý → Vào nhóm mới**. Khách mới: **Đăng ký → Chuẩn bị → Vào nhóm**.
+- Đưa link cho khách là bước cuối: web không theo dõi khách đã vào nhóm hay chưa. Trang khách không còn nút *Tôi đã vào được / Tôi không vào được*, trang Family không còn nút *Đã vào*. Tra cứu khách hiện **Khách chờ link** và **Khách đã nhận link**.
+- Bên dưới là **Chi tiết tiến trình**: bước đã xong có dấu tích và giờ, bước hiện tại ghi *Đang làm* hoặc *Bạn thao tác*. Hướng dẫn và nút **Vào nhóm mới** nằm ngay trong bước Vào nhóm.
 - Khi shop đang xử lý, trang tự làm mới 30 giây một lần và khi khách quay lại trang, nên link hiện ra mà khách không cần tải lại.
 - Máy bật chế độ giảm chuyển động thì chibi và thanh tiến trình đứng yên.
 

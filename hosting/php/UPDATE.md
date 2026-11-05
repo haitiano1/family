@@ -1,3 +1,7 @@
+# 0.28.1 — Lời văn trang tra cứu, giao link là xong
+
+Dùng **Cập nhật một chạm**. Không đổi schema hay Apps Script.
+
 # 0.28.0 — Trang tra cứu có tiến trình, khách báo mất Premium, Telegram
 
 Dùng **Cập nhật một chạm**. Bảng báo lỗi của khách tự tạo khi website mở lần đầu; không cần đổi Apps Script, SQL hay config.php. Muốn nhận tin Telegram: Thêm → Tra cứu khách → Thông báo Telegram. Xem TRA-CUU-CHUYEN-NHOM.md.

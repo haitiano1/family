@@ -6,14 +6,8 @@ const escape = value => String(value ?? '').replace(/[&<>"']/g, c => ({ '&': '&a
 const day = value => value ? value.split('-').reverse().join('/') : 'chưa có';
 const time = value => { if (!value) return ''; const parts = Object.fromEntries(new Intl.DateTimeFormat('en-GB', { timeZone: 'Asia/Ho_Chi_Minh', hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit', hourCycle: 'h23' }).formatToParts(new Date(value)).map(p => [p.type, p.value])); return `${parts.hour}:${parts.minute} ngày ${parts.day}/${parts.month}`; };
 const statusColors = { active: 'green', checking: 'amber', scanned: 'amber', disabled: 'red' };
-const reasons = [
-  ['twelve_months', 'Chỉ được đổi nhóm 1 lần trong 12 tháng', 'Gmail của bạn đã rời một nhóm gia đình khác trong năm nay.'],
-  ['invite_used', 'Lời mời đã được dùng hoặc hết hạn', 'Shop sẽ gửi link khác cho bạn.'],
-  ['other_family', 'Bạn đang ở một nhóm gia đình khác', 'Làm lại bước 1: rời nhóm cũ rồi mở lại link.'],
-  ['other', 'Lỗi khác', 'Mô tả lỗi ở ô bên dưới.']
-];
 const inApp = /FBAN|FBAV|FB_IAB|FBIOS|Messenger|Instagram|Zalo|Line\//i.test(navigator.userAgent);
-let shop = {}, data = null, reporting = null, problemOpen = null;
+let shop = {}, data = null, problemOpen = null;
 
 async function call(path, body) {
   const options = body === undefined ? { headers: { 'X-Fam-Request': '1' } } : { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Fam-Request': '1' }, body: JSON.stringify(body) };
@@ -96,76 +90,67 @@ function joinTodo(move, includeLeave) {
       ${includeLeave ? `<li><div><h3>Rời nhóm cũ</h3><p>Vào trang Gia đình của Google, chọn Rời khỏi nhóm gia đình. Google báo bạn không còn ở nhóm nào thì bỏ qua bước này.</p><a class="btn small" href="https://g.co/YourFamily" target="_blank" rel="noopener noreferrer">Mở trang Gia đình Google</a></div></li>` : ''}
       <li><div><h3>Đăng nhập đúng Gmail</h3><p>Mở link bằng trình duyệt đang đăng nhập <strong>${escape(data.email)}</strong>. Trình duyệt đang đăng nhập Gmail khác thì Gmail đó sẽ vào nhóm thay bạn.</p></div></li>
       <li><div><h3>${includeLeave ? 'Bấm vào nhóm mới' : 'Bấm vào nhóm'}</h3><p>Google mở trang mời, bạn bấm đồng ý tham gia là xong.${includeLeave ? '' : ' Google báo bạn đang ở nhóm gia đình khác thì rời nhóm đó trước.'}</p>${link}</div></li>
-    </ol>${inAppHint()}`
-    + (move.state === 'failed' ? note('Bạn đã báo lỗi' + (move.reported_at ? ' lúc ' + time(move.reported_at) : ''), 'Shop đang xử lý. Bạn vẫn có thể thử lại link ở trên hoặc chờ shop nhắn.', 'red') : '')
-    + (reporting === move.id ? reportForm(move) : `<div class="actions"><button type="button" class="btn success" data-act="joined" data-move="${move.id}">Tôi đã vào được</button><button type="button" class="btn" data-act="report" data-move="${move.id}">Tôi không vào được</button></div>`);
+    </ol>${inAppHint()}`;
 }
 
 // Each customer situation becomes a short sequence of stages: what happened, what the shop is
-// doing, and the customer's own step. The runner stops at the current stage.
+// doing, and the customer's own step. Handing over the link is the last stage: the shop does not
+// track whether the customer joined. The runner stops at the current stage.
 function flowOf(item) {
-  const move = item.move, problem = item.problem;
-  const joined = item.view === 'normal' && move?.state === 'joined';
-  if (!['reported', 'incident', 'move', 'waiting'].includes(item.view) && !joined) return null;
+  const move = item.move && ['assigned', 'opened', 'failed'].includes(item.move.state) ? item.move : null, problem = item.problem;
+  if (!['reported', 'incident', 'move', 'waiting'].includes(item.view)) return null;
   if ((move && move.kind === 'join') || (!move && item.view === 'waiting')) {
-    const current = joined ? 4 : move?.invite_url ? 2 : 1, failed = move?.state === 'failed' && !joined;
+    const current = move?.invite_url ? 2 : 1;
     return {
-      current, n: 4, tone: joined ? 'done' : failed ? 'warn' : '', yours: current === 2,
-      title: joined ? 'Chào mừng bạn vào nhóm' : failed ? 'Shop đang kiểm tra lỗi bạn báo' : current === 2 ? 'Đến lượt bạn: vào nhóm' : 'Shop đang chuẩn bị link vào nhóm',
-      sub: joined ? `Bạn đã vào ${item.family_name}${move.joined_at ? ' lúc ' + time(move.joined_at) : ''}. Mở YouTube là thấy Premium.` : failed ? 'Bạn vẫn có thể thử lại link hoặc chờ shop nhắn.' : current === 2 ? (move.state === 'opened' ? 'Bạn đã mở link. Vào được rồi thì bấm Tôi đã vào được.' : 'Làm 2 bước ở mục Vào nhóm, mất khoảng 1 phút.') : 'Link riêng của bạn sẽ hiện ngay tại trang này.',
+      current, n: 3, yours: current === 2,
+      title: current === 2 ? 'Bạn thao tác: vào nhóm' : 'Shop đang chuẩn bị link vào nhóm',
+      sub: current === 2 ? 'Làm 2 bước ở mục Vào nhóm, mất khoảng 1 phút.' : 'Link riêng của bạn sẽ hiện ngay tại trang này.',
       steps: [
-        { label: 'Đăng ký', title: 'Shop nhận đơn', detail: `Gmail ${data.email} đã có trong ${item.family_name}.` },
+        { label: 'Đăng ký', title: 'Shop nhận đơn', detail: 'Shop đã ghi nhận Gmail của bạn.' },
         { label: 'Chuẩn bị', title: 'Chuẩn bị link vào nhóm', detail: current > 1 ? 'Link riêng của bạn đã sẵn sàng.' : 'Shop đang chuẩn bị link riêng cho bạn. Bạn chưa cần làm gì, link sẽ hiện ngay tại đây.' },
-        { label: 'Vào nhóm', title: 'Vào nhóm', detail: current === 2 ? '' : current > 2 ? 'Bạn đã mở link và vào nhóm.' : 'Mở link riêng để vào nhóm.', body: current === 2 ? joinTodo(move, false) : '' },
-        { label: 'Hoàn tất', title: 'Dùng Premium', time: joined ? move.joined_at : '', detail: joined ? `Bạn đã vào ${item.family_name}.` : 'Mở YouTube, thấy chữ Premium cạnh logo là xong.' }
+        { label: 'Vào nhóm', title: 'Bạn thao tác để vào nhóm', detail: current === 2 ? '' : 'Mở link riêng để vào nhóm.', body: current === 2 ? joinTodo(move, false) : '' }
       ]
     };
   }
-  const moved = move && move.kind === 'move';
-  const fromName = moved ? move.from_family_name : item.family_name, shopNote = moved ? move.from_note : item.status_note;
-  const current = joined ? 5 : item.view === 'reported' ? 1 : item.view === 'incident' ? 2 : move?.invite_url ? 3 : 2;
-  const failed = move?.state === 'failed' && !joined, linkLater = item.view === 'move' && !move.invite_url;
+  const shopNote = move && move.kind === 'move' ? move.from_note : item.status_note;
+  const current = item.view === 'reported' ? 1 : move?.invite_url ? 3 : 2, linkLater = item.view === 'move' && !move?.invite_url;
   return {
-    current, n: 5, tone: joined ? 'done' : failed ? 'warn' : '', yours: current === 3,
-    title: joined ? 'Premium đã hoạt động lại' : failed ? 'Shop đang kiểm tra lỗi bạn báo' : current === 3 ? 'Đến lượt bạn: vào nhóm mới' : current === 1 ? 'Shop đang kiểm tra nhóm của bạn' : linkLater ? 'Shop đang tạo link riêng cho bạn' : 'Shop đang chuẩn bị nhóm mới',
-    sub: joined ? `Bạn đã vào ${item.family_name}${move.joined_at ? ' lúc ' + time(move.joined_at) : ''}. Hạn dùng giữ nguyên.`
-      : failed ? 'Bạn vẫn có thể thử lại link hoặc chờ shop nhắn.'
-      : current === 3 ? (move.state === 'opened' ? 'Bạn đã mở link. Vào được rồi thì bấm Tôi đã vào được.' : 'Làm 3 bước ở mục Vào nhóm mới, mất khoảng 1 phút.')
+    current, n: 4, yours: current === 3,
+    title: current === 3 ? 'Bạn thao tác: vào nhóm mới' : current === 1 ? 'Shop đang kiểm tra nhóm của bạn' : linkLater ? 'Shop đang tạo link riêng cho bạn' : 'Hải đang chuẩn bị nhóm mới, phiền bạn đợi xíuuuu ^^',
+    sub: current === 3 ? 'Làm 3 bước ở mục Bạn thao tác để vào nhóm mới, mất khoảng 1 phút.'
       : current === 1 ? 'Shop đã nhận báo lỗi của bạn. Kết quả kiểm tra sẽ hiện ngay tại đây.'
       : linkLater ? 'Nhóm mới đã sẵn sàng. Link riêng của bạn sẽ hiện ngay tại đây.'
-      : 'Hạn dùng của bạn giữ nguyên. Bạn chưa cần làm gì, link vào nhóm mới sẽ hiện ngay tại đây.',
+      : 'Bạn chưa cần làm gì, link vào nhóm mới sẽ hiện ngay tại đây sau khi mình fix xong.',
     steps: [
-      { label: 'Báo lỗi', title: problem ? 'Bạn báo mất Premium' : 'Phát hiện sự cố', time: problem?.created_at || '', detail: problem ? (problemLabels[problem.reason] || [problem.reason])[0] : `Nhóm ${fromName} gặp sự cố.` },
-      { label: 'Tiếp nhận', title: 'Shop tiếp nhận', time: current > 1 && item.view === 'incident' ? item.status_updated_at : '', detail: current > 1 ? (shopNote || 'Shop đã xác nhận nhóm gặp sự cố và đang xử lý.') : 'Shop đang kiểm tra nhóm của bạn. Nhóm gặp sự cố thì shop chuẩn bị nhóm mới cho bạn.' },
-      { label: 'Nhóm mới', title: 'Chuẩn bị nhóm mới', detail: current > 2 ? 'Link riêng của bạn đã sẵn sàng.' : current === 2 ? 'Shop đang tạo nhóm mới và link riêng cho bạn. Bạn chưa cần làm gì, trang tự cập nhật.' : 'Shop tạo nhóm mới và link riêng cho bạn.' },
-      { label: 'Vào nhóm', title: 'Vào nhóm mới', detail: current === 3 ? '' : current > 3 ? 'Bạn đã vào nhóm mới.' : 'Rời nhóm cũ rồi mở link riêng để vào nhóm mới.', body: current === 3 ? joinTodo(move, true) : '' },
-      { label: 'Hoàn tất', title: 'Premium hoạt động lại', time: joined ? move.joined_at : '', detail: joined ? `Bạn đã vào ${item.family_name}. Hạn dùng giữ nguyên.` : 'Mở YouTube, thấy chữ Premium cạnh logo là xong.' }
+      { label: 'Báo lỗi', title: problem ? 'Bạn báo mất Premium' : 'Phát hiện sự cố mất Premium', time: problem?.created_at || '', detail: problem ? (problemLabels[problem.reason] || [problem.reason])[0] : '' },
+      { label: 'Tiếp nhận', title: current > 1 ? 'Shop đã tiếp nhận và đang xử lý' : 'Shop tiếp nhận', time: current > 1 && item.view === 'incident' ? item.status_updated_at : '', detail: current > 1 ? (shopNote || 'Nhóm Youtube của bạn bị Google quét nên có thể mất Premium. Shop đang xử lý và sẽ cập nhật tại đây.') : 'Shop đang kiểm tra nhóm của bạn. Nhóm gặp sự cố thì shop chuẩn bị nhóm mới cho bạn.' },
+      { label: 'Đang xử lý', title: 'Chuẩn bị nhóm mới', detail: current > 2 ? 'Link riêng của bạn đã sẵn sàng.' : current === 2 ? 'Shop đang tạo nhóm mới và link riêng cho bạn. Bạn chưa cần làm gì, trang tự cập nhật.' : 'Shop tạo nhóm mới và link riêng cho bạn.' },
+      { label: 'Vào nhóm mới', title: 'Bạn thao tác để vào nhóm mới', detail: current === 3 ? '' : 'Bạn tiến hành rời nhóm cũ rồi mở link riêng để vào nhóm mới.', body: current === 3 ? joinTodo(move, true) : '' }
     ]
   };
 }
-const watched = item => ['reported', 'incident', 'move', 'waiting'].includes(item.view);
+const watched = item => ['reported', 'incident', 'waiting'].includes(item.view) || (item.view === 'move' && !item.move?.invite_url);
 function statusCard(item, flow) {
-  const done = flow.current >= flow.n, pct = done ? 100 : Math.round(flow.current / (flow.n - 1) * 100);
-  const live = done ? 'Hoàn tất' : flow.tone === 'warn' ? 'Cần kiểm tra' : flow.yours ? 'Đến lượt bạn' : 'Đang xử lý';
-  return `<section class="card status ${flow.tone}" data-progress="${pct}" data-key="${item.member_ref}" data-n="${flow.n}">
-    <div class="status-meta"><span class="live">${live}</span><span class="step-count">${done ? `Xong ${flow.n}/${flow.n}` : `Bước ${flow.current + 1}/${flow.n}`}</span></div>
+  const pct = Math.round((flow.current + 0.5) / flow.n * 100), live = flow.yours ? 'Bạn thao tác' : 'Đang xử lý';
+  return `<section class="card status" data-progress="${pct}" data-key="${item.member_ref}" data-n="${flow.n}">
+    <div class="status-meta"><span class="live">${live}</span><span class="step-count">Bước ${flow.current + 1}/${flow.n}</span></div>
     <h1>${escape(flow.title)}</h1>
     <p class="status-sub">${escape(flow.sub)}</p>
-    <div class="track-wrap"><div class="runner">${chibi()}</div><div class="track" role="progressbar" aria-label="Tiến trình xử lý" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${pct}" aria-valuetext="${escape(done ? 'Hoàn tất' : `Bước ${flow.current + 1} trên ${flow.n}: ${flow.steps[flow.current].title}`)}"><div class="fill"></div></div></div>
+    <div class="track-wrap"><div class="runner">${chibi()}</div><div class="track" role="progressbar" aria-label="Tiến trình xử lý" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${pct}" aria-valuetext="${escape(`Bước ${flow.current + 1} trên ${flow.n}: ${flow.steps[flow.current].title}`)}"><div class="fill"></div></div></div>
     <div class="labels" aria-hidden="true">${flow.steps.map((step, i) => `<span class="${i < flow.current ? 'done' : i === flow.current ? 'now' : ''}">${escape(step.label)}</span>`).join('')}</div>
     ${watched(item) ? `<p class="status-time" data-checked>${checkedText()}</p>` : ''}
   </section>`;
 }
 function timelineCard(flow) {
   return `<section class="card"><h2>Chi tiết tiến trình</h2><ol class="timeline">${flow.steps.map((step, i) => {
-    const state = i < flow.current ? 'done' : i === flow.current ? 'now' : 'later', warn = state === 'now' && flow.tone === 'warn';
-    const right = state === 'now' ? `<span class="now-chip">${warn ? 'Đang kiểm tra' : flow.yours ? 'Đến lượt bạn' : 'Đang làm'}</span>` : step.time ? `<span class="step-time">${time(step.time)}</span>` : '';
-    return `<li class="${state}${warn ? ' warn-step' : ''}"${state === 'now' ? ' aria-current="step"' : ''}><span class="dot">${state === 'done' ? tick : i + 1}</span><div class="step"><div class="step-head"><h3>${escape(step.title)}</h3>${right}</div>${step.detail ? `<p>${escape(step.detail)}</p>` : ''}${state === 'now' && step.body ? `<div class="step-body">${step.body}</div>` : ''}</div></li>`;
+    const state = i < flow.current ? 'done' : i === flow.current ? 'now' : 'later';
+    const right = state === 'now' ? `<span class="now-chip">${flow.yours ? 'Bạn thao tác' : 'Đang làm'}</span>` : step.time ? `<span class="step-time">${time(step.time)}</span>` : '';
+    return `<li class="${state}"${state === 'now' ? ' aria-current="step"' : ''}><span class="dot">${state === 'done' ? tick : i + 1}</span><div class="step"><div class="step-head"><h3>${escape(step.title)}</h3>${right}</div>${step.detail ? `<p>${escape(step.detail)}</p>` : ''}${state === 'now' && step.body ? `<div class="step-body">${step.body}</div>` : ''}</div></li>`;
   }).join('')}</ol></section>`;
 }
 function planCard(item) {
   return `<section class="card plan">
-    <div class="plan-name"><div><span class="label">Nhóm của bạn</span><strong>${escape(item.family_name)}</strong></div><span class="badge ${statusColors[item.status] || ''}">${escape(familyStatusLabels[item.status] || item.status)}</span></div>
+    <div class="plan-name"><div><span class="label">Mail của bạn</span><strong>${escape(data.email)}</strong></div><span class="badge ${statusColors[item.status] || ''}">${escape(familyStatusLabels[item.status] || item.status)}</span></div>
     <div><span class="label">Gói</span><strong>YouTube Premium</strong><span class="sub">${escape(plan(item))}</span></div>
     <div><span class="label">Hạn dùng</span><strong>${day(item.expires_at)}</strong>${expiryLine(item)}</div>
   </section>`;
@@ -184,7 +169,7 @@ function calmCard(item) {
   return `<section class="card status ${expired ? 'stop' : 'done'}">
       <div class="status-meta"><span class="live">${expired ? 'Hết hạn' : 'Đang hoạt động'}</span></div>
       <h1>${expired ? `Gói đã hết hạn ${Math.abs(item.days_left)} ngày` : 'Premium đang hoạt động'}</h1>
-      <p class="status-sub">${expired ? 'Gia hạn xong, thông tin mới hiện ngay trên trang này.' : `Nhóm ${escape(item.family_name)} hoạt động bình thường. Bạn không cần làm gì thêm.`}</p>
+      <p class="status-sub">${expired ? 'Gia hạn xong, thông tin mới hiện ngay trên trang này.' : 'Nhóm của bạn hoạt động bình thường. Bạn không cần làm gì thêm.'}</p>
     </section>`
     + (handled ? note('Shop đã xử lý báo lỗi của bạn' + (item.problem.handled_at ? ' lúc ' + time(item.problem.handled_at) : ''), item.problem.handled_note || 'Mở lại YouTube để kiểm tra. Vẫn lỗi thì báo lại cho shop.', 'green') : '')
     + planCard(item)
@@ -226,7 +211,7 @@ function watch() {
   if (data && (data.items || []).some(watched)) pollTimer = setInterval(quietRefresh, 30000);
 }
 async function quietRefresh() {
-  if (!data || document.visibilityState !== 'visible' || reporting !== null || problemOpen !== null || document.activeElement?.closest?.('#view form')) return;
+  if (!data || document.visibilityState !== 'visible' || problemOpen !== null || document.activeElement?.closest?.('#view form')) return;
   try {
     const value = await call('me');
     if (value.signed_in === false) { clearInterval(pollTimer); return loginView('Phiên tra cứu đã hết. Nhập lại Gmail và mã tra cứu.', data?.email || ''); }
@@ -238,15 +223,6 @@ async function quietRefresh() {
 document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') quietRefresh(); });
 function render(value, focus = true) { data = value; checkedAt = new Date(); resultView(focus); }
 
-function reportForm(move) {
-  return `<section class="card"><form id="report" data-move="${move.id}">
-    <div><h2>Không vào được nhóm?</h2><p class="muted">Cho shop biết Google báo lỗi gì. Shop kiểm tra rồi nhắn lại cho bạn.</p></div>
-    <fieldset><legend class="legend">Google báo lỗi gì?</legend>${reasons.map(([value, title, hint], i) => `<label class="choice"><input type="radio" name="reason" value="${value}" ${i === 0 ? 'checked' : ''}><span><strong>${title}</strong><small>${hint}</small></span></label>`).join('')}</fieldset>
-    <div class="field"><label for="report-note">Ghi chú cho shop</label><textarea id="report-note" name="note" maxlength="500" placeholder="Ví dụ: bấm Vào nhóm mới thì Google báo lỗi"></textarea>${shop.contact_url ? `<span class="sub">Có ảnh chụp lỗi? Gửi qua ${contactLink(shop.contact_label || 'Messenger của shop', '')}.</span>` : ''}</div>
-    <p class="error" id="report-error" role="alert"></p>
-    <div class="actions"><button type="submit" class="btn primary">Gửi cho shop</button><button type="button" class="btn" data-act="cancel-report">Quay lại</button></div>
-  </form></section>`;
-}
 
 async function copyPage() {
   const value = location.origin + location.pathname + location.hash;
@@ -268,10 +244,6 @@ document.addEventListener('submit', async event => {
       const value = new FormData(form);
       try { const result = await call('problem', { member: Number(form.dataset.member), reason: value.get('reason'), note: value.get('note') || '' }); problemOpen = null; render(result, false); window.scrollTo({ top: 0, behavior: 'smooth' }); }
       catch (error) { $('#problem-error').textContent = error.message; if (error.status === 409) { problemOpen = null; setTimeout(quietRefresh, 1500); } }
-    } else if (form.id === 'report') {
-      const value = new FormData(form);
-      try { reporting = null; render(await call('report', { move_id: Number(form.dataset.move), reason: value.get('reason'), note: value.get('note') || '' })); }
-      catch (error) { reporting = Number(form.dataset.move); $('#report-error').textContent = error.message; }
     }
   } finally { if (button.isConnected) button.disabled = false; }
 });
@@ -282,15 +254,12 @@ document.addEventListener('click', async event => {
     return;
   }
   const button = event.target.closest('[data-act]'); if (!button) return;
-  const act = button.dataset.act, move = Number(button.dataset.move);
+  const act = button.dataset.act;
   try {
-    if (act === 'joined') { button.disabled = true; render(await call('joined', { move_id: move })); }
-    else if (act === 'report') { reporting = move; resultView(false); $('#report')?.scrollIntoView({ block: 'start' }); }
-    else if (act === 'cancel-report') { reporting = null; resultView(false); }
-    else if (act === 'problem-open') { problemOpen = Number(button.dataset.member); resultView(false); $('#problem-card')?.scrollIntoView({ block: 'start', behavior: 'smooth' }); }
+    if (act === 'problem-open') { problemOpen = Number(button.dataset.member); resultView(false); $('#problem-card')?.scrollIntoView({ block: 'start', behavior: 'smooth' }); }
     else if (act === 'problem-cancel') { problemOpen = null; resultView(false); }
     else if (act === 'copy-page') await copyPage();
-    else if (act === 'logout') { await call('logout', {}).catch(() => {}); reporting = null; problemOpen = null; clearInterval(pollTimer); loginView('', data?.email || ''); }
+    else if (act === 'logout') { await call('logout', {}).catch(() => {}); problemOpen = null; clearInterval(pollTimer); loginView('', data?.email || ''); }
   } catch (error) {
     button.disabled = false;
     if (error.status === 401) loginView('Phiên tra cứu đã hết. Nhập lại Gmail và mã tra cứu.', data?.email || '');

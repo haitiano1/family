@@ -105,7 +105,7 @@ function lookupRotateCode(PDO $db,array $d): array {
 
 // Fix lỗi drives the status customers see: reporting the owner Gmail marks an active Family
 // "Bị quét"; completing the case (or keeping the mail) puts it back to "Đang hoạt động".
-function lookupAutoScannedNote(string $name): string {return "$name bị Google quét nên một số thành viên có thể mất Premium. Shop đang xử lý và sẽ cập nhật tại đây; hạn dùng của bạn giữ nguyên.";}
+function lookupAutoScannedNote(string $name): string {return 'Nhóm Youtube của bạn bị Google quét nên có thể mất Premium. Shop đang xử lý và sẽ cập nhật tại đây.';}
 function lookupIssueStatus(PDO $db,int $familyId,string $event): void {
     $f=lookupActiveFamily($db,$familyId);if(!$f)return;
     if($event==='reported')lookupCloseReports($db,$f);
