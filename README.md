@@ -1,4 +1,6 @@
-# Hải Premium — Quản lý khách hàng 0.25.0
+# Hải Premium — Quản lý khách hàng 0.26.0
+
+Bản 0.26.0: **đổi chủ ngay trên Family cũ** khi có đợt quét. Ở Fix lỗi → **Đã fix → Đổi sang mail mới**, khách ở lại Family đó và giữ nguyên trạng thái; mỗi khách tự nhận một link của chủ mới khi tra cứu Gmail. Hộp Đã fix tạo luôn mail mời bằng số khách, link và mail mời của chủ cũ được bỏ. Kho hiện mail mới và ngày trial là ngày đổi; mật khẩu, 2FA, mail khôi phục, ghi chú để trống. Khách quá hạn vẫn được cấp link như bình thường. Xem [hướng dẫn](hosting/php/TRA-CUU-CHUYEN-NHOM.md).
 
 Bản 0.25.0: tag **Đã gửi** hoàn toàn tự động (bỏ ô tick); link khách đã vào nhóm hiện Gmail của khách thay cho mail haihoangrr+…; hộp **Đã fix** ở Fix lỗi có thêm nút **Cho khách vào**: chuyển toàn bộ khách của Family bị quét sang Family mới (ghi đè hồ sơ trùng Gmail), khách tra cứu sẽ nhận link của Family mới. Xem [hướng dẫn](hosting/php/TRA-CUU-CHUYEN-NHOM.md).
 

@@ -33,7 +33,7 @@ function lookupInviteHolder(array $refs): array {
     return $open?['state'=>'assigned','move'=>$open]:['state'=>'ready','move'=>null];
 }
 // A ready link the owner ticked as sent by hand is not handed out again.
-function lookupInviteState(PDO $db,array $invite): string {$state=lookupInviteHolder(lookupInviteRefs($db,(int)$invite['id']))['state'];return $state==='ready'&&($invite['sent_at']??'')!==''?'sent':$state;}
+function lookupInviteState(PDO $db,array $invite): string {if(($invite['retired_at']??'')!=='')return 'retired';$state=lookupInviteHolder(lookupInviteRefs($db,(int)$invite['id']))['state'];return $state==='ready'&&($invite['sent_at']??'')!==''?'sent':$state;}
 function lookupInviteRefs(PDO $db,int $inviteId): array {
     return all($db,"SELECT mv.id,mv.state,mv.email,mv.customer_name,mv.to_family_id,mv.member_id,m.family_id AS member_family_id FROM member_moves mv LEFT JOIN members m ON m.id=mv.member_id WHERE mv.invite_id=? AND mv.state<>'cancelled' ORDER BY mv.id",[$inviteId]);
 }
@@ -111,6 +111,27 @@ function lookupIssueStatus(PDO $db,int $familyId,string $event): void {
     if($old)q($db,'UPDATE family_statuses SET status=?,note=?,updated_at=?,revision=revision+1 WHERE family_id=?',[$next,$note,lookupNow(),$f['id']]);
     else q($db,'INSERT INTO family_statuses(family_id,status,note,updated_at,revision) VALUES (?,?,?,?,1)',[$f['id'],$next,$note,lookupNow()]);
     logEntry($db,'Tự động: đặt trạng thái '.$f['name'].' là '.LOOKUP_STATUS_LABELS[$next].($event==='reported'?' khi báo lỗi mail quản lý':' khi hoàn tất Fix lỗi'));
+}
+// Đã fix · Đổi sang mail mới on the owner keeps the same Family record: every customer has to
+// accept the new owner's invitation, so they become "Đã mời, chưa vào" and get a fresh link on
+// lookup. Links and Gen mail made before the case was reported belong to the old owner's group:
+// the links are retired (kept, so Lấy link mời never imports them again) and the addresses go.
+// A prepared Family of the new owner (donor) hands over its links and addresses.
+function lookupOwnerReplaced(PDO $db,int $familyId,string $since,?int $donorId,int $count): ?array {
+    $f=lookupActiveFamily($db,$familyId);if(!$f)return null;$time=lookupNow();
+    $retired=q($db,"UPDATE family_invites SET retired_at=?,revision=revision+1,updated_at=? WHERE family_id=? AND retired_at='' AND created_at<?",[$time,$time,$f['id'],$since])->rowCount();
+    q($db,'DELETE FROM invite_mails WHERE family_id=? AND created_at<?',[$f['id'],$since]);
+    if($donorId){q($db,'UPDATE family_invites SET family_id=?,revision=revision+1,updated_at=? WHERE family_id=?',[$f['id'],$time,$donorId]);q($db,'UPDATE invite_mails SET family_id=? WHERE family_id=?',[$f['id'],$donorId]);}
+    foreach(all($db,"SELECT mv.id,mv.state FROM member_moves mv JOIN members m ON m.id=mv.member_id WHERE mv.to_family_id=? AND m.family_id=? AND mv.state<>'cancelled' AND mv.dismissed_at=''",[$f['id'],$f['id']]) as $mv){
+        if(in_array($mv['state'],LOOKUP_OPEN_STATES,true))q($db,"UPDATE member_moves SET state='cancelled',updated_at=?,revision=revision+1 WHERE id=?",[$time,$mv['id']]);
+        else q($db,'UPDATE member_moves SET dismissed_at=?,updated_at=?,revision=revision+1 WHERE id=?',[$time,$time,$mv['id']]);
+    }
+    // Customers keep their member status; each one waits for a link of the new owner's group.
+    $status=lookupStatusRow($db,(int)$f['id']);$problem=in_array($status['status'],LOOKUP_PROBLEM_STATUSES,true);
+    $members=all($db,'SELECT * FROM members WHERE family_id=? ORDER BY id',[$f['id']]);
+    foreach($members as $m)lookupAwaitLink($db,$m,$f,null,$f['name'],$problem?$status['status']:'scanned',$problem&&$status['note']!==''?$status['note']:lookupAutoScannedNote($f['name']));
+    logEntry($db,"Tự động: {$f['name']} đổi chủ sang {$f['manager_email']}: ".count($members)." khách chờ link vào nhóm mới".($retired?", bỏ $retired link của chủ cũ":''));
+    return ['waiting'=>count($members),'retired'=>$retired,'invite_mails'=>$count?lookupGenerateInviteMails($db,(int)$f['id'],['count'=>$count]):null];
 }
 function lookupInviteMailBase(string $address): string {
     $at=strrpos($address,'@');if($at===false||$at===0)return '';$local=explode('+',substr($address,0,$at))[0];return $local===''?'':$local.substr($address,$at);
@@ -192,7 +213,7 @@ function lookupImportInvites(PDO $db,array $items): array {
         $key=$f['id']."\0".$m['to'];if(isset($seen[$key]))continue;$seen[$key]=true;
         if($m['moved']!=='')$mismatched[$m['to']]=['email'=>$m['to'],'generated_for'=>$m['moved'],'invited_by'=>$f['name']];
         if(one($db,'SELECT id FROM family_invites WHERE url=?',[$m['url']])){$out['unchanged']++;continue;}
-        $old=one($db,'SELECT * FROM family_invites WHERE family_id=? AND label=? ORDER BY id DESC LIMIT 1',[$f['id'],$m['to']]);
+        $old=one($db,"SELECT * FROM family_invites WHERE family_id=? AND label=? AND retired_at='' ORDER BY id DESC LIMIT 1",[$f['id'],$m['to']]);
         // A link someone joined with, or one ticked as sent by hand, is kept as it is. A link held
         // for a customer (handed out on lookup or by a move) takes the newer link, so that customer
         // keeps the same slot and sees a working link until they move to another group.
@@ -224,9 +245,15 @@ function lookupDeleteInviteMails(PDO $db,int $familyId,array $d): array {
         return ['ok'=>true,'deleted'=>count($rows)];
     });
 }
-// Cho khách vào: every customer of the old Family, with all their details, moves into the new
-// Family as "Đã mời, chưa vào" (they then get their own link on lookup). A record of the same
-// Gmail already in the new Family is replaced by the old Family's record.
+// A customer who must (re)join a group without a link yet: the move is open with no invite,
+// and the first ready link of the Family is attached when the customer looks up their Gmail.
+function lookupAwaitLink(PDO $db,array $m,array $to,?int $fromId,string $fromName,string $fromStatus,string $fromNote): void {
+    $time=lookupNow();
+    q($db,"INSERT INTO member_moves(member_id,email,customer_name,from_family_id,from_family_name,from_status,from_note,to_family_id,to_family_name,invite_id,invite_label,state,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,NULL,'','assigned',?,?)",[$m['id'],$m['email'],$m['customer_name'],$fromId,$fromName,$fromStatus,$fromNote,$to['id'],$to['name'],$time,$time]);
+}
+// Cho khách vào: every customer of the old Family, with all their details and member status,
+// moves into the new Family and waits for their own link, handed out on lookup. A record of the
+// same Gmail already in the new Family is replaced by the old Family's record.
 function lookupHandOver(PDO $db,int $fromId,array $d): array {
     $from=lookupActiveFamily($db,$fromId);if(!$from)fail('Không tìm thấy Family cũ đang hoạt động.',404);
     $to=lookupActiveFamily($db,$d['to_family_id']??null);if(!$to||(int)$to['id']===(int)$from['id'])fail('Chọn Family mới đang hoạt động.');
@@ -234,14 +261,16 @@ function lookupHandOver(PDO $db,int $fromId,array $d): array {
     $members=all($db,'SELECT * FROM members WHERE family_id=? ORDER BY id',[$from['id']]);
     if(!$members)fail("{$from['name']} không còn khách để chuyển.",409);
     foreach($members as $m)if($m['email']===$to['manager_email'])fail("Email {$m['email']} trùng mail chủ {$to['name']}.",409);
-    return transaction($db,function()use($db,$from,$to,$members){
+    $source=lookupStatusRow($db,(int)$from['id']);
+    return transaction($db,function()use($db,$from,$to,$members,$source){
         $time=lookupNow();$replaced=0;
         foreach($members as $m){
             $duplicate=one($db,'SELECT id FROM members WHERE family_id=? AND email=?',[$to['id'],$m['email']]);
             if($duplicate){foreach(['member_moves','renewal_history','new_purchase_history'] as $t)q($db,"UPDATE `$t` SET member_id=NULL WHERE member_id=?",[$duplicate['id']]);q($db,"DELETE FROM issues WHERE family_id=? AND target_type='member' AND target_id=?",[$to['id'],$duplicate['id']]);q($db,'DELETE FROM members WHERE id=?',[$duplicate['id']]);$replaced++;}
             q($db,"UPDATE member_moves SET state='cancelled',updated_at=?,revision=revision+1 WHERE member_id=? AND state IN ('assigned','opened','failed')",[$time,$m['id']]);
-            q($db,"UPDATE members SET family_id=?,membership_status='invited',renewal_revision=renewal_revision+1 WHERE id=?",[$to['id'],$m['id']]);
+            q($db,'UPDATE members SET family_id=?,renewal_revision=renewal_revision+1 WHERE id=?',[$to['id'],$m['id']]);
             q($db,"DELETE FROM issues WHERE family_id=? AND target_type='member' AND target_id=?",[$from['id'],$m['id']]);
+            lookupAwaitLink($db,$m,$to,(int)$from['id'],$from['name'],$source['status'],$source['note']);
         }
         logEntry($db,'Cá nhân: cho '.count($members)." khách của {$from['name']} ({$from['manager_email']}) vào {$to['name']} ({$to['manager_email']})".($replaced?", ghi đè $replaced hồ sơ trùng Gmail":'').': '.implode(', ',array_column($members,'email')));
         return ['ok'=>true,'moved'=>count($members),'replaced'=>$replaced,'family_id'=>(int)$to['id'],'family_name'=>$to['name']];
@@ -252,6 +281,7 @@ function lookupMarkInviteSent(PDO $db,int $id,array $d): array {
     $f=lookupActiveFamily($db,(int)$i['family_id']);if(!$f)fail('Không tìm thấy Family đang hoạt động.',404);
     if(lookupRevision($d['revision']??null)!==(int)$i['revision'])fail('Link mời vừa được sửa ở nơi khác. Tải lại rồi thử lại.',409);
     if(!is_bool($d['sent']??null))fail('Thiếu trạng thái đã gửi.');
+    if(($i['retired_at']??'')!=='')fail('Link của chủ cũ không dùng được nữa.',409);
     $state=lookupInviteHolder(lookupInviteRefs($db,$id))['state'];
     if($d['sent']&&$state!=='ready')fail($state==='used'?'Link này đã có khách dùng.':'Link đang giao cho khách trong lượt chuyển nhóm.',409);
     q($db,'UPDATE family_invites SET sent_at=?,revision=revision+1,updated_at=? WHERE id=?',[$d['sent']?lookupNow():'',lookupNow(),$id]);
@@ -345,7 +375,7 @@ function lookupAdminState(PDO $db): array {
     $salt=lookupSalt($db);
     $refs=all($db,"SELECT mv.id,mv.invite_id,mv.state,mv.email,mv.customer_name,mv.to_family_id,mv.member_id,m.family_id AS member_family_id FROM member_moves mv LEFT JOIN members m ON m.id=mv.member_id WHERE mv.invite_id IS NOT NULL AND mv.state<>'cancelled' ORDER BY mv.id");
     $byInvite=[];foreach($refs as $r)$byInvite[(int)$r['invite_id']][]=$r;
-    $invites=array_map(function($i)use($byInvite){$h=lookupInviteHolder($byInvite[(int)$i['id']]??[]);return [...$i,'expires_on'=>lookupInviteExpiry($i['sent_on']),'holder_state'=>$h['state']==='ready'&&$i['sent_at']!==''?'sent':$h['state'],'holder_move_id'=>$h['move']?(int)$h['move']['id']:null,'holder_email'=>$h['move']['email']??'','holder_name'=>$h['move']['customer_name']??''];},all($db,'SELECT * FROM family_invites ORDER BY family_id,id'));
+    $invites=array_map(function($i)use($byInvite){$h=lookupInviteHolder($byInvite[(int)$i['id']]??[]);return [...$i,'expires_on'=>lookupInviteExpiry($i['sent_on']),'holder_state'=>($i['retired_at']??'')!==''?'retired':($h['state']==='ready'&&$i['sent_at']!==''?'sent':$h['state']),'holder_move_id'=>$h['move']?(int)$h['move']['id']:null,'holder_email'=>$h['move']['email']??'','holder_name'=>$h['move']['customer_name']??''];},all($db,'SELECT * FROM family_invites ORDER BY family_id,id'));
     $moves=array_map(function($mv){$live=$mv['member_family_id']!==null&&$mv['to_family_id']!==null&&(int)$mv['member_family_id']===(int)$mv['to_family_id'];return [...$mv,'live'=>$live,'effective_state'=>in_array($mv['state'],LOOKUP_OPEN_STATES,true)&&!$live?'stale':$mv['state']];},all($db,"SELECT mv.*,m.family_id AS member_family_id FROM member_moves mv LEFT JOIN members m ON m.id=mv.member_id WHERE mv.dismissed_at='' ORDER BY mv.id DESC LIMIT 500"));
     $codes=[];foreach(all($db,'SELECT DISTINCT email FROM members') as $r)$codes[$r['email']]=lookupCodeFor($db,$r['email'],$salt);
     // Gmail import needs the Google Sheet connection (same Apps Script). Plain query: no DDL inside the state audit.
@@ -359,13 +389,16 @@ function lookupAdminState(PDO $db): array {
 // held for them (never handed to anyone else) and ticked Đã gửi.
 function lookupJoinable(array $m): bool {return in_array($m['membership_status'],['invited','new'],true);}
 function lookupAllocateJoin(PDO $db,array $m,array $status,array $period): bool {
-    if(!lookupJoinable($m)||$status['status']!=='active'||$period['expiry_status']==='expired')return false;
-    if(one($db,"SELECT id FROM member_moves WHERE member_id=? AND to_family_id=? AND state<>'cancelled'",[$m['id'],$m['family_id']]))return false;
+    // Customers past their expiry date still get a link: they renew, they just have not paid yet.
+    if($status['status']!=='active')return false;
+    $pending=one($db,"SELECT * FROM member_moves WHERE member_id=? AND to_family_id=? AND state<>'cancelled' AND dismissed_at='' ORDER BY id DESC LIMIT 1",[$m['id'],$m['family_id']]);
+    if($pending?!(in_array($pending['state'],LOOKUP_OPEN_STATES,true)&&$pending['invite_id']===null):!lookupJoinable($m))return false;
     $f=lookupActiveFamily($db,(int)$m['family_id']);if(!$f)return false;$today=today();$invite=null;
-    foreach(all($db,"SELECT * FROM family_invites WHERE family_id=? AND sent_at='' ORDER BY CASE WHEN sent_on='' THEN 1 ELSE 0 END,sent_on,id",[$f['id']]) as $i)if(lookupInviteHolder(lookupInviteRefs($db,(int)$i['id']))['state']==='ready'&&($i['sent_on']===''||lookupInviteExpiry($i['sent_on'])>=$today)){$invite=$i;break;}
+    foreach(all($db,"SELECT * FROM family_invites WHERE family_id=? AND sent_at='' AND retired_at='' ORDER BY CASE WHEN sent_on='' THEN 1 ELSE 0 END,sent_on,id",[$f['id']]) as $i)if(lookupInviteHolder(lookupInviteRefs($db,(int)$i['id']))['state']==='ready'&&($i['sent_on']===''||lookupInviteExpiry($i['sent_on'])>=$today)){$invite=$i;break;}
     if(!$invite)return false;
     $time=lookupNow();
-    q($db,"INSERT INTO member_moves(member_id,email,customer_name,from_family_id,from_family_name,from_status,from_note,to_family_id,to_family_name,invite_id,invite_label,state,created_at,updated_at) VALUES (?,?,?,NULL,'','active','',?,?,?,?,'assigned',?,?)",[$m['id'],$m['email'],$m['customer_name'],$f['id'],$f['name'],$invite['id'],$invite['label'],$time,$time]);
+    if($pending)q($db,'UPDATE member_moves SET invite_id=?,invite_label=?,updated_at=?,revision=revision+1 WHERE id=?',[$invite['id'],$invite['label'],$time,$pending['id']]);
+    else q($db,"INSERT INTO member_moves(member_id,email,customer_name,from_family_id,from_family_name,from_status,from_note,to_family_id,to_family_name,invite_id,invite_label,state,created_at,updated_at) VALUES (?,?,?,NULL,'','active','',?,?,?,?,'assigned',?,?)",[$m['id'],$m['email'],$m['customer_name'],$f['id'],$f['name'],$invite['id'],$invite['label'],$time,$time]);
     q($db,'UPDATE family_invites SET sent_at=?,revision=revision+1,updated_at=? WHERE id=?',[$time,$time,$invite['id']]);
     logEntry($db,'Tự động: giao link mời '.($invite['label']?:'#'.$invite['id'])." của {$f['name']} cho {$m['email']} khi khách tra cứu");
     return true;
@@ -382,8 +415,8 @@ function lookupResult(PDO $db,string $address): array {
             $source=$latest['from_family_id']!==null&&lookupActiveFamily($db,(int)$latest['from_family_id'])?lookupStatusRow($db,(int)$latest['from_family_id']):null;
             $move=['id'=>(int)$latest['id'],'kind'=>$latest['from_family_id']===null&&$latest['from_family_name']===''?'join':'move','state'=>$latest['state'],'from_family_name'=>$latest['from_family_name'],'from_status'=>$source?$source['status']:$latest['from_status'],'from_note'=>$source?$source['note']:$latest['from_note'],'invite_url'=>$invite?$invite['url']:'','invite_expires_on'=>$invite?lookupInviteExpiry($invite['sent_on']):'','report_reason'=>$latest['report_reason'],'reported_at'=>$latest['reported_at'],'opened_at'=>$latest['opened_at'],'joined_at'=>$latest['joined_at']];
         }
-        $waiting=!$allocated&&!$move&&lookupJoinable($m)&&$status['status']==='active'&&$period['expiry_status']!=='expired';
-        $view=$move&&in_array($move['state'],LOOKUP_OPEN_STATES,true)?'move':(in_array($status['status'],LOOKUP_PROBLEM_STATUSES,true)?($period['expiry_status']==='expired'?'expired':'incident'):($period['expiry_status']==='expired'?'expired':($waiting?'waiting':'normal')));
+        $waiting=!$allocated&&!$move&&lookupJoinable($m)&&$status['status']==='active';
+        $view=$move&&in_array($move['state'],LOOKUP_OPEN_STATES,true)?'move':(in_array($status['status'],LOOKUP_PROBLEM_STATUSES,true)?'incident':($waiting?'waiting':($period['expiry_status']==='expired'?'expired':'normal')));
         $items[]=['family_name'=>$m['family_name'],'plan_months'=>(int)$m['plan_months'],'expires_at'=>$m['expires_at'],...$period,'membership_status'=>$m['membership_status'],'status'=>$status['status'],'status_note'=>$status['note'],'status_updated_at'=>$status['updated_at'],'view'=>$view,'move'=>$move];
     }
     return ['email'=>$address,'today'=>today(),'shop'=>lookupSettings($db),'items'=>$items];

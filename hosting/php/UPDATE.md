@@ -1,3 +1,7 @@
+# 0.26.0 — Đổi chủ ngay trên Family cũ, khách quá hạn vẫn nhận link
+
+Dùng **Cập nhật một chạm**. Không cần đổi Apps Script, SQL hay config.php; cột mới cho link của chủ cũ tự thêm khi website mở lần đầu. Khi có đợt quét: Báo lỗi → Đã fix → Đổi sang mail mới (chọn số mail mời) → mời các mail đó từ chủ mới → Lấy link mời. Xem TRA-CUU-CHUYEN-NHOM.md.
+
 # 0.25.0 — Đã gửi tự động, nút Cho khách vào
 
 Dùng **Cập nhật một chạm**. Không còn ô tick Đã gửi: web tự gắn tag khi đưa link cho khách. Hộp Đã fix có thêm nút Cho khách vào (chuyển toàn bộ khách Family cũ sang Family mới). Không đổi schema hay Apps Script. Xem TRA-CUU-CHUYEN-NHOM.md.

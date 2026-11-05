@@ -158,7 +158,7 @@ test('incident flow: status, invite pool, bulk move with one link per customer, 
     // Other customers: expired in the broken Family, and a calm Family.
     const expired = f.customer(), calm = f.customer();
     result = await expired('verify', 'POST', { email: 'quocbao@example.com', code: state.lookup_codes['quocbao@example.com'] });
-    assert.deepEqual([result.items[0].view, result.items[0].status, result.items[0].move], ['expired', 'disabled', null]);
+    assert.deepEqual([result.items[0].view, result.items[0].status, result.items[0].move], ['incident', 'disabled', null], 'past expiry still sees the incident, not only a renewal reminder');
     result = await calm('verify', 'POST', { email: 'hoangnam@example.com', code: state.lookup_codes['hoangnam@example.com'] });
     assert.deepEqual([result.items[0].view, result.items[0].status], ['normal', 'active']);
     await a(`families/${calmFamily.id}/status`, 'PATCH', { status: 'checking', note: 'Đang kiểm tra', revision: 0 });
@@ -394,7 +394,7 @@ test('new customers get one link of their own Family on lookup, never shared, an
     assert.equal((await look('an@example.com')).move.invite_url, inviteUrl(81), 'same link again');
     assert.equal((await look('binh@example.com')).move.invite_url, inviteUrl(82), 'Mua mới gets the next link');
     assert.equal((await look('chi@example.com')).view, 'normal', 'a customer already in the group gets nothing');
-    assert.equal((await look('dung@example.com')).view, 'expired');
+    assert.equal((await look('dung@example.com')).view, 'waiting', 'past expiry still waits for a link');
     assert.equal((await look('em@example.com')).view, 'waiting', 'pool used up: wait for a link');
     let state = await a('state');
     const holder = id => state.invites.find(i => i.id === id);
@@ -404,6 +404,8 @@ test('new customers get one link of their own Family on lookup, never shared, an
     // A new link in the pool goes to the waiting customer; joining marks the customer in the group.
     await a(`families/${fam.id}/invites`, 'POST', { label: 'moi', url: inviteUrl(84), sent_on: day(0) }, 201);
     assert.equal((await look('em@example.com')).move.invite_url, inviteUrl(84));
+    await a(`families/${fam.id}/invites`, 'POST', { label: 'moi2', url: inviteUrl(86), sent_on: day(0) }, 201);
+    assert.equal((await look('dung@example.com')).move.invite_url, inviteUrl(86), 'a customer past expiry gets a link too');
     const c = f.customer(); const signed = await c('verify', 'POST', { email: 'an@example.com', code: codes['an@example.com'] });
     const joined = await c('joined', 'POST', { move_id: signed.items[0].move.id });
     assert.equal(joined.items[0].view, 'normal');
@@ -449,13 +451,18 @@ test('Đã fix · Cho khách vào moves every customer with their details and ke
     assert.deepEqual(await a(`families/${oldFamily.id}/hand-over`, 'POST', { to_family_id: newFamily.id, expected_manager_email: 'owner09@example.com' }), { ok: true, moved: 3, replaced: 1, family_id: newFamily.id, family_name: 'Family 09' });
     let state = await a('state');
     const moved = state.members.filter(m => m.family_id === newFamily.id).sort((x, y) => x.id - y.id);
-    assert.deepEqual(moved.map(m => [m.id, m.email, m.customer_name, m.membership_status]), [[minh.id, 'minhanh@example.com', 'Minh Anh', 'invited'], [huy.id, 'giahuy@example.com', 'Gia Huy', 'invited'], [bao.id, 'quocbao@example.com', 'Quốc Bảo', 'invited']], 'old records win, all details kept');
+    assert.deepEqual(moved.map(m => [m.id, m.email, m.customer_name, m.membership_status]), [[minh.id, 'minhanh@example.com', 'Minh Anh', 'active'], [huy.id, 'giahuy@example.com', 'Gia Huy', 'active'], [bao.id, 'quocbao@example.com', 'Quốc Bảo', 'active']], 'old records win, all details and member status kept');
+    assert.deepEqual(state.moves.filter(m => m.to_family_id === newFamily.id && m.effective_state === 'assigned').map(m => [m.member_id, m.invite_id, m.from_family_name]).sort(), [[bao.id, null, 'Family 04'], [huy.id, null, 'Family 04'], [minh.id, null, 'Family 04']].sort(), 'each customer waits for a link');
     assert.equal(state.members.some(m => m.id === stale.id), false, 'duplicate in the new Family replaced');
     assert.equal(state.members.some(m => m.family_id === oldFamily.id), false);
     assert.equal(member(state, minh.id).expires_at, day(38), 'dates kept');
     // Customers now get the new Family's links on lookup.
     const item = (await f.customer()('verify', 'POST', { email: 'minhanh@example.com', code: state.lookup_codes['minhanh@example.com'] })).items[0];
-    assert.deepEqual([item.family_name, item.view, item.move.kind, item.move.invite_url], ['Family 09', 'move', 'join', inviteUrl(70)]);
+    assert.deepEqual([item.family_name, item.view, item.move.kind, item.move.from_family_name, item.move.from_status, item.move.invite_url], ['Family 09', 'move', 'move', 'Family 04', 'scanned', inviteUrl(70)]);
+    const late = (await f.customer()('verify', 'POST', { email: 'giahuy@example.com', code: state.lookup_codes['giahuy@example.com'] })).items[0];
+    assert.deepEqual([late.view, late.move.state, late.move.invite_url], ['move', 'assigned', ''], 'no link left: the page says one is coming');
+    await a(`families/${newFamily.id}/invites`, 'POST', { label: 'slot2', url: inviteUrl(71), sent_on: day(0) }, 201);
+    assert.equal((await f.customer()('verify', 'POST', { email: 'quocbao@example.com', code: state.lookup_codes['quocbao@example.com'] })).items[0].move.invite_url, inviteUrl(71), 'past expiry gets one as well');
     let issue = state.issues.find(i => i.id === created.id);
     await a(`issues/${created.id}`, 'PATCH', { revision: issue.revision, status: 'done', resolution: 'move', move_family_id: oldFamily.id }, 400);
     await a(`issues/${created.id}`, 'PATCH', { revision: issue.revision, status: 'done', resolution: 'move', move_family_id: newFamily.id });
@@ -467,5 +474,64 @@ test('Đã fix · Cho khách vào moves every customer with their details and ke
     // A customer whose Gmail is the new owner's blocks the hand-over.
     const ownerClash = await a('families', 'POST', { name: 'Family 20', manager_email: 'hoangnam@example.com' }, 201);
     await a(`families/${calm.id}/hand-over`, 'POST', { to_family_id: ownerClash.id, expected_manager_email: 'hoangnam@example.com' }, 409);
+  } finally { await f.close(); }
+});
+
+test('Đã fix · Đổi sang mail mới keeps customers in the Family: statuses kept, old links retired, everyone waits for a new link', async () => {
+  const f = await server(); try {
+    const a = f.admin;
+    const fam = await a('families', 'POST', { name: 'Family 30', manager_email: 'owner30@example.com' }, 201);
+    const add = (email, extra) => a('members', 'POST', { family_id: fam.id, email, customer_name: email.split('@')[0], expires_at: day(60), ...extra }, 201);
+    const ann = await add('ann@example.com', { membership_status: 'invited' });
+    const lan = await add('lan@example.com', { membership_status: 'new', joined_at: day(0) });
+    const tuan = await add('tuan@example.com', { membership_status: 'active', expires_at: day(-5) });
+    // Before the scan: one link used by ann, one still ready, one Gen mail without a link yet.
+    const used = await a(`families/${fam.id}/invites`, 'POST', { label: 'haihoangrr+old111@gmail.com', url: inviteUrl(90), sent_on: day(-3) }, 201);
+    const spare = await a(`families/${fam.id}/invites`, 'POST', { label: 'haihoangrr+old222@gmail.com', url: inviteUrl(91), sent_on: day(-2) }, 201);
+    const codes = (await a('state')).lookup_codes, look = async address => (await f.customer()('verify', 'POST', { email: address, code: codes[address] })).items[0];
+    const c = f.customer(); const signed = await c('verify', 'POST', { email: 'ann@example.com', code: codes['ann@example.com'] });
+    assert.equal(signed.items[0].move.invite_url, inviteUrl(90));
+    await c('joined', 'POST', { move_id: signed.items[0].move.id });
+    await a(`families/${fam.id}/invite-mails`, 'POST', { count: 1 }, 201);
+    await new Promise(resolve => setTimeout(resolve, 5));
+    const created = await a('issues', 'POST', { family_id: fam.id, target_type: 'manager', title: 'Bị quét' }, 201);
+    await new Promise(resolve => setTimeout(resolve, 5));
+    // After the report: a link of the new owner already came in.
+    const fresh = await a(`families/${fam.id}/invites`, 'POST', { label: 'haihoangrr+new333@gmail.com', url: inviteUrl(92), sent_on: day(0) }, 201);
+    let state = await a('state'), issue = state.issues.find(i => i.id === created.id);
+    const before = Object.fromEntries(state.members.filter(m => m.family_id === fam.id).map(m => [m.id, m.membership_status]));
+    assert.equal(before[ann.id], 'active');
+    const done = { revision: issue.revision, expected_created_at: issue.created_at, status: 'done', resolution: 'replace', replacement_email: 'owner30b@example.com' };
+    await a(`issues/${created.id}`, 'PATCH', { ...done, invite_count: 6 }, 400);
+    const result = await a(`issues/${created.id}`, 'PATCH', { ...done, invite_count: 2 });
+    assert.deepEqual([result.ok, result.waiting_customers, result.retired_links, result.invite_mails.mails.length, result.invite_mails.family_id], [true, 3, 2, 2, fam.id]);
+    state = await a('state');
+    assert.equal(state.families.find(x => x.id === fam.id).manager_email, 'owner30b@example.com');
+    assert.equal(state.families.find(x => x.id === fam.id).trial_date, state.today, 'trial date is the change date');
+    assert.deepEqual(Object.fromEntries(state.members.filter(m => m.family_id === fam.id).map(m => [m.id, m.membership_status])), before, 'member statuses untouched');
+    assert.equal(state.family_statuses.find(x => x.family_id === fam.id).status, 'active');
+    const holder = id => state.invites.find(i => i.id === id).holder_state;
+    assert.deepEqual([holder(used.id), holder(spare.id), holder(fresh.id)], ['retired', 'retired', 'ready'], 'links from before the report are retired');
+    assert.deepEqual(state.invite_mails.filter(x => x.family_id === fam.id).map(x => x.email).sort(), [...result.invite_mails.mails].sort(), 'old Gen mail removed, new ones kept');
+    const waiting = state.moves.filter(m => m.to_family_id === fam.id && m.effective_state === 'assigned');
+    assert.deepEqual(waiting.map(m => [m.member_id, m.invite_id, m.from_family_name, m.from_status]).sort(), [[ann.id, null, 'Family 30', 'scanned'], [lan.id, null, 'Family 30', 'scanned'], [tuan.id, null, 'Family 30', 'scanned']].sort());
+    assert.equal(state.moves.some(m => m.to_family_id === fam.id && m.state === 'joined'), false, 'the old join is hidden');
+    assert.ok((await a('journal')).entries.some(e => e.message.includes('Tự động: Family 30 đổi chủ sang owner30b@example.com: 3 khách chờ link vào nhóm mới, bỏ 2 link của chủ cũ')));
+    // Lookups hand out the new owner's links only, to every customer including the expired one.
+    const first = await look('tuan@example.com');
+    assert.deepEqual([first.view, first.move.kind, first.move.from_family_name, first.move.invite_url], ['move', 'move', 'Family 30', inviteUrl(92)], 'expired customer gets the link');
+    const second = await look('ann@example.com');
+    assert.deepEqual([second.view, second.move.state, second.move.invite_url], ['move', 'assigned', ''], 'no ready link: the page says one is coming');
+    await a(`families/${fam.id}/invites`, 'POST', { label: result.invite_mails.mails[0], url: inviteUrl(93), sent_on: day(0) }, 201);
+    assert.equal((await look('ann@example.com')).move.invite_url, inviteUrl(93));
+    state = await a('state');
+    assert.equal(state.invites.find(i => i.url === inviteUrl(93)).holder_state, 'assigned');
+    // Đổi link works on a customer who is still waiting.
+    const lanMove = state.moves.find(m => m.member_id === lan.id && m.effective_state === 'assigned');
+    const extra = await a(`families/${fam.id}/invites`, 'POST', { label: 'tay', url: inviteUrl(94), sent_on: day(0) }, 201);
+    await a(`moves/${lanMove.id}`, 'PATCH', { action: 'reassign', revision: lanMove.revision, invite_id: extra.id, invite_revision: 0 });
+    assert.equal((await look('lan@example.com')).move.invite_url, inviteUrl(94));
+    // Retired links stay out of every pool.
+    await a(`invites/${spare.id}/sent`, 'PATCH', { sent: true, revision: state.invites.find(i => i.id === spare.id).revision }, 409);
   } finally { await f.close(); }
 });
