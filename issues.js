@@ -57,7 +57,7 @@ export function initIssues(db,{fail,text,email,log,familyStatus=()=>{}}) {
     if(old.status==='done'&&status!=='done')requireNoOpenIssue(old.family_id,old.id);
     let subject=old.subject_email,resolution=old.resolution,resolutionEmail=old.resolution_email,resolutionNote=old.resolution_note,done=old.done_at;
     if(status==='done'&&old.status!=='done'){
-      if(!['keep','replace'].includes(data.resolution))fail('Chọn Giữ nguyên mail hoặc Đổi sang mail mới.');const current=target(old);resolution=data.resolution;
+      if(!['keep','replace','move'].includes(data.resolution))fail('Chọn Giữ nguyên mail hoặc Đổi sang mail mới.');const current=target(old);resolution=data.resolution;
       if(resolution==='replace'){
         const replacement=email(data.replacement_email);if(!current||current.email!==(data.expected_email??old.subject_email))fail('Mail trong Family đã thay đổi hoặc bị xóa. Tải lại để kiểm tra; chưa đổi mail.',409);if(replacement===current.email)fail('Mail mới cần khác mail hiện tại.');
         const f=one('SELECT f.*,a.email AS manager_email FROM families f JOIN accounts a ON a.id=f.manager_id WHERE f.id=?',old.family_id);
@@ -65,13 +65,18 @@ export function initIssues(db,{fail,text,email,log,familyStatus=()=>{}}) {
         let reused=false;if(old.target_type==='manager'){if(one('SELECT id FROM members WHERE family_id=? AND email=?',f.id,replacement))fail('Mail mới trùng khách trong Family.',409);const prepared=reusePreparedOwner(f,replacement,now);if(prepared){reused=true;newTrial=prepared.trial;}else{newTrial=today(new Date(now));run('UPDATE accounts SET email=? WHERE id=?',replacement,current.id);run('UPDATE families SET trial_date=? WHERE id=?',newTrial,f.id);run('DELETE FROM vault_items WHERE family_id=?',f.id);}}
         else{if(replacement===f.manager_email||one('SELECT id FROM members WHERE family_id=? AND email=? AND id!=?',f.id,replacement,current.id))fail('Mail mới đã có trong Family.',409);run('UPDATE members SET email=?,renewal_revision=renewal_revision+1 WHERE id=?',replacement,current.id);}
         resolutionNote=`Đã đổi từ ${current.email} sang ${replacement}.${newTrial?' Ngày trial mới: '+newTrial.split('-').reverse().join('/')+'. '+(reused?'Đã nhận đầy đủ thông tin Kho của mail mới; mail cũ được giữ trong Family lưu trữ.':'Đã để trống thông tin Kho để nhập lại cho mail mới.'):''}`;subject=replacement;
+      }else if(resolution==='move'){
+        // Customers were moved to another Family; the broken one keeps its status.
+        if(old.target_type!=='manager')fail('Chuyển khách sang Family mới chỉ dùng cho lỗi mail quản lý.');
+        const next=one("SELECT * FROM families WHERE id=? AND archived_at=''",Number(data.move_family_id));if(!next||next.id===old.family_id)fail('Chọn Family mới đang hoạt động.');
+        subject=current?.email||old.subject_email;resolutionNote=`Đã chuyển khách sang ${next.name}.`;
       }else{subject=current?.email||old.subject_email;resolutionNote=`Giữ nguyên mail ${subject}.`;}
       resolutionEmail=subject;done=now;
     }else if(status!=='done'){resolution='';resolutionEmail='';resolutionNote='';done='';}
     if(status!==old.status)forgetOrder(old.id,old.created_at);
     run('UPDATE issues SET title=?,note=?,status=?,subject_email=?,resolution=?,resolution_email=?,resolution_note=?,done_at=?,updated_at=?,revision=revision+1 WHERE id=?',title,note,status,subject,resolution,resolutionEmail,resolutionNote,done,now,id);
     log(`Cá nhân: lỗi #${id} → ${status}${resolutionNote?' · '+resolutionNote:''}`);
-    if(old.target_type==='manager'&&(status==='done')!==(old.status==='done'))familyStatus(old.family_id,status==='done'?'resolved':'reported');
+    if(old.target_type==='manager'&&(status==='done')!==(old.status==='done')&&!(status==='done'&&resolution==='move'))familyStatus(old.family_id,status==='done'?'resolved':'reported');
     return {ok:true};
   }
   function remove(id,data){const old=one('SELECT * FROM issues WHERE id=?',id);if(!old)fail('Không tìm thấy case lỗi.',404);if(!Number.isInteger(data.revision)||data.revision!==old.revision||data.expected_created_at!==old.created_at)fail('Case đã thay đổi. Tải lại rồi thử lại.',409);if(old.status!=='done')fail('Chỉ xóa case ở cột Đã fix.');forgetOrder(old.id,old.created_at);run('DELETE FROM issues WHERE id=?',id);log(`Cá nhân: xóa case đã fix ${old.subject_email} #${id}`);return {ok:true};}

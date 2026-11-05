@@ -151,6 +151,29 @@ export function initLookup(db, { fail, email, text, calendarDate, log }) {
       return { ok: true, deleted: rows.length };
     });
   }
+  // Cho khách vào: every customer of the old Family, with all their details, moves into the new
+  // Family as "Đã mời, chưa vào" (they then get their own link on lookup). A record of the same
+  // Gmail already in the new Family is replaced by the old Family's record.
+  function handOver(fromId, data) {
+    const from = activeFamily(fromId); if (!from) fail('Không tìm thấy Family cũ đang hoạt động.', 404);
+    const to = activeFamily(data.to_family_id); if (!to || to.id === from.id) fail('Chọn Family mới đang hoạt động.');
+    if (to.manager_email !== email(data.expected_manager_email)) fail('Mail chủ Family mới đã thay đổi. Tải lại rồi chọn lại.', 409);
+    const members = all('SELECT * FROM members WHERE family_id=? ORDER BY id', from.id);
+    if (!members.length) fail(`${from.name} không còn khách để chuyển.`, 409);
+    const owner = members.find(m => m.email === to.manager_email); if (owner) fail(`Email ${owner.email} trùng mail chủ ${to.name}.`, 409);
+    return atomic('lookup_hand_over', () => {
+      const time = now(); let replaced = 0;
+      for (const member of members) {
+        const duplicate = one('SELECT id FROM members WHERE family_id=? AND email=?', to.id, member.email);
+        if (duplicate) { run('UPDATE member_moves SET member_id=NULL WHERE member_id=?', duplicate.id); run("DELETE FROM issues WHERE family_id=? AND target_type='member' AND target_id=?", to.id, duplicate.id); run('DELETE FROM members WHERE id=?', duplicate.id); replaced++; }
+        run("UPDATE member_moves SET state='cancelled',updated_at=?,revision=revision+1 WHERE member_id=? AND state IN ('assigned','opened','failed')", time, member.id);
+        run("UPDATE members SET family_id=?,membership_status='invited',renewal_revision=renewal_revision+1 WHERE id=?", to.id, member.id);
+        run("DELETE FROM issues WHERE family_id=? AND target_type='member' AND target_id=?", from.id, member.id);
+      }
+      log(`Cá nhân: cho ${members.length} khách của ${from.name} (${from.manager_email}) vào ${to.name} (${to.manager_email})${replaced ? `, ghi đè ${replaced} hồ sơ trùng Gmail` : ''}: ${members.map(m => m.email).join(', ')}`);
+      return { ok: true, moved: members.length, replaced, family_id: to.id, family_name: to.name };
+    });
+  }
   function markInviteSent(id, data) {
     const invite = one('SELECT * FROM family_invites WHERE id=?', id); if (!invite) fail('Không tìm thấy link mời.', 404);
     const family = activeFamily(invite.family_id); if (!family) fail('Không tìm thấy Family đang hoạt động.', 404);
@@ -277,7 +300,7 @@ export function initLookup(db, { fail, email, text, calendarDate, log }) {
       } else if (data.action === 'release') {
         if (!open) fail('Chỉ thu hồi được link chưa dùng.', 409);
         run("UPDATE member_moves SET state='cancelled',updated_at=?,revision=revision+1 WHERE id=?", stamp, id);
-        if (move.invite_id) run('UPDATE family_invites SET revision=revision+1,updated_at=? WHERE id=?', stamp, move.invite_id);
+        if (move.invite_id) run("UPDATE family_invites SET sent_at='',revision=revision+1,updated_at=? WHERE id=?", stamp, move.invite_id);
         log(`Cá nhân: thu hồi link ${move.invite_label || ''} của ${move.email}, trả về kho ${move.to_family_name}`);
       } else if (data.action === 'reassign') {
         if (!open || !live) fail('Chỉ đổi link cho khách đang chờ vào Family mới.', 409);
@@ -416,5 +439,5 @@ export function initLookup(db, { fail, email, text, calendarDate, log }) {
     return result(address);
   }
 
-  return { adminState, settings, saveSettings, rotateCode, generateInviteMails, deleteInviteMails, markInviteSent, issueStatus, saveStatus, saveInvite, deleteInvite, bulkMove, updateMove, result, verify, sessionEmail, logout, customerOpen, customerJoined, customerReport };
+  return { adminState, settings, saveSettings, rotateCode, generateInviteMails, deleteInviteMails, markInviteSent, handOver, issueStatus, saveStatus, saveInvite, deleteInvite, bulkMove, updateMove, result, verify, sessionEmail, logout, customerOpen, customerJoined, customerReport };
 }

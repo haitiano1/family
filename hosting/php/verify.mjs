@@ -757,5 +757,11 @@ test('PHP lookup page: Family status, invite pool, bulk move, Gmail + code sign-
  state=await a('state');const newcomer=await lookup('verify','POST',{email:'moi@example.com',code:state.lookup_codes['moi@example.com']});const handed=newcomer.body.items[0].move;
  assert.equal(newcomer.body.items[0].view,'move');assert.equal(handed.kind,'join');assert.match(handed.invite_url,/php-[23]$/);
  state=await a('state');const held=state.invites.find(i=>i.url===handed.invite_url);assert.equal(held.holder_state,'assigned');assert.ok(held.sent_at);
+ // Đã fix · Cho khách vào: every customer of Family 09 moves to Family 10, overwriting the same Gmail.
+ const ten=await a('families','POST',{name:'Family 10',manager_email:'owner10@example.com'},201);await a('members','POST',{family_id:ten.id,email:'moi@example.com',customer_name:'Bản trùng',expires_at:'2026-01-01'},201);
+ await a('families/'+next.id+'/hand-over','POST',{to_family_id:ten.id,expected_manager_email:'changed@example.com'},409);
+ const over=await a('families/'+next.id+'/hand-over','POST',{to_family_id:ten.id,expected_manager_email:'owner10@example.com'});assert.equal(over.moved,2);assert.equal(over.replaced,1);
+ state=await a('state');const landed=state.members.filter(m=>m.family_id===ten.id);assert.equal(landed.length,2);assert.ok(landed.every(m=>m.membership_status==='invited'));assert.equal(landed.find(m=>m.email==='moi@example.com').customer_name,'Khách mới');assert.equal(state.members.some(m=>m.family_id===next.id),false);
+ assert.ok((await a('journal')).entries.some(e=>e.action==='Cho khách vào Family mới'));
  await lookup('logout','POST',{},200,signed.cookie);assert.deepEqual((await lookup('me','GET',undefined,200,signed.cookie)).body,{signed_in:false});
 });

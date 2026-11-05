@@ -1,3 +1,7 @@
+# 0.25.0 — Đã gửi tự động, nút Cho khách vào
+
+Dùng **Cập nhật một chạm**. Không còn ô tick Đã gửi: web tự gắn tag khi đưa link cho khách. Hộp Đã fix có thêm nút Cho khách vào (chuyển toàn bộ khách Family cũ sang Family mới). Không đổi schema hay Apps Script. Xem TRA-CUU-CHUYEN-NHOM.md.
+
 # 0.24.1 — Xóa mail mời tạo nhầm
 
 Dùng **Cập nhật một chạm**. Khung mail chờ lấy link có nút × cạnh từng mail và nút Xóa tất cả. Không đổi schema hay Apps Script.

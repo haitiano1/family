@@ -95,6 +95,7 @@ async function handle(req, res) {
     }
     if(req.method==='PATCH'&&/^\/api\/families\/\d+\/status$/.test(url.pathname))return send(res,200,lookup.saveStatus(Number(url.pathname.split('/')[3]),await body(req)));
     if(req.method==='PATCH'&&/^\/api\/invites\/\d+\/sent$/.test(url.pathname))return send(res,200,lookup.markInviteSent(Number(url.pathname.split('/')[3]),await body(req)));
+    if(req.method==='POST'&&/^\/api\/families\/\d+\/hand-over$/.test(url.pathname))return send(res,200,lookup.handOver(Number(url.pathname.split('/')[3]),await body(req)));
     if(req.method==='DELETE'&&/^\/api\/families\/\d+\/invite-mails$/.test(url.pathname))return send(res,200,lookup.deleteInviteMails(Number(url.pathname.split('/')[3]),await body(req)));
     if(req.method==='POST'&&/^\/api\/families\/\d+\/invite-mails$/.test(url.pathname))return send(res,201,lookup.generateInviteMails(Number(url.pathname.split('/')[3]),await body(req)));
     if(req.method==='POST'&&/^\/api\/families\/\d+\/invites$/.test(url.pathname))return send(res,201,lookup.saveInvite(Number(url.pathname.split('/')[3]),null,await body(req)));
