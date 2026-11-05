@@ -7,9 +7,11 @@ export const familyStatuses = ['active', 'checking', 'scanned', 'disabled'];
 export const problemStatuses = ['checking', 'scanned', 'disabled'];
 export const openMoveStates = ['assigned', 'opened', 'failed'];
 export const reportReasons = ['twelve_months', 'invite_used', 'other_family', 'other'];
-export const lookupBackupTables = ['family_statuses', 'family_invites', 'member_moves', 'lookup_codes', 'lookup_settings', 'invite_mails'];
-// invite_mails joined backup version 10 in 0.23.0; earlier version-10 files simply have none.
-export const optionalBackupTables = ['invite_mails'];
+// What a customer can tell the shop from the lookup page while their group still looks fine.
+export const problemReasons = { lost_premium: 'Mất Premium hoặc hiện quảng cáo', left_family: 'Bị đưa ra khỏi nhóm gia đình', other: 'Lỗi khác' };
+export const lookupBackupTables = ['family_statuses', 'family_invites', 'member_moves', 'lookup_codes', 'lookup_settings', 'invite_mails', 'customer_reports'];
+// invite_mails (0.23.0) and customer_reports (0.28.0) joined backup version 10 later; earlier version-10 files simply have none.
+export const optionalBackupTables = ['invite_mails', 'customer_reports'];
 // Gen mail mời: random tag after "+" on the shop's Gmail, e.g. haihoangrr+k7p2qx@gmail.com.
 export const inviteMailAlphabet = 'abcdefghjkmnpqrstuvwxyz23456789';
 export const inviteMailMax = 5;
@@ -200,6 +202,7 @@ export function initLookup(db, { fail, email, text, calendarDate, log }) {
   // "Bị quét"; completing the case (or keeping the mail) puts it back to "Đang hoạt động".
   function issueStatus(familyId, event) {
     const family = activeFamily(familyId); if (!family) return;
+    if (event === 'reported') closeReports(family);
     const old = one('SELECT * FROM family_statuses WHERE family_id=?', family.id), current = old?.status || 'active';
     if (event === 'reported' ? current !== 'active' : current === 'active') return;
     const next = event === 'reported' ? 'scanned' : 'active', note = event === 'reported' ? autoScannedNote(family.name) : '';
@@ -241,7 +244,96 @@ export function initLookup(db, { fail, email, text, calendarDate, log }) {
     if (old) run('UPDATE family_statuses SET status=?,note=?,updated_at=?,revision=revision+1 WHERE family_id=?', data.status, note, now(), family.id);
     else run('INSERT INTO family_statuses(family_id,status,note,updated_at,revision) VALUES (?,?,?,?,1)', family.id, data.status, note, now());
     log(`Cá nhân: đặt trạng thái ${family.name} là ${label(data.status)}`);
+    if (problemStatuses.includes(data.status)) closeReports(family);
     return { ok: true };
+  }
+
+  // ---- Khách báo mất Premium ----
+  // A customer whose group still shows as working can tell the shop; the report shows on the
+  // customer page as received, in Fix lỗi for the shop, and on Telegram when it is set up.
+  // Once the shop marks the Family as having an incident, its open reports are closed.
+  const reportVisibleMs = 3 * 86400000;
+  function latestReport(memberId) {
+    const row = one('SELECT * FROM customer_reports WHERE member_id=? ORDER BY id DESC LIMIT 1', memberId);
+    if (!row || (row.handled_at && Date.now() - Date.parse(row.handled_at) > reportVisibleMs)) return null;
+    return { id: row.id, state: row.handled_at ? 'handled' : 'open', reason: row.reason, created_at: row.created_at, handled_at: row.handled_at, handled_note: row.handled_note };
+  }
+  function closeReports(family) {
+    const changed = Number(run("UPDATE customer_reports SET handled_at=?,handled_note='',revision=revision+1 WHERE family_id=? AND handled_at=''", now(), family.id).changes);
+    if (changed) log(`Tự động: ghi nhận ${changed} báo lỗi của khách ở ${family.name} khi Family có sự cố`);
+  }
+  function customerProblem(address, data, origin = '') {
+    const member = Number.isSafeInteger(data.member) ? one("SELECT m.*,f.name AS family_name FROM members m JOIN families f ON f.id=m.family_id WHERE m.id=? AND m.email=? AND f.archived_at=''", data.member, address) : null;
+    if (!member) fail('Không tìm thấy nhóm này của bạn. Tải lại trang.', 404);
+    if (!Object.hasOwn(problemReasons, data.reason)) fail('Chọn lỗi bạn đang gặp.');
+    if (problemStatuses.includes(statusRow(member.family_id).status)) fail('Shop đã biết nhóm đang gặp sự cố và đang xử lý. Tải lại trang để xem tiến trình.', 409);
+    if (one("SELECT id FROM customer_reports WHERE member_id=? AND handled_at=''", member.id)) fail('Shop đã nhận báo lỗi của bạn và đang kiểm tra.', 409);
+    const note = text(data.note, 500);
+    run('INSERT INTO customer_reports(member_id,email,family_id,family_name,reason,note,created_at) VALUES (?,?,?,?,?,?,?)', member.id, address, member.family_id, member.family_name, data.reason, note, now());
+    const open = one("SELECT COUNT(*) AS n FROM customer_reports WHERE family_id=? AND handled_at=''", member.family_id).n, family = activeFamily(member.family_id);
+    log(`Khách ${address} báo ${problemReasons[data.reason]} ở ${member.family_name}${note ? ' · ' + note : ''}`);
+    telegramNotify(['🔔 Khách báo mất Premium', `Gmail: ${address}`, `Family: ${member.family_name} (${family.manager_email})`, `Lỗi: ${problemReasons[data.reason]}`, note ? `Ghi chú: ${note}` : '', open > 1 ? `Family này đang có ${open} khách báo lỗi.` : '', origin ? `Mở Fix lỗi: ${origin}/#issues` : ''].filter(Boolean).join('\n'));
+    return result(address);
+  }
+  function handleReport(id, data) {
+    const row = one('SELECT * FROM customer_reports WHERE id=?', id); if (!row) fail('Không tìm thấy báo lỗi của khách.', 404);
+    if (revision(data.revision) !== row.revision) fail('Báo lỗi vừa được cập nhật. Tải lại rồi thử lại.', 409);
+    if (row.handled_at) fail('Báo lỗi này đã được xử lý.', 409);
+    const note = text(data.note, 500);
+    run('UPDATE customer_reports SET handled_at=?,handled_note=?,revision=revision+1 WHERE id=?', now(), note, row.id);
+    log(`Cá nhân: đã xử lý báo lỗi của ${row.email} ở ${row.family_name}${note ? ' · ' + note : ''}`);
+    return { ok: true };
+  }
+
+  // ---- Thông báo Telegram ----
+  // The bot token stays on the server: the admin page only sees whether it is set and where it sends.
+  const telegramApi = (process.env.FAMILY_TELEGRAM_API || 'https://api.telegram.org').replace(/\/$/, '');
+  const stored = name => one('SELECT value FROM lookup_settings WHERE name=?', name)?.value || '';
+  function storeSetting(name, value) {
+    if (one('SELECT id FROM lookup_settings WHERE name=?', name)) run('UPDATE lookup_settings SET value=? WHERE name=?', value, name);
+    else run('INSERT INTO lookup_settings(name,value) VALUES (?,?)', name, value);
+  }
+  async function telegramCall(token, method, params = {}) {
+    let response;
+    try { response = await fetch(`${telegramApi}/bot${token}/${method}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(params), signal: AbortSignal.timeout(8000) }); }
+    catch { fail('Không kết nối được Telegram. Kiểm tra mạng rồi thử lại.', 502); }
+    let value = {}; try { value = await response.json(); } catch {}
+    if (!value.ok) fail([401, 404].includes(response.status) ? 'Mã bot không đúng. Copy lại mã @BotFather gửi bạn.' : 'Telegram báo lỗi: ' + (value.description || response.status), 502);
+    return value.result;
+  }
+  function telegramState() {
+    const enabled = !!(stored('telegram_token') && stored('telegram_chat'));
+    return { enabled, bot: enabled ? stored('telegram_bot') : '', chat: enabled ? stored('telegram_chat_title') : '' };
+  }
+  function telegramNotify(message) {
+    const token = stored('telegram_token'), chat = stored('telegram_chat'); if (!token || !chat) return;
+    telegramCall(token, 'sendMessage', { chat_id: chat, text: message, disable_web_page_preview: true }).catch(() => console.error('Telegram notification failed.'));
+  }
+  // Connect: check the token, take the chat of the latest message sent to the bot (/start), send a test.
+  async function connectTelegram(data) {
+    const token = typeof data.token === 'string' && data.token.trim() ? data.token.trim() : stored('telegram_token');
+    if (!/^\d{5,15}:[A-Za-z0-9_-]{30,80}$/.test(token)) fail('Dán mã bot @BotFather gửi bạn, dạng 123456789:AAE…');
+    const bot = await telegramCall(token, 'getMe');
+    const updates = await telegramCall(token, 'getUpdates', { limit: 100 });
+    const chat = [...(Array.isArray(updates) ? updates : [])].reverse().map(u => u.message?.chat || u.my_chat_member?.chat).find(c => c && c.id);
+    if (!chat) fail(`Mở Telegram, tìm @${bot.username}, bấm Bắt đầu (Start), rồi bấm lại nút này.`, 409);
+    const title = chat.title || [chat.first_name, chat.last_name].filter(Boolean).join(' ') || chat.username || String(chat.id);
+    await telegramCall(token, 'sendMessage', { chat_id: chat.id, text: `✅ Đã bật thông báo cho ${settings().shop_name || 'trang tra cứu'}. Khi khách báo mất Premium, tin sẽ gửi về đây.` });
+    return atomic('telegram_connect', () => {
+      storeSetting('telegram_token', token); storeSetting('telegram_chat', String(chat.id)); storeSetting('telegram_bot', String(bot.username || '')); storeSetting('telegram_chat_title', text(title, 100));
+      log(`Cá nhân: bật thông báo Telegram qua @${bot.username} tới ${title}`);
+      return { ok: true, telegram: telegramState() };
+    });
+  }
+  async function testTelegram() {
+    const token = stored('telegram_token'), chat = stored('telegram_chat'); if (!token || !chat) fail('Chưa bật thông báo Telegram.', 409);
+    await telegramCall(token, 'sendMessage', { chat_id: chat, text: '🔔 Tin thử: thông báo khách báo lỗi đang hoạt động.' });
+    return { ok: true };
+  }
+  function disconnectTelegram() {
+    run("DELETE FROM lookup_settings WHERE name IN ('telegram_token','telegram_chat','telegram_bot','telegram_chat_title')");
+    log('Cá nhân: tắt thông báo Telegram');
+    return { ok: true, telegram: telegramState() };
   }
 
   function inviteUrl(value) {
@@ -369,7 +461,10 @@ export function initLookup(db, { fail, email, text, calendarDate, log }) {
       lookup_supported: true, lookup_settings: settings(),
       family_statuses: all('SELECT family_id,status,note,updated_at,revision FROM family_statuses'),
       invites, moves, lookup_codes: Object.fromEntries(all('SELECT DISTINCT email FROM members').map(r => [r.email, codeFor(r.email, key)])),
-      invite_mails: all('SELECT id,family_id,email,created_at FROM invite_mails ORDER BY id'), invite_base_email: inviteMailInbox
+      invite_mails: all('SELECT id,family_id,email,created_at FROM invite_mails ORDER BY id'), invite_base_email: inviteMailInbox,
+      // Open reports, and the ones handled in the last week for context.
+      customer_reports: all("SELECT * FROM customer_reports WHERE handled_at='' OR handled_at>? ORDER BY id DESC LIMIT 300", new Date(Date.now() - 7 * 86400000).toISOString()),
+      problem_reasons: problemReasons, telegram: telegramState()
     };
   }
 
@@ -409,9 +504,9 @@ export function initLookup(db, { fail, email, text, calendarDate, log }) {
         const source = latest.from_family_id && activeFamily(latest.from_family_id) ? statusRow(latest.from_family_id) : null;
         move = { id: latest.id, kind: latest.from_family_id == null && latest.from_family_name === '' ? 'join' : 'move', state: latest.state, from_family_name: latest.from_family_name, from_status: source ? source.status : latest.from_status, from_note: source ? source.note : latest.from_note, invite_url: invite ? invite.url : '', invite_expires_on: invite ? inviteExpiry(invite.sent_on) : '', report_reason: latest.report_reason, reported_at: latest.reported_at, opened_at: latest.opened_at, joined_at: latest.joined_at };
       }
-      const waiting = !allocated && !move && joinable(member) && status.status === 'active';
-      const view = move && openMoveStates.includes(move.state) ? 'move' : problemStatuses.includes(status.status) ? 'incident' : waiting ? 'waiting' : period.expiry_status === 'expired' ? 'expired' : 'normal';
-      return { family_name: member.family_name, plan_months: member.plan_months, expires_at: member.expires_at, ...period, membership_status: member.membership_status, status: status.status, status_note: status.note, status_updated_at: status.updated_at, view, move };
+      const waiting = !allocated && !move && joinable(member) && status.status === 'active', problem = latestReport(member.id);
+      const view = move && openMoveStates.includes(move.state) ? 'move' : problemStatuses.includes(status.status) ? 'incident' : problem?.state === 'open' ? 'reported' : waiting ? 'waiting' : period.expiry_status === 'expired' ? 'expired' : 'normal';
+      return { member_ref: member.id, problem, family_name: member.family_name, plan_months: member.plan_months, expires_at: member.expires_at, ...period, membership_status: member.membership_status, status: status.status, status_note: status.note, status_updated_at: status.updated_at, view, move };
     });
     return { email: address, today: current, shop: settings(), items };
   }
@@ -476,5 +571,5 @@ export function initLookup(db, { fail, email, text, calendarDate, log }) {
     return result(address);
   }
 
-  return { adminState, settings, saveSettings, rotateCode, generateInviteMails, deleteInviteMails, markInviteSent, handOver, issueStatus, ownerReplaced, saveStatus, saveInvite, deleteInvite, bulkMove, updateMove, result, verify, sessionEmail, logout, customerOpen, customerJoined, customerReport };
+  return { adminState, settings, saveSettings, rotateCode, generateInviteMails, deleteInviteMails, markInviteSent, handOver, issueStatus, ownerReplaced, saveStatus, customerProblem, handleReport, connectTelegram, testTelegram, disconnectTelegram, saveInvite, deleteInvite, bulkMove, updateMove, result, verify, sessionEmail, logout, customerOpen, customerJoined, customerReport };
 }

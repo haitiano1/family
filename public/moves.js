@@ -147,6 +147,35 @@ function moveTable(ctx, moves, showTarget = false) {
   }).join('')}</tbody></table></div>`;
 }
 
+// ---- Khách báo mất Premium (customer reports) ----
+const openReports = state => (state.customer_reports || []).filter(r => !r.handled_at);
+const reasonLabel = (state, reason) => (state.problem_reasons || {})[reason] || reason;
+export function customerReportsCount(state) { return openReports(state).length; }
+export function customerReportsNotice(ctx) {
+  const count = openReports(ctx.state).length; if (!count) return '';
+  const families = new Set(openReports(ctx.state).map(r => r.family_id)).size;
+  return `<a class="notice report-alert" href="#issues"><span class="report-alert-dot" aria-hidden="true"></span><span><strong>${count} khách báo mất Premium</strong><span class="subtext">${families > 1 ? `Ở ${families} Family. ` : ''}Mở Fix lỗi để xem và xử lý.</span></span></a>`;
+}
+export function customerReportsSection(ctx) {
+  const { state, escape, btn } = ctx, rows = openReports(state);
+  const tg = state.telegram || {};
+  const hint = tg.enabled ? '' : `<p class="subtext">Muốn biết ngay khi khách báo? ${btn('telegram-setup', 'Cài thông báo Telegram', 'secondary tiny')}</p>`;
+  if (!rows.length) return state.lookup_supported && !tg.enabled ? `<section class="card report-card report-card-empty"><div class="section-heading"><div><h2>Khách báo mất Premium</h2><p>Khách tra cứu Gmail thấy nhóm vẫn bình thường mà mất Premium thì bấm báo cho shop. Báo lỗi hiện ở đây.</p></div></div>${hint}</section>` : '';
+  const groups = [...new Map(rows.map(r => [r.family_id, []])).keys()].map(id => ({ id, rows: rows.filter(r => r.family_id === id) }));
+  return `<section class="card report-card"><div class="section-heading"><div><h2>Khách báo mất Premium <span class="section-count">${rows.length}</span></h2><p>Nhiều khách cùng một Family báo thì thường là mail chủ bị quét: bấm <strong>Báo lỗi mail chủ</strong>. Nếu chỉ một khách bị, xử lý xong bấm <strong>Đã xử lý</strong> và để lại lời nhắn cho khách.</p></div></div>${hint}`
+    + groups.map(group => {
+      const family = state.families.find(f => f.id === group.id);
+      const name = family ? family.name : group.rows[0].family_name;
+      return `<div class="report-group"><div class="report-group-head"><div><strong>${family ? `<a class="email-link" href="#family/${family.id}">${escape(name)}</a>` : escape(name)}</strong>${family ? `<span class="subtext">${escape(family.manager_email)}</span>` : ''}</div><div class="row-actions">${family ? btn('report-family', 'Báo lỗi mail chủ', 'primary tiny', `data-id="${family.id}"`) : ''}${group.rows.length > 1 ? btn('customer-reports-handle', 'Đã xử lý tất cả', 'secondary tiny', `data-ids="${group.rows.map(r => r.id).join(',')}"`) : ''}</div></div>`
+        + group.rows.map(r => `<div class="report-row"><div class="report-who">${ctx.customerInfo({ customer_name: (state.members.find(m => m.id === r.member_id) || {}).customer_name || '', email: r.email }, false)}</div><div class="report-what"><span class="badge amber">${escape(reasonLabel(state, r.reason))}</span>${r.note ? `<span class="subtext">“${escape(r.note)}”</span>` : ''}<span class="subtext">Báo lúc ${ctx.date(r.created_at)}</span></div><div class="row-actions">${btn('customer-reports-handle', 'Đã xử lý', 'secondary tiny', `data-ids="${r.id}"`)}</div></div>`).join('')
+        + '</div>';
+    }).join('') + '</section>';
+}
+function telegramCard(ctx) {
+  const { state, escape, btn } = ctx, tg = state.telegram || {};
+  return `<section class="card"><div class="section-heading"><div><h2>Thông báo Telegram</h2><p>${tg.enabled ? `Khi khách báo mất Premium, bot <strong>@${escape(tg.bot)}</strong> nhắn ngay cho <strong>${escape(tg.chat)}</strong>.` : 'Chưa bật. Bật để nhận tin trên điện thoại ngay khi khách báo mất Premium.'}</p></div><div class="row-actions">${tg.enabled ? btn('telegram-test', 'Gửi tin thử', 'secondary') + btn('telegram-setup', 'Đổi bot', 'secondary') + btn('telegram-off', 'Tắt', 'danger') : btn('telegram-setup', 'Cài thông báo Telegram', 'primary')}</div></div></section>`;
+}
+
 export function familyLookupSections(ctx, family) {
   if (!ctx.state.lookup_supported) return '';
   const { state, escape, btn } = ctx;
@@ -171,6 +200,7 @@ export function lookupPage(ctx) {
     + `<div class="dashboard-summary stats"><div class="card stat"><h2>Family có sự cố</h2><strong>${incidents.length}</strong></div><div class="card stat"><h2>Khách chờ vào nhóm</h2><strong>${waiting.length}</strong></div><div class="card stat"><h2>Khách báo không vào được</h2><strong>${failed.length}</strong></div></div>`
     + `<section class="card"><div class="section-heading"><div><h2>Family có sự cố</h2><p>Đặt trạng thái trong trang chi tiết Family.</p></div></div>${incidents.length ? `<div class="table-wrap"><table class="lookup-table"><thead><tr><th scope="col">FAMILY</th><th scope="col">TRẠNG THÁI</th><th scope="col">KHÁCH</th><th scope="col"></th></tr></thead><tbody>${incidents.map(f => { const s = familyStatus(state, f.id); return `<tr><td data-column="family"><a class="email-link" href="#family/${f.id}">${escape(f.name)}</a><span class="subtext">${escape(f.manager_email)}</span></td><td data-column="state"><span class="badge ${statusColors[s.status]}">${escape(familyStatusLabels[s.status])}</span><span class="subtext">${escape(s.note)}</span></td><td data-column="members">${familyOccupancy(state.members, f.id).label}</td><td data-column="actions"><a class="primary link-button tiny" href="#family/${f.id}">Mở Family</a></td></tr>`; }).join('')}</tbody></table></div>` : '<p class="muted">Tất cả Family đang hoạt động bình thường.</p>'}</section>`
     + `<section class="card"><div class="section-heading"><div><h2>Khách đang chuyển nhóm</h2><p>Thứ tự mới nhất trước. Ẩn các lượt đã xong để danh sách gọn.</p></div></div>${moveTable(ctx, moves, true)}</section>`
+    + telegramCard(ctx)
     + `<section class="card"><div class="section-heading"><div><h2>Thông tin hiển thị cho khách</h2><p>Tên shop và link liên hệ xuất hiện trên trang tra cứu.</p></div><div class="row-actions">${btn('lookup-settings', 'Sửa thông tin', 'secondary')}</div></div><div class="list-item"><strong>Tên shop</strong><p>${escape(settings.shop_name || 'Chưa đặt')}</p></div><div class="list-item"><strong>Link liên hệ</strong><p>${settings.contact_url ? `<a class="contact-link" href="${escape(settings.contact_url)}" target="_blank" rel="noopener noreferrer">${escape(settings.contact_label || settings.contact_url)}</a>` : 'Chưa đặt'}</p></div><div class="list-item"><strong>Ghi chú cho khách</strong><p>${escape(settings.help_text || 'Chưa có')}</p></div></section>`
     + `<section class="card"><h2>Cách dùng</h2><ol class="lookup-steps"><li>Gửi mỗi khách link tra cứu riêng (menu … của khách → <strong>Copy link tra cứu</strong>), ví dụ lúc bán hoặc gia hạn.</li><li>Khi mail chủ bị quét: <strong>Fix lỗi → Báo lỗi</strong>. Family tự thành Bị quét và khách thấy lời nhắn.</li><li>Có Gmail chủ mới: <strong>Đã fix → Đổi sang Gmail chủ mới</strong>, chọn số mail mời. Khách ở lại Family và chờ link của chủ mới.</li><li>Mời các mail vừa tạo từ Gmail chủ mới, rồi bấm <strong>Lấy link mời</strong>${state.gmail_import ? '' : ' (cần kết nối Google Sheet; hoặc <strong>+ Thêm link mời</strong> để dán tay)'}.</li><li>Khách mở link tra cứu, nhập Gmail để thấy link vào nhóm mới; theo dõi tiến độ tại đây.</li></ol></section>`;
 }
@@ -236,6 +266,30 @@ function openBulkMove(ctx, sourceId) {
 // Returns true when the action belongs to this module.
 export async function handleLookupAction(ctx, action, button) {
   const { state } = ctx, id = Number(button.dataset.id);
+  if (action === 'customer-reports-handle') {
+    const ids = String(button.dataset.ids || '').split(',').map(Number), rows = ids.map(i => (state.customer_reports || []).find(r => r.id === i && !r.handled_at));
+    if (!rows.length || rows.some(r => !r)) return ctx.toast('Báo lỗi đã thay đổi. Tải lại trang.'), true;
+    ctx.modal(rows.length > 1 ? `Đã xử lý ${rows.length} báo lỗi` : 'Đã xử lý báo lỗi', `<p>${rows.map(r => ctx.escape(r.email)).join(', ')}</p><div class="form-field"><label for="field-note">Lời nhắn cho khách (không bắt buộc)</label><textarea id="field-note" name="note" maxlength="500" rows="3" placeholder="Ví dụ: Shop đã mời lại bạn, kiểm tra Gmail rồi bấm chấp nhận."></textarea></div><p class="subtext">Khách thấy lời nhắn này trên trang tra cứu trong 3 ngày.</p>`, async data => {
+      for (const r of rows) await ctx.patch(`customer-reports/${r.id}`, { revision: r.revision, note: data.note || '' });
+      ctx.toast(rows.length > 1 ? `Đã xử lý ${rows.length} báo lỗi.` : 'Đã xử lý báo lỗi.');
+    }, 'Đã xử lý');
+    return true;
+  }
+  if (action === 'telegram-setup') {
+    const tg = state.telegram || {};
+    ctx.modal('Cài thông báo Telegram', `<ol class="lookup-steps telegram-steps"><li>Mở Telegram, tìm <strong>@BotFather</strong>, gửi <code>/newbot</code>. Đặt tên (ví dụ <em>Hải Premium thông báo</em>) và tên đăng nhập kết thúc bằng <em>bot</em>.</li><li>BotFather gửi một mã dạng <code>123456789:AAE…</code>. Copy và dán vào ô dưới.</li><li>Bấm vào link bot BotFather gửi (t.me/…), rồi bấm <strong>Bắt đầu / Start</strong>. Muốn nhận tin trong nhóm chat thì thêm bot vào nhóm và gửi một tin bất kỳ.</li><li>Bấm <strong>Kết nối</strong>. Web gửi một tin thử về Telegram của bạn.</li></ol>`
+      + ctx.input('token', 'Mã bot (token)', 'text', '', !tg.enabled, `maxlength="120" autocomplete="off" spellcheck="false" placeholder="${tg.enabled ? 'Để trống để giữ bot hiện tại' : '123456789:AAE…'}"`)
+      + '<p class="subtext">Mã bot chỉ lưu trên máy chủ của bạn, không hiện lại trên web.</p>', async data => {
+      const result = await ctx.post('telegram', { token: data.token || '' });
+      ctx.toast(`Đã kết nối @${result.telegram.bot}. Kiểm tra tin thử trên Telegram.`);
+    }, 'Kết nối');
+    return true;
+  }
+  if (action === 'telegram-test') { try { await ctx.post('telegram/test', {}); ctx.toast('Đã gửi tin thử. Kiểm tra Telegram.'); } catch (error) { ctx.toast(error.message); } return true; }
+  if (action === 'telegram-off') {
+    ctx.modal('Tắt thông báo Telegram?', '<p>Khách vẫn báo mất Premium được và báo lỗi vẫn hiện ở Fix lỗi, chỉ không gửi tin Telegram nữa.</p>', async () => { await ctx.api('telegram', { method: 'DELETE', body: '{}' }); ctx.toast('Đã tắt thông báo Telegram.'); }, 'Tắt');
+    return true;
+  }
   if (action === 'family-status') {
     const family = state.families.find(f => f.id === id); if (!family) return ctx.toast('Family đã thay đổi. Tải lại trang.'), true;
     const status = familyStatus(state, id);

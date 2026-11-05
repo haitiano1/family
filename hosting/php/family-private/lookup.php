@@ -7,7 +7,10 @@ const LOOKUP_FAMILY_STATUSES=['active','checking','scanned','disabled'];
 const LOOKUP_PROBLEM_STATUSES=['checking','scanned','disabled'];
 const LOOKUP_OPEN_STATES=['assigned','opened','failed'];
 const LOOKUP_REPORT_REASONS=['twelve_months','invite_used','other_family','other'];
-const LOOKUP_BACKUP_TABLES=['family_statuses','family_invites','member_moves','lookup_codes','lookup_settings','invite_mails'];
+// What a customer can tell the shop from the lookup page while their group still looks fine.
+const LOOKUP_PROBLEM_REASONS=['lost_premium'=>'Mất Premium hoặc hiện quảng cáo','left_family'=>'Bị đưa ra khỏi nhóm gia đình','other'=>'Lỗi khác'];
+const LOOKUP_REPORT_VISIBLE_MS=259200000;
+const LOOKUP_BACKUP_TABLES=['family_statuses','family_invites','member_moves','lookup_codes','lookup_settings','invite_mails','customer_reports'];
 // Gen mail mời: random tag after "+" on the shop's Gmail, e.g. haihoangrr+k7p2qx@gmail.com.
 const LOOKUP_INVITE_MAIL_ALPHABET='abcdefghjkmnpqrstuvwxyz23456789';
 const LOOKUP_INVITE_MAIL_MAX=5;
@@ -105,6 +108,7 @@ function lookupRotateCode(PDO $db,array $d): array {
 function lookupAutoScannedNote(string $name): string {return "$name bị Google quét nên một số thành viên có thể mất Premium. Shop đang xử lý và sẽ cập nhật tại đây; hạn dùng của bạn giữ nguyên.";}
 function lookupIssueStatus(PDO $db,int $familyId,string $event): void {
     $f=lookupActiveFamily($db,$familyId);if(!$f)return;
+    if($event==='reported')lookupCloseReports($db,$f);
     $old=one($db,'SELECT * FROM family_statuses WHERE family_id=?',[$f['id']]);$current=$old['status']??'active';
     if($event==='reported'?$current!=='active':$current==='active')return;
     $next=$event==='reported'?'scanned':'active';$note=$event==='reported'?lookupAutoScannedNote($f['name']):'';
@@ -165,7 +169,104 @@ function lookupSaveStatus(PDO $db,int $familyId,array $d): array {
     if($old)q($db,'UPDATE family_statuses SET status=?,note=?,updated_at=?,revision=revision+1 WHERE family_id=?',[$status,$note,lookupNow(),$f['id']]);
     else q($db,'INSERT INTO family_statuses(family_id,status,note,updated_at,revision) VALUES (?,?,?,?,1)',[$f['id'],$status,$note,lookupNow()]);
     logEntry($db,"Cá nhân: đặt trạng thái {$f['name']} là ".LOOKUP_STATUS_LABELS[$status]);
+    if(in_array($status,LOOKUP_PROBLEM_STATUSES,true))lookupCloseReports($db,$f);
     return ['ok'=>true];
+}
+
+// ---- Khách báo mất Premium ----
+// A customer whose group still shows as working can tell the shop; the report shows on the
+// customer page as received, in Fix lỗi for the shop, and on Telegram when it is set up.
+// Once the shop marks the Family as having an incident, its open reports are closed.
+function lookupLatestReport(PDO $db,int $memberId): ?array {
+    $r=one($db,'SELECT * FROM customer_reports WHERE member_id=? ORDER BY id DESC LIMIT 1',[$memberId]);
+    if(!$r||($r['handled_at']!==''&&lookupMs()-(int)(strtotime($r['handled_at'])*1000)>LOOKUP_REPORT_VISIBLE_MS))return null;
+    return ['id'=>(int)$r['id'],'state'=>$r['handled_at']!==''?'handled':'open','reason'=>$r['reason'],'created_at'=>$r['created_at'],'handled_at'=>$r['handled_at'],'handled_note'=>$r['handled_note']];
+}
+function lookupCloseReports(PDO $db,array $f): void {
+    $changed=q($db,"UPDATE customer_reports SET handled_at=?,handled_note='',revision=revision+1 WHERE family_id=? AND handled_at=''",[lookupNow(),$f['id']])->rowCount();
+    if($changed)logEntry($db,"Tự động: ghi nhận $changed báo lỗi của khách ở {$f['name']} khi Family có sự cố");
+}
+function lookupOrigin(): string {
+    $host=(string)($_SERVER['HTTP_HOST']??'');if($host===''||!preg_match('/^[A-Za-z0-9.:-]+$/D',$host))return '';
+    return ((!empty($_SERVER['HTTPS'])&&$_SERVER['HTTPS']!=='off')||($_SERVER['HTTP_X_FORWARDED_PROTO']??'')==='https'?'https':'http').'://'.$host;
+}
+function lookupCustomerProblem(PDO $db,string $address,array $d): array {
+    $id=$d['member']??null;$m=is_int($id)?one($db,"SELECT m.*,f.name AS family_name FROM members m JOIN families f ON f.id=m.family_id WHERE m.id=? AND m.email=? AND f.archived_at=''",[$id,$address]):null;
+    if(!$m)fail('Không tìm thấy nhóm này của bạn. Tải lại trang.',404);
+    $reason=$d['reason']??null;if(!is_string($reason)||!isset(LOOKUP_PROBLEM_REASONS[$reason]))fail('Chọn lỗi bạn đang gặp.');
+    if(in_array(lookupStatusRow($db,(int)$m['family_id'])['status'],LOOKUP_PROBLEM_STATUSES,true))fail('Shop đã biết nhóm đang gặp sự cố và đang xử lý. Tải lại trang để xem tiến trình.',409);
+    if(one($db,"SELECT id FROM customer_reports WHERE member_id=? AND handled_at=''",[$m['id']]))fail('Shop đã nhận báo lỗi của bạn và đang kiểm tra.',409);
+    $note=text($d['note']??'',500);
+    q($db,'INSERT INTO customer_reports(member_id,email,family_id,family_name,reason,note,created_at) VALUES (?,?,?,?,?,?,?)',[$m['id'],$address,$m['family_id'],$m['family_name'],$reason,$note,lookupNow()]);
+    $open=(int)one($db,"SELECT COUNT(*) AS n FROM customer_reports WHERE family_id=? AND handled_at=''",[$m['family_id']])['n'];$f=lookupActiveFamily($db,(int)$m['family_id']);
+    logEntry($db,"Khách $address báo ".LOOKUP_PROBLEM_REASONS[$reason]." ở {$m['family_name']}".($note!==''?" · $note":''));
+    $origin=lookupOrigin();
+    lookupTelegramNotify($db,implode("\n",array_filter(['🔔 Khách báo mất Premium',"Gmail: $address","Family: {$m['family_name']} ({$f['manager_email']})",'Lỗi: '.LOOKUP_PROBLEM_REASONS[$reason],$note!==''?"Ghi chú: $note":'',$open>1?"Family này đang có $open khách báo lỗi.":'',$origin!==''?"Mở Fix lỗi: $origin/#issues":''])));
+    return lookupResult($db,$address);
+}
+function lookupHandleReport(PDO $db,int $id,array $d): array {
+    $r=one($db,'SELECT * FROM customer_reports WHERE id=?',[$id]);if(!$r)fail('Không tìm thấy báo lỗi của khách.',404);
+    if(lookupRevision($d['revision']??null)!==(int)$r['revision'])fail('Báo lỗi vừa được cập nhật. Tải lại rồi thử lại.',409);
+    if($r['handled_at']!=='')fail('Báo lỗi này đã được xử lý.',409);
+    $note=text($d['note']??'',500);
+    q($db,'UPDATE customer_reports SET handled_at=?,handled_note=?,revision=revision+1 WHERE id=?',[lookupNow(),$note,$r['id']]);
+    logEntry($db,"Cá nhân: đã xử lý báo lỗi của {$r['email']} ở {$r['family_name']}".($note!==''?" · $note":''));
+    return ['ok'=>true];
+}
+
+// ---- Thông báo Telegram ----
+// The bot token stays on the server: the admin page only sees whether it is set and where it sends.
+function lookupStored(PDO $db,string $name): string {return (string)(one($db,'SELECT value FROM lookup_settings WHERE name=?',[$name])['value']??'');}
+function lookupStore(PDO $db,string $name,string $value): void {
+    if(one($db,'SELECT id FROM lookup_settings WHERE name=?',[$name]))q($db,'UPDATE lookup_settings SET value=? WHERE name=?',[$value,$name]);else q($db,'INSERT INTO lookup_settings(name,value) VALUES (?,?)',[$name,$value]);
+}
+function lookupTelegramCall(string $token,string $method,array $params=[]): mixed {
+    $url="https://api.telegram.org/bot$token/$method";$body=json_encode((object)$params,JSON_UNESCAPED_UNICODE|JSON_THROW_ON_ERROR);
+    if(isset($GLOBALS['family_telegram_transport'])&&is_callable($GLOBALS['family_telegram_transport'])){[$status,$raw]=($GLOBALS['family_telegram_transport'])($method,$params,$token);}
+    else{
+        if(!function_exists('curl_init'))fail('Bật extension cURL của PHP để gửi Telegram.',503);
+        $ch=curl_init($url);curl_setopt_array($ch,[CURLOPT_POST=>true,CURLOPT_POSTFIELDS=>$body,CURLOPT_HTTPHEADER=>['Content-Type: application/json'],CURLOPT_RETURNTRANSFER=>true,CURLOPT_CONNECTTIMEOUT=>4,CURLOPT_TIMEOUT=>8]);
+        $raw=curl_exec($ch);$status=(int)curl_getinfo($ch,CURLINFO_RESPONSE_CODE);curl_close($ch);
+        if($raw===false)fail('Không kết nối được Telegram. Kiểm tra mạng rồi thử lại.',502);
+    }
+    $value=json_decode((string)$raw,true);
+    if(!is_array($value)||empty($value['ok']))fail(in_array($status,[401,404],true)?'Mã bot không đúng. Copy lại mã @BotFather gửi bạn.':'Telegram báo lỗi: '.(is_array($value)&&isset($value['description'])?(string)$value['description']:$status),502);
+    return $value['result']??null;
+}
+function lookupTelegramState(PDO $db): array {
+    $on=lookupStored($db,'telegram_token')!==''&&lookupStored($db,'telegram_chat')!=='';
+    return ['enabled'=>$on,'bot'=>$on?lookupStored($db,'telegram_bot'):'','chat'=>$on?lookupStored($db,'telegram_chat_title'):''];
+}
+// A failed notification never blocks the customer's report.
+function lookupTelegramNotify(PDO $db,string $message): void {
+    $token=lookupStored($db,'telegram_token');$chat=lookupStored($db,'telegram_chat');if($token===''||$chat==='')return;
+    try{lookupTelegramCall($token,'sendMessage',['chat_id'=>$chat,'text'=>$message,'disable_web_page_preview'=>true]);}catch(Throwable $e){error_log('Telegram notification failed.');}
+}
+// Connect: check the token, take the chat of the latest message sent to the bot (/start), send a test.
+function lookupConnectTelegram(PDO $db,array $d): array {
+    $token=is_string($d['token']??null)&&trim($d['token'])!==''?trim($d['token']):lookupStored($db,'telegram_token');
+    if(!preg_match('/^\d{5,15}:[A-Za-z0-9_-]{30,80}$/D',$token))fail('Dán mã bot @BotFather gửi bạn, dạng 123456789:AAE…');
+    $bot=lookupTelegramCall($token,'getMe');$updates=lookupTelegramCall($token,'getUpdates',['limit'=>100]);$chat=null;
+    foreach(array_reverse(is_array($updates)?$updates:[]) as $u){$c=$u['message']['chat']??$u['my_chat_member']['chat']??null;if(is_array($c)&&isset($c['id'])){$chat=$c;break;}}
+    if(!$chat)fail('Mở Telegram, tìm @'.($bot['username']??'bot').', bấm Bắt đầu (Start), rồi bấm lại nút này.',409);
+    $title=(string)($chat['title']??trim(($chat['first_name']??'').' '.($chat['last_name']??'')));if($title==='')$title=(string)($chat['username']??$chat['id']);
+    $shop=lookupSettings($db)['shop_name']?:'trang tra cứu';
+    lookupTelegramCall($token,'sendMessage',['chat_id'=>$chat['id'],'text'=>"✅ Đã bật thông báo cho $shop. Khi khách báo mất Premium, tin sẽ gửi về đây."]);
+    return transaction($db,function()use($db,$token,$chat,$bot,$title){
+        lookupStore($db,'telegram_token',$token);lookupStore($db,'telegram_chat',(string)$chat['id']);lookupStore($db,'telegram_bot',(string)($bot['username']??''));lookupStore($db,'telegram_chat_title',text($title,100));
+        logEntry($db,'Cá nhân: bật thông báo Telegram qua @'.($bot['username']??'')." tới $title");
+        return ['ok'=>true,'telegram'=>lookupTelegramState($db)];
+    });
+}
+function lookupTestTelegram(PDO $db): array {
+    $token=lookupStored($db,'telegram_token');$chat=lookupStored($db,'telegram_chat');if($token===''||$chat==='')fail('Chưa bật thông báo Telegram.',409);
+    lookupTelegramCall($token,'sendMessage',['chat_id'=>$chat,'text'=>'🔔 Tin thử: thông báo khách báo lỗi đang hoạt động.']);
+    return ['ok'=>true];
+}
+function lookupDisconnectTelegram(PDO $db): array {
+    q($db,"DELETE FROM lookup_settings WHERE name IN ('telegram_token','telegram_chat','telegram_bot','telegram_chat_title')");
+    logEntry($db,'Cá nhân: tắt thông báo Telegram');
+    return ['ok'=>true,'telegram'=>lookupTelegramState($db)];
 }
 
 function lookupInviteUrl(mixed $value): string {
@@ -380,7 +481,10 @@ function lookupAdminState(PDO $db): array {
     $codes=[];foreach(all($db,'SELECT DISTINCT email FROM members') as $r)$codes[$r['email']]=lookupCodeFor($db,$r['email'],$salt);
     // Gmail import needs the Google Sheet connection (same Apps Script). Plain query: no DDL inside the state audit.
     $gmail=false;$mailbox='';try{$gmail=(bool)one($db,"SELECT name FROM family_sheet_state WHERE name='config'");$row=one($db,"SELECT value FROM family_sheet_state WHERE name='gmail_mailbox'");$mailbox=$row?(string)json_decode($row['value'],true):'';}catch(Throwable $e){}
-    return ['lookup_supported'=>true,'gmail_import'=>$gmail,'gmail_mailbox'=>$mailbox,'invite_base_email'=>LOOKUP_INVITE_MAIL_INBOX,'invite_mails'=>array_map(fn($r)=>[...$r,'id'=>(int)$r['id'],'family_id'=>(int)$r['family_id']],all($db,'SELECT id,family_id,email,created_at FROM invite_mails ORDER BY id')),'lookup_settings'=>lookupSettings($db),'family_statuses'=>all($db,'SELECT family_id,status,note,updated_at,revision FROM family_statuses'),'invites'=>$invites,'moves'=>$moves,'lookup_codes'=>(object)$codes];
+    return ['lookup_supported'=>true,'gmail_import'=>$gmail,'gmail_mailbox'=>$mailbox,'invite_base_email'=>LOOKUP_INVITE_MAIL_INBOX,'invite_mails'=>array_map(fn($r)=>[...$r,'id'=>(int)$r['id'],'family_id'=>(int)$r['family_id']],all($db,'SELECT id,family_id,email,created_at FROM invite_mails ORDER BY id')),'lookup_settings'=>lookupSettings($db),'family_statuses'=>all($db,'SELECT family_id,status,note,updated_at,revision FROM family_statuses'),'invites'=>$invites,'moves'=>$moves,'lookup_codes'=>(object)$codes,
+        // Open reports, and the ones handled in the last week for context.
+        'customer_reports'=>array_map(fn($r)=>[...$r,'id'=>(int)$r['id'],'member_id'=>$r['member_id']===null?null:(int)$r['member_id'],'family_id'=>$r['family_id']===null?null:(int)$r['family_id'],'revision'=>(int)$r['revision']],all($db,"SELECT * FROM customer_reports WHERE handled_at='' OR handled_at>? ORDER BY id DESC LIMIT 300",[gmdate('Y-m-d\TH:i:s.000\Z',time()-604800)])),
+        'problem_reasons'=>LOOKUP_PROBLEM_REASONS,'telegram'=>lookupTelegramState($db)];
 }
 
 // ---- Public lookup (customer) ----
@@ -415,9 +519,9 @@ function lookupResult(PDO $db,string $address): array {
             $source=$latest['from_family_id']!==null&&lookupActiveFamily($db,(int)$latest['from_family_id'])?lookupStatusRow($db,(int)$latest['from_family_id']):null;
             $move=['id'=>(int)$latest['id'],'kind'=>$latest['from_family_id']===null&&$latest['from_family_name']===''?'join':'move','state'=>$latest['state'],'from_family_name'=>$latest['from_family_name'],'from_status'=>$source?$source['status']:$latest['from_status'],'from_note'=>$source?$source['note']:$latest['from_note'],'invite_url'=>$invite?$invite['url']:'','invite_expires_on'=>$invite?lookupInviteExpiry($invite['sent_on']):'','report_reason'=>$latest['report_reason'],'reported_at'=>$latest['reported_at'],'opened_at'=>$latest['opened_at'],'joined_at'=>$latest['joined_at']];
         }
-        $waiting=!$allocated&&!$move&&lookupJoinable($m)&&$status['status']==='active';
-        $view=$move&&in_array($move['state'],LOOKUP_OPEN_STATES,true)?'move':(in_array($status['status'],LOOKUP_PROBLEM_STATUSES,true)?'incident':($waiting?'waiting':($period['expiry_status']==='expired'?'expired':'normal')));
-        $items[]=['family_name'=>$m['family_name'],'plan_months'=>(int)$m['plan_months'],'expires_at'=>$m['expires_at'],...$period,'membership_status'=>$m['membership_status'],'status'=>$status['status'],'status_note'=>$status['note'],'status_updated_at'=>$status['updated_at'],'view'=>$view,'move'=>$move];
+        $waiting=!$allocated&&!$move&&lookupJoinable($m)&&$status['status']==='active';$problem=lookupLatestReport($db,(int)$m['id']);
+        $view=$move&&in_array($move['state'],LOOKUP_OPEN_STATES,true)?'move':(in_array($status['status'],LOOKUP_PROBLEM_STATUSES,true)?'incident':(($problem['state']??'')==='open'?'reported':($waiting?'waiting':($period['expiry_status']==='expired'?'expired':'normal'))));
+        $items[]=['member_ref'=>(int)$m['id'],'problem'=>$problem,'family_name'=>$m['family_name'],'plan_months'=>(int)$m['plan_months'],'expires_at'=>$m['expires_at'],...$period,'membership_status'=>$m['membership_status'],'status'=>$status['status'],'status_note'=>$status['note'],'status_updated_at'=>$status['updated_at'],'view'=>$view,'move'=>$move];
     }
     return ['email'=>$address,'today'=>today(),'shop'=>lookupSettings($db),'items'=>$items];
 }
@@ -484,7 +588,7 @@ function lookupRequest(PDO $db,array $c,string $route,string $method): never {
     $address=lookupSessionEmail($db,$token);
     if($route==='/api/lookup/me'&&$method==='GET')reply($address?lookupResult($db,$address):['signed_in'=>false]);
     if(!$address)fail('Phiên tra cứu đã hết. Nhập lại Gmail và mã tra cứu.',401);
-    $actions=['/api/lookup/open'=>['Khách mở link mời','lookupCustomerOpen'],'/api/lookup/joined'=>['Khách xác nhận vào nhóm','lookupCustomerJoined'],'/api/lookup/report'=>['Khách báo lỗi vào nhóm','lookupCustomerReport']];
+    $actions=['/api/lookup/open'=>['Khách mở link mời','lookupCustomerOpen'],'/api/lookup/joined'=>['Khách xác nhận vào nhóm','lookupCustomerJoined'],'/api/lookup/report'=>['Khách báo lỗi vào nhóm','lookupCustomerReport'],'/api/lookup/problem'=>['Khách báo mất Premium','lookupCustomerProblem']];
     if(isset($actions[$route])&&$method==='POST'){$d=body();beginAudit($db,$actions[$route][0],'Khách tra cứu');reply($actions[$route][1]($db,$address,$d));}
     fail('Không tìm thấy.',404);
 }
@@ -502,6 +606,10 @@ function lookupAdminRequest(PDO $db,string $route,string $method): void {
     if(preg_match('~^/api/moves/(\d+)$~D',$route,$p)&&$method==='PATCH')reply(lookupUpdateMove($db,(int)$p[1],body()));
     if($route==='/api/lookup-settings'&&$method==='PATCH')reply(lookupSaveSettings($db,body()));
     if($route==='/api/lookup-codes'&&$method==='POST')reply(lookupRotateCode($db,body()));
+    if(preg_match('~^/api/customer-reports/(\d+)$~D',$route,$p)&&$method==='PATCH')reply(lookupHandleReport($db,(int)$p[1],body()));
+    if($route==='/api/telegram'&&$method==='POST')reply(lookupConnectTelegram($db,body()));
+    if($route==='/api/telegram/test'&&$method==='POST')reply(lookupTestTelegram($db));
+    if($route==='/api/telegram'&&$method==='DELETE')reply(lookupDisconnectTelegram($db));
 }
 function lookupAuditAction(string $method,string $route): string {
     if(preg_match('~^/api/families/\d+/status$~D',$route))return 'Sửa trạng thái Family';
@@ -514,5 +622,7 @@ function lookupAuditAction(string $method,string $route): string {
     if(preg_match('~^/api/moves/\d+$~D',$route))return 'Sửa chuyển nhóm';
     if($route==='/api/lookup-settings')return 'Sửa trang tra cứu';
     if($route==='/api/lookup-codes')return 'Sửa mã tra cứu';
+    if(preg_match('~^/api/customer-reports/\d+$~D',$route))return 'Xử lý khách báo lỗi';
+    if(str_starts_with($route,'/api/telegram'))return 'Sửa thông báo Telegram';
     return '';
 }

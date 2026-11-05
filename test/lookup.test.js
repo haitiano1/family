@@ -536,3 +536,83 @@ test('Đã fix · Đổi sang mail mới keeps customers in the Family: statuses
     await a(`invites/${spare.id}/sent`, 'PATCH', { sent: true, revision: state.invites.find(i => i.id === spare.id).revision }, 409);
   } finally { await f.close(); }
 });
+
+test('a customer tells the shop Premium stopped: report on the page, in Fix lỗi, on Telegram; closed when the Family is reported', async () => {
+  const { createServer } = await import('node:http');
+  const calls = []; let updates = [];
+  const stub = createServer(async (req, res) => {
+    let raw = ''; for await (const chunk of req) raw += chunk;
+    const [, token, method] = req.url.match(/^\/bot([^/]+)\/(\w+)$/) || [];
+    const params = raw ? JSON.parse(raw) : {}; calls.push({ token, method, params });
+    const reply = (status, value) => { res.writeHead(status, { 'Content-Type': 'application/json' }); res.end(JSON.stringify(value)); };
+    if (token !== '123456789:AAEgoodtokengoodtokengoodtoken12') return reply(401, { ok: false, description: 'Unauthorized' });
+    if (method === 'getMe') return reply(200, { ok: true, result: { username: 'haishop_bot' } });
+    if (method === 'getUpdates') return reply(200, { ok: true, result: updates });
+    return reply(200, { ok: true, result: {} });
+  });
+  stub.listen(0, '127.0.0.1'); await once(stub, 'listening');
+  const f = await server({ FAMILY_TELEGRAM_API: `http://127.0.0.1:${stub.address().port}` }); try {
+    const a = f.admin, sent = () => calls.filter(c => c.method === 'sendMessage');
+    const settle = () => new Promise(resolve => setTimeout(resolve, 150));
+    // Telegram setup: wrong token, no /start yet, then connected with a test message.
+    await a('telegram', 'POST', { token: 'not a token' }, 400);
+    await a('telegram', 'POST', { token: '123456789:AAEwrongtokenwrongtokenwrongtok' }, 502);
+    await a('telegram', 'POST', { token: '123456789:AAEgoodtokengoodtokengoodtoken12' }, 409);
+    updates = [{ update_id: 1, message: { chat: { id: 777, type: 'private', first_name: 'Hải' }, text: '/start' } }];
+    assert.deepEqual((await a('telegram', 'POST', { token: '123456789:AAEgoodtokengoodtokengoodtoken12' })).telegram, { enabled: true, bot: 'haishop_bot', chat: 'Hải' });
+    assert.equal(sent().length, 1); assert.equal(sent()[0].params.chat_id, 777);
+    let state = await a('state');
+    assert.deepEqual(state.telegram, { enabled: true, bot: 'haishop_bot', chat: 'Hải' });
+    assert.equal(JSON.stringify(state).includes('AAEgoodtoken'), false, 'the token never reaches the admin page');
+    assert.equal(JSON.stringify(await f.customer()('info')).includes('AAEgoodtoken'), false);
+    await a('telegram/test', 'POST', {}); assert.equal(sent().length, 2);
+    // A customer of a working Family reports.
+    const fam = await a('families', 'POST', { name: 'Family 40', manager_email: 'owner40@example.com' }, 201);
+    await a('members', 'POST', { family_id: fam.id, email: 'lan@example.com', expires_at: day(30), membership_status: 'active' }, 201);
+    await a('members', 'POST', { family_id: fam.id, email: 'minh@example.com', expires_at: day(-2), membership_status: 'active' }, 201);
+    const codes = (await a('state')).lookup_codes, lan = f.customer(), minh = f.customer();
+    let item = (await lan('verify', 'POST', { email: 'lan@example.com', code: codes['lan@example.com'] })).items[0];
+    assert.deepEqual([item.view, item.problem, typeof item.member_ref], ['normal', null, 'number']);
+    await lan('problem', 'POST', { member: item.member_ref + 999, reason: 'lost_premium' }, 404);
+    await lan('problem', 'POST', { member: item.member_ref, reason: 'nope' }, 400);
+    item = (await lan('problem', 'POST', { member: item.member_ref, reason: 'lost_premium', note: 'Mất từ sáng' })).items[0];
+    assert.deepEqual([item.view, item.problem.state, item.problem.reason], ['reported', 'open', 'lost_premium']);
+    await lan('problem', 'POST', { member: item.member_ref, reason: 'other' }, 409);
+    await settle();
+    assert.match(sent().at(-1).params.text, /Khách báo mất Premium\nGmail: lan@example.com\nFamily: Family 40 \(owner40@example.com\)\nLỗi: Mất Premium hoặc hiện quảng cáo\nGhi chú: Mất từ sáng/);
+    const minhItem = (await minh('verify', 'POST', { email: 'minh@example.com', code: codes['minh@example.com'] })).items[0];
+    assert.equal(minhItem.view, 'expired');
+    assert.equal((await minh('problem', 'POST', { member: minhItem.member_ref, reason: 'left_family' })).items[0].view, 'reported', 'past expiry can report too');
+    await settle();
+    assert.match(sent().at(-1).params.text, /Family này đang có 2 khách báo lỗi\./);
+    state = await a('state');
+    assert.deepEqual(state.customer_reports.map(r => [r.email, r.reason, r.handled_at]), [['minh@example.com', 'left_family', ''], ['lan@example.com', 'lost_premium', '']]);
+    assert.ok((await a('journal')).entries.some(e => e.action === 'Khách báo mất Premium' && e.actor === 'Khách tra cứu'));
+    // The shop reports the owner mail: reports close and the customers see the incident.
+    await a('issues', 'POST', { family_id: fam.id, target_type: 'manager' }, 201);
+    state = await a('state');
+    assert.ok(state.customer_reports.every(r => r.handled_at), 'reports closed by the incident');
+    item = (await lan('me')).items[0];
+    assert.deepEqual([item.view, item.problem.state], ['incident', 'handled']);
+    await lan('problem', 'POST', { member: item.member_ref, reason: 'other' }, 409);
+    // The shop marks a single report as handled with a message to the customer.
+    const calm = await a('families', 'POST', { name: 'Family 41', manager_email: 'owner41@example.com' }, 201);
+    await a('members', 'POST', { family_id: calm.id, email: 'hoa@example.com', expires_at: day(30), membership_status: 'active' }, 201);
+    const hoa = f.customer(), hoaItem = (await hoa('verify', 'POST', { email: 'hoa@example.com', code: (await a('state')).lookup_codes['hoa@example.com'] })).items[0];
+    await hoa('problem', 'POST', { member: hoaItem.member_ref, reason: 'left_family' });
+    const report = (await a('state')).customer_reports.find(r => r.email === 'hoa@example.com');
+    await a(`customer-reports/${report.id}`, 'PATCH', { revision: report.revision + 1 }, 409);
+    await a(`customer-reports/${report.id}`, 'PATCH', { revision: report.revision, note: 'Shop đã mời lại bạn, kiểm tra Gmail.' });
+    await a(`customer-reports/${report.id}`, 'PATCH', { revision: report.revision + 1 }, 409);
+    item = (await hoa('me')).items[0];
+    assert.deepEqual([item.view, item.problem.state, item.problem.handled_note], ['normal', 'handled', 'Shop đã mời lại bạn, kiểm tra Gmail.']);
+    assert.ok((await a('journal')).entries.some(e => e.action === 'Xử lý khách báo lỗi'));
+    // Turning Telegram off stops the messages.
+    assert.deepEqual((await a('telegram', 'DELETE')).telegram, { enabled: false, bot: '', chat: '' });
+    const before = sent().length;
+    await hoa('problem', 'POST', { member: hoaItem.member_ref, reason: 'other' });
+    await settle(); assert.equal(sent().length, before);
+    await a('telegram/test', 'POST', {}, 409);
+    const backup = await a('backup'); assert.equal(backup.tables.customer_reports.length, 4);
+  } finally { await f.close(); stub.close(); }
+});

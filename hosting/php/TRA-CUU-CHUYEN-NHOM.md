@@ -20,6 +20,34 @@ Mỗi Gmail khách có một **mã tra cứu 6 ký tự** cố định. Từ 0.2
 
 Vào **Thêm → Tra cứu khách → Sửa thông tin** để đặt tên shop, link liên hệ (Messenger, Zalo…) và ghi chú hiển thị cho khách.
 
+## Trang tra cứu có tiến trình (0.28.0)
+
+- Khách thấy một thẻ trạng thái với thanh tiến trình màu xanh và nhân vật chibi đội mũ chữ N chạy tới đúng bước đang xử lý. Các bước khi nhóm gặp sự cố: **Báo lỗi → Tiếp nhận → Nhóm mới → Vào nhóm → Hoàn tất**. Khách mới: **Đăng ký → Chuẩn bị → Vào nhóm → Hoàn tất**.
+- Bên dưới là **Chi tiết tiến trình**: bước đã xong có dấu tích và giờ, bước hiện tại ghi *Đang làm* hoặc *Đến lượt bạn*. Hướng dẫn và nút **Vào nhóm mới** nằm ngay trong bước Vào nhóm.
+- Khi shop đang xử lý, trang tự làm mới 30 giây một lần và khi khách quay lại trang, nên link hiện ra mà khách không cần tải lại.
+- Máy bật chế độ giảm chuyển động thì chibi và thanh tiến trình đứng yên.
+
+## Khách báo mất Premium (0.28.0)
+
+Khi nhóm vẫn hiện bình thường mà khách mất Premium, khách bấm **Báo mất Premium cho shop**, chọn lỗi (mất Premium hoặc hiện quảng cáo, bị đưa ra khỏi nhóm, lỗi khác) và ghi chú nếu muốn.
+
+- Khách thấy tiến trình ở bước **Tiếp nhận**: "Shop đang kiểm tra nhóm của bạn". Mỗi khách chỉ có một báo lỗi đang mở.
+- Bạn thấy báo lỗi ở đầu trang **Fix lỗi** (nhóm theo Family) và một dòng đỏ ở **Tổng quan**.
+  - Nhiều khách cùng Family báo thì thường mail chủ bị quét: bấm **Báo lỗi mail chủ**. Family thành Bị quét, các báo lỗi của Family đó tự đóng và khách chuyển sang bước **Nhóm mới**.
+  - Chỉ một khách bị: xử lý xong bấm **Đã xử lý**, có thể để lại lời nhắn (ví dụ "Shop đã mời lại bạn, kiểm tra Gmail"). Khách thấy lời nhắn trong 3 ngày.
+- Nếu Family đã được đặt sự cố, khách không cần báo: trang hiện thẳng tiến trình shop đang xử lý.
+
+### Thông báo Telegram
+
+Vào **Thêm → Tra cứu khách → Thông báo Telegram → Cài thông báo Telegram**:
+
+1. Mở Telegram, tìm **@BotFather**, gửi `/newbot`, đặt tên và tên đăng nhập kết thúc bằng `bot`.
+2. Copy mã bot BotFather gửi (dạng `123456789:AAE…`) và dán vào ô **Mã bot**.
+3. Mở bot vừa tạo, bấm **Bắt đầu / Start**. Muốn nhận trong nhóm chat thì thêm bot vào nhóm và gửi một tin bất kỳ.
+4. Bấm **Kết nối**. Web gửi một tin thử về Telegram.
+
+Mỗi lần khách báo mất Premium, bot gửi Gmail khách, Family, mail chủ, loại lỗi, ghi chú, số khách cùng Family đang báo và link mở Fix lỗi. Mã bot chỉ lưu trên máy chủ của bạn. Có nút **Gửi tin thử**, **Đổi bot** và **Tắt**. Telegram lỗi thì báo lỗi của khách vẫn được lưu.
+
 ## Khách mới tự nhận link (0.24.0)
 
 - Khách có trạng thái thành viên **Đã mời, chưa vào** hoặc **Mua mới** trong một Family đang hoạt động (từ 0.26.0 kể cả khách đã quá hạn), tra cứu Gmail trên `/tra-cuu.html` sẽ tự nhận **một** link *Sẵn sàng* trong **Link mời vào Family này** của chính Family đó.
