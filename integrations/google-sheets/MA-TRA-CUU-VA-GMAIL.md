@@ -1,15 +1,17 @@
-# 0.22.0 — Mã tra cứu, Gen mail mời và lấy link mời từ Gmail
+# 0.22.0–0.23.0 — Mã tra cứu, Gen mail mời và lấy link mời từ Gmail
 
 ## Có gì mới
 
 - **Mã tra cứu hiện ngay dưới Gmail của khách** trong bảng khách và trang Family, có nút copy mã. Menu **…** của khách vẫn có **Copy link tra cứu** (tin nhắn đầy đủ) và **Đổi mã tra cứu**.
 - **Tab FamilySync_MaTraCuu trong Google Sheet** có 3 cột: Tên khách · Mail khách · Mã tra cứu. Cột ID nằm ẩn ở cột D. Tab đồng bộ hai chiều với web.
-- **Gen mail mời**: web tạo 1–5 Gmail có dấu + với đuôi ngẫu nhiên (ví dụ `haihoangrr+k7p2qx@gmail.com`), không bao giờ trùng, để bạn mời từ tài khoản chủ Family.
-- **Lấy link mời**: web tự lấy link nút **Accept invitation / Chấp nhận lời mời** trong thư mời gửi tới các Gmail đó, hiện link của từng mail và lưu vào kho link của Family.
-- **Tick Đã gửi** trên từng link: link đã gửi tay cho khách sẽ không bị giao cho khách khác.
-- Tiêu đề web đổi thành **Hải Premium**.
+- **Gen mail mời** (0.23.0): web tạo 1–5 Gmail có dấu + với đuôi ngẫu nhiên (ví dụ `haihoangrr+k7p2qx@gmail.com`), không bao giờ trùng, để bạn mời từ tài khoản chủ Family.
+- **Lấy link mời** (0.23.0; 0.22.0 có nút Lấy link từ Gmail): web tự lấy link nút **Accept invitation / Chấp nhận lời mời** trong thư mời gửi tới các Gmail đó, hiện link của từng mail và lưu vào kho link của Family.
+- **Tick Đã gửi** (0.23.0) trên từng link: link đã gửi tay cho khách sẽ không bị giao cho khách khác.
+- Tiêu đề web đổi thành **Hải Premium** (0.23.0).
 
 ## Cập nhật (làm một lần)
+
+Đã lên 0.22.0 và làm xong bước 2 trước đó? Khi lên 0.23.0 chỉ cần dán lại `Code.gs` (bước 2.1) và triển khai New version (bước 2.4). Không cần thay appsscript.json hay chạy lại capQuyenGmail. Code.gs của 0.22.0 vẫn chạy; bản mới chỉ thêm việc tự điền Gmail nhận lời mời.
 
 1. **Website**: dùng **Cập nhật một chạm** như bình thường; schema 8 giữ nguyên. Nếu upload tay, dùng gói `family-ma-tra-cuu-gmail.zip`: upload hai thư mục `family-private` và `public_html`, giữ `config.php` và database, rồi Ctrl+F5.
 2. **Apps Script** (script.google.com, mở dự án đang dùng để đồng bộ Sheet):
@@ -39,7 +41,7 @@ Nếu bước 2.3 báo lỗi Gmail: ở cột trái của Apps Script bấm **Se
 - Nếu web và Sheet cùng đổi mã của một khách, web hỏi bạn giữ **bản web** hay **bản Sheet**, giống các tab khác.
 - Ai đọc được Sheet cũng thấy mã của khách. Chỉ chia sẻ file cho người bạn tin.
 
-## Gen mail mời → mời → Lấy link mời
+## Gen mail mời → mời → Lấy link mời (0.23.0)
 
 1. **Tạo mail mời**: khi **+ Thêm Family**, chọn số mail ở ô **Gen mail mời** (1–5). Với Family đã có, mở Family → **Gen mail mời**. Ô **Gmail nhận lời mời** là Gmail đang chạy Apps Script, ví dụ `haihoangrr@gmail.com`; web nhớ cho lần sau.
 2. Web hiện các mail vừa tạo, ví dụ `haihoangrr+k7p2qx@gmail.com`. Đuôi sau dấu + là ngẫu nhiên. Web lưu mọi mail đã tạo nên không bao giờ tạo trùng, kể cả với tên các link đã có. Bấm **Copy tất cả mail**.
@@ -48,7 +50,7 @@ Nếu bước 2.3 báo lỗi Gmail: ở cột trái của Apps Script bấm **Se
 
 Vẫn mời được các Gmail tự đặt như `hai+1@gmail.com`; nút **Lấy link từ Gmail** ở **Thêm → Tra cứu khách** lấy link cho mọi Family. Khi website đang mở, web tự kiểm tra Gmail 10 phút một lần.
 
-## Tick Đã gửi
+## Tick Đã gửi (0.23.0)
 
 - Mỗi link trong **Link mời vào Family này** có ô **Đã gửi**. Gửi link cho khách bằng tay (Zalo, Messenger…) thì tick ô này.
 - Link đã tick hiện **Đã gửi** kèm giờ tick. Link này không có trong danh sách chọn khi **Chuyển khách sang nhóm mới** hoặc **Đổi link**, và Lấy link mời không thay link này.

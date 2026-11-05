@@ -1,4 +1,8 @@
-# 0.22.0 — Mã tra cứu, Gen mail mời, lấy link mời từ Gmail và tick Đã gửi
+# 0.23.0 — Gen mail mời, Lấy link mời và tick Đã gửi
+
+Dùng **Cập nhật một chạm**; không cần chạy SQL hay sửa config.php. Bảng mail mời và cột Đã gửi tự thêm khi website mở lần đầu. Upload tay: dùng gói family-ma-tra-cuu-gmail.zip như 0.22.0. Code.gs của 0.22.0 vẫn chạy; dán Code.gs mới rồi Deploy → Manage deployments → Edit → New version để web tự điền Gmail nhận lời mời. Xem MA-TRA-CUU-VA-GMAIL.md.
+
+# 0.22.0 — Mã tra cứu và lấy link mời từ Gmail
 
 Dùng **Cập nhật một chạm**; không cần chạy SQL, sửa config.php hay .htaccess. Nếu upload tay: sao lưu dữ liệu, upload nội dung hai thư mục family-private và public_html của gói family-ma-tra-cuu-gmail.zip, giữ config.php và database, rồi Ctrl+F5. Sau đó cập nhật Apps Script: dán Code.gs và appsscript.json mới, chạy hàm capQuyenGmail để cấp quyền chỉ đọc Gmail, rồi Deploy → Manage deployments → Edit → New version. Xem MA-TRA-CUU-VA-GMAIL.md.
 

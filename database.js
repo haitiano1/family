@@ -63,7 +63,7 @@ try {
   CREATE INDEX IF NOT EXISTS member_moves_invite ON member_moves(invite_id);
   CREATE TABLE IF NOT EXISTS invite_mails(id INTEGER PRIMARY KEY,family_id INTEGER NOT NULL REFERENCES families(id) ON DELETE CASCADE,email TEXT NOT NULL UNIQUE,created_at TEXT NOT NULL);
   CREATE INDEX IF NOT EXISTS invite_mails_family ON invite_mails(family_id);`);
-  // 0.22.0: Đã gửi tick on invite links (databases created by 0.21 lack the column).
+  // 0.23.0: Đã gửi tick on invite links (databases created by 0.21 lack the column).
   if(!db.prepare('PRAGMA table_info(family_invites)').all().some(column=>column.name==='sent_at'))db.exec("ALTER TABLE family_invites ADD COLUMN sent_at TEXT NOT NULL DEFAULT ''");
   db.prepare("INSERT OR IGNORE INTO lookup_settings(name,value) VALUES ('code_salt',?)").run(randomBytes(32).toString('hex'));
   db.exec('PRAGMA user_version=16; COMMIT');

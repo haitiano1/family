@@ -8,7 +8,7 @@ export const problemStatuses = ['checking', 'scanned', 'disabled'];
 export const openMoveStates = ['assigned', 'opened', 'failed'];
 export const reportReasons = ['twelve_months', 'invite_used', 'other_family', 'other'];
 export const lookupBackupTables = ['family_statuses', 'family_invites', 'member_moves', 'lookup_codes', 'lookup_settings', 'invite_mails'];
-// invite_mails joined backup version 10 in 0.22.0; earlier version-10 files simply have none.
+// invite_mails joined backup version 10 in 0.23.0; earlier version-10 files simply have none.
 export const optionalBackupTables = ['invite_mails'];
 // Gen mail mời: random tag after "+" on the shop's Gmail, e.g. haihoangrr+k7p2qx@gmail.com.
 export const inviteMailAlphabet = 'abcdefghjkmnpqrstuvwxyz23456789';

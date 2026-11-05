@@ -128,13 +128,13 @@ function initializeSchema(PDO $db): void {
 }
 // Tra cứu & chuyển nhóm tables are additive and created once, without changing the data schema version,
 // so the one-click updater still treats this release as compatible. DDL runs outside any transaction.
-// 2 (0.22.0): invite_mails for Gen mail mời and family_invites.sent_at.
+// 2 (0.23.0): invite_mails for Gen mail mời and family_invites.sent_at.
 const FAMILY_LOOKUP_SCHEMA_VERSION=2;
 function ensureLookupSchema(PDO $db): void {
     $row=one($db,"SELECT value FROM app_meta WHERE name='lookup_schema'");
     if(($row['value']??'')===(string)FAMILY_LOOKUP_SCHEMA_VERSION)return;
     foreach(explode(';',file_get_contents(__DIR__.'/lookup.sql')) as $sql)if(trim($sql))$db->exec($sql);
-    // 0.22.0: Đã gửi tick on invite links (tables created by 0.21 lack the column).
+    // 0.23.0: Đã gửi tick on invite links (tables created by 0.21 lack the column).
     if(!in_array('sent_at',array_column(all($db,'SHOW COLUMNS FROM family_invites'),'Field'),true))$db->exec("ALTER TABLE family_invites ADD COLUMN sent_at VARCHAR(32) NOT NULL DEFAULT ''");
     q($db,"INSERT IGNORE INTO lookup_settings(name,value) VALUES ('code_salt',?)",[bin2hex(random_bytes(32))]);
     q($db,"INSERT INTO app_meta(name,value) VALUES ('lookup_schema',?) ON DUPLICATE KEY UPDATE value=VALUES(value)",[(string)FAMILY_LOOKUP_SCHEMA_VERSION]);
