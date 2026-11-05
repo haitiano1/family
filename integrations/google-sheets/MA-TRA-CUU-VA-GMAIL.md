@@ -48,7 +48,7 @@ Nếu bước 2.3 báo lỗi Gmail: ở cột trái của Apps Script bấm **Se
 3. Đăng nhập tài khoản chủ Family, mời các mail vừa copy. Trang Family hiện khung **mail chờ lấy link** cho tới khi có link. Tạo nhầm thì bấm × cạnh mail đó hoặc **Xóa tất cả** (từ 0.24.1); chỉ xóa được mail chưa có link.
 4. Quay lại Family → **Lấy link mời**. Web đọc thư mời trong Gmail và hiện bảng **Mail mời · Link mời · Trạng thái**: tạo 4 mail và mời đủ thì có đủ 4 link. Mail chưa có thư thì ghi **Chưa thấy thư mời**; đợi một chút rồi bấm lại. Link được lưu luôn vào **Link mời vào Family này**.
 
-Vẫn mời được các Gmail tự đặt như `hai+1@gmail.com`; nút **Lấy link từ Gmail** ở **Thêm → Tra cứu khách** lấy link cho mọi Family. Khi website đang mở, web tự kiểm tra Gmail 10 phút một lần.
+Vẫn mời được các Gmail tự đặt như `hai+1@gmail.com`; nút **Lấy link từ Gmail** ở **Thêm → Tra cứu khách** lấy link cho mọi Family. Từ 0.28.2 không cần bấm nút: khách đang chờ link mở trang tra cứu (trang khách tự làm mới 30 giây một lần) thì máy chủ tự đọc Gmail, tối đa một lần mỗi phút, và link hiện ngay cho khách. Trang quản lý đang mở cũng tự kiểm tra mỗi phút khi còn mail chờ lấy link, bình thường 10 phút.
 
 ## Tag Đã gửi (tự động từ 0.25.0)
 

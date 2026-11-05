@@ -1,3 +1,7 @@
+# 0.28.2 — Tự lấy link mời khi khách tra cứu
+
+Dùng **Cập nhật một chạm**. Không đổi schema hay Apps Script. Cần đã kết nối Google Sheet và cấp quyền đọc Gmail như bản 0.22.0.
+
 # 0.28.1 — Lời văn trang tra cứu, giao link là xong
 
 Dùng **Cập nhật một chạm**. Không đổi schema hay Apps Script.

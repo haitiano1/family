@@ -255,4 +255,16 @@ $lan=lookupResult($db,'lan40@example.com')['items'][0];check($lan['view']==='inc
 beginAudit($db,'Telegram');lookupDisconnectTelegram($db);finishAudit();check(lookupTelegramState($db)['enabled']===false,'Telegram off');
 $GLOBALS['family_telegram_transport']=function(){check(false,'nothing sent after off');};lookupTelegramNotify($db,'x');
 check(count(all($db,'SELECT id FROM customer_reports WHERE email=?',['lan40@example.com']))===2,'both reports kept');
+// ---- A waiting customer's lookup reads Gmail by itself ----
+beginAudit($db,'Dữ liệu giả');$s50=saveFamilyRecord($db,null,['name'=>'Family 50','manager_email'=>'owner50@example.com'])['id'];finishAudit();
+q($db,"INSERT INTO members(family_id,email,customer_name,expires_at,plan_months,membership_status) VALUES (?,?,?,?,1,'invited')",[$s50,'wait50@example.com','Chờ','2099-01-01']);
+$code50=((array)lookupAdminState($db)['lookup_codes'])['wait50@example.com'];
+$GLOBALS['family_gmail_transport']=function()use(&$gmailReply){return $gmailReply;};$gmailReply=['ok'=>true,'invites'=>[]];
+q($db,"DELETE FROM lookup_settings WHERE name='gmail_auto_at'");
+$w=lookupWithFreshLinks($db,$c,lookupVerify($db,['email'=>'wait50@example.com','code'=>$code50],'1.1.5.0')['result']);check($w['items'][0]['view']==='waiting','no invitation yet');
+$gmailReply=['ok'=>true,'invites'=>[$mail('shop+f50a@gmail.com','https://families.google.com/join/promo/f50a',['owner50@example.com'],'2026-11-05T10:00:00.000Z')]];
+$w=lookupWithFreshLinks($db,$c,lookupResult($db,'wait50@example.com'));check($w['items'][0]['view']==='waiting','throttled for a minute');
+q($db,"UPDATE lookup_settings SET value='0' WHERE name='gmail_auto_at'");
+$w=lookupWithFreshLinks($db,$c,lookupResult($db,'wait50@example.com'));check($w['items'][0]['view']==='move'&&$w['items'][0]['move']['invite_url']==='https://families.google.com/join/promo/f50a','link read from Gmail on lookup: '.json_encode($w['items'][0]));
+unset($GLOBALS['family_gmail_transport']);
 echo "Sheet codes and Gmail invite checks passed\n";
