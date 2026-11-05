@@ -23,7 +23,7 @@ $db->sqliteCreateFunction('IS_USED_LOCK',function($name)use(&$locks){return $loc
 $db->sqliteCreateFunction('GET_LOCK',function($name,$wait)use(&$locks){$locks[$name]=1;return 1;},2);
 $db->sqliteCreateFunction('RELEASE_LOCK',function($name)use(&$locks){$held=isset($locks[$name]);unset($locks[$name]);return $held?1:null;},1);
 foreach(['schema.sql','features.sql','vault.sql','lookup.sql'] as $file)foreach(explode(';',file_get_contents("$root/$file")) as $sql)if(trim($sql))$db->exec($sql);
-$db->exec("ALTER TABLE families ADD COLUMN trial_date VARCHAR(10) NOT NULL DEFAULT ''");$db->exec("ALTER TABLE families ADD COLUMN archived_at VARCHAR(32) NOT NULL DEFAULT ''");$db->exec('ALTER TABLE vault_items ADD COLUMN family_id INT NULL');
+$db->exec("ALTER TABLE families ADD COLUMN trial_date VARCHAR(10) NOT NULL DEFAULT ''");$db->exec("ALTER TABLE families ADD COLUMN archived_at VARCHAR(32) NOT NULL DEFAULT ''");$db->exec('ALTER TABLE vault_items ADD COLUMN family_id INT NULL');$db->exec("ALTER TABLE issues ADD COLUMN trial_date VARCHAR(10) NOT NULL DEFAULT ''");$db->exec("ALTER TABLE issues ADD COLUMN reported_on VARCHAR(10) NOT NULL DEFAULT ''");
 q($db,"INSERT INTO lookup_settings(name,value) VALUES ('code_salt',?)",[str_repeat('5a',32)]);
 $c=['db_name'=>'family_test','db_password'=>'fake-db-password','access_password'=>'fake-access-password','db_host'=>'localhost'];
 sheetsPut($db,'config',vaultSeal(json_encode(['url'=>'https://script.google.com/macros/s/test/exec','token'=>str_repeat('t',64)]),sheetsKey($c),'family-sheets-config-v1'));
@@ -150,9 +150,23 @@ $r=$gmail();check($r['added']===2&&$r['mailbox']==='hai@gmail.com','generated ad
 check($invite($ten,$gen[0])['url']==='https://families.google.com/join/promo/g1','alias decides when the owner is not in the mail');
 check($invite($b,$gen[1])['url']==='https://families.google.com/join/promo/g2'&&!$invite($ten,$gen[1]),'owner decides when it disagrees');
 check($r['mismatched']===[['email'=>$gen[1],'generated_for'=>'Family 10','invited_by'=>'Family 09']],'mismatch reported');
-$state=lookupAdminState($db);check($state['gmail_mailbox']==='hai@gmail.com'&&$state['invite_base_email']==='hai@gmail.com','mailbox remembered');
+$state=lookupAdminState($db);check($state['gmail_mailbox']==='hai@gmail.com'&&$state['invite_base_email']==='haihoangrr@gmail.com','mailbox remembered, inbox fixed');
+$fixed=lookupGenerateInviteMails($db,$ten,['count'=>1])['mails'][0];check(preg_match('/^haihoangrr\+[a-hj-km-np-z2-9]{6}@gmail\.com$/D',$fixed)===1,'default inbox haihoangrr@gmail.com');
 // A link ticked Đã gửi is kept when Google sends a newer invitation to the same address.
 $g1=$invite($ten,$gen[0]);lookupMarkInviteSent($db,(int)$g1['id'],['sent'=>true,'revision'=>(int)$g1['revision']]);
 $gmailReply['invites'][]=$mail($gen[0],'https://families.google.com/join/promo/g1-new',[],'2026-11-05T02:00:00.000Z');
 $r=$gmail();check($r['added']===1&&$r['updated']===0,'sent link kept, new link added');check(one($db,'SELECT url FROM family_invites WHERE id=?',[$g1['id']])['url']==='https://families.google.com/join/promo/g1','sent link unchanged');
+// Fix lỗi drives the Family status: owner mail reported → Bị quét; case done → Đang hoạt động.
+$statusOf=fn(int $f)=>lookupStatusRow($db,$f)['status'];
+check($statusOf($ten)==='active','starts active');
+beginAudit($db,'Báo lỗi thử');$case=saveIssue($db,null,['family_id'=>$ten,'target_type'=>'manager','title'=>'Mail chủ bị quét']);finishAudit();
+check($statusOf($ten)==='scanned'&&str_contains(lookupStatusRow($db,$ten)['note'],'Family 10 bị Google quét'),'owner mail report marks Bị quét');
+$issue=one($db,'SELECT * FROM issues WHERE id=?',[$case['id']]);
+beginAudit($db,'Fix thử');saveIssue($db,$case['id'],['revision'=>(int)$issue['revision'],'status'=>'done','resolution'=>'replace','replacement_email'=>'owner10-new@example.com','expected_email'=>'owner10@example.com']);finishAudit();
+check($statusOf($ten)==='active'&&lookupStatusRow($db,$ten)['note']==='','done case puts the Family back to Đang hoạt động');
+check(str_contains(json_encode(all($db,'SELECT message FROM audit_events'),JSON_UNESCAPED_UNICODE),'Tự động: đặt trạng thái Family 10 là Bị quét'),'journal');
+$customer=(int)one($db,'SELECT id FROM members WHERE family_id=? LIMIT 1',[$b])['id'];
+beginAudit($db,'Báo lỗi khách');saveIssue($db,null,['family_id'=>$b,'target_type'=>'member','target_id'=>$customer,'title'=>'Mail khách lỗi']);finishAudit();check($statusOf($b)==='active','a customer mail report leaves the Family status');
+lookupSaveStatus($db,$ten,['status'=>'disabled','note'=>'Tự đặt','revision'=>(int)lookupStatusRow($db,$ten)['revision']]);
+beginAudit($db,'Báo lỗi thử');saveIssue($db,null,['family_id'=>$ten,'target_type'=>'manager','title'=>'Lỗi tiếp']);finishAudit();check($statusOf($ten)==='disabled'&&lookupStatusRow($db,$ten)['note']==='Tự đặt','an existing incident status is kept');
 echo "Sheet codes and Gmail invite checks passed\n";

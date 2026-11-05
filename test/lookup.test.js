@@ -297,9 +297,11 @@ test('Gen mail mời makes unique + addresses, and a link ticked Đã gửi is n
     for (const bad of [{ count: 0 }, { count: 6 }, { count: '3' }, { count: 2, base_email: 'not-an-email' }]) await a(`families/${newFamily.id}/invite-mails`, 'POST', { base_email: 'haihoangrr@gmail.com', ...bad }, 400);
     await a(`families/${newFamily.id}/invite-mails`, 'POST', { count: 1, base_email: 'owner09+x@example.com' }, 400);
     await a('families/999/invite-mails', 'POST', { count: 1, base_email: 'haihoangrr@gmail.com' }, 404);
+    const fixed = await a(`families/${newFamily.id}/invite-mails`, 'POST', { count: 1 }, 201);
+    assert.match(fixed.mails[0], /^haihoangrr\+[a-hj-km-np-z2-9]{6}@gmail\.com$/, 'the shop inbox is fixed');
     const seen = new Set(made.mails);
     for (let i = 0; i < 12; i++) for (const address of (await a(`families/${oldFamily.id}/invite-mails`, 'POST', { count: 5, base_email: 'haihoangrr@gmail.com' }, 201)).mails) { assert.equal(seen.has(address), false, 'never generated twice'); seen.add(address); }
-    assert.equal((await a('state')).invite_mails.length, 64);
+    assert.equal((await a('state')).invite_mails.length, 65);
     const journal = await a('journal');
     assert.ok(journal.entries.some(e => e.action === 'Tạo mail mời' && e.message.includes(made.mails[0])));
 
@@ -327,10 +329,40 @@ test('Gen mail mời makes unique + addresses, and a link ticked Đã gửi is n
     state = await a('state');
     await a(`invites/${spare.id}/sent`, 'PATCH', { sent: false, revision: state.invites.find(i => i.id === spare.id).revision });
     const backup = await a('backup');
-    assert.equal(backup.version, 10); assert.equal(backup.tables.invite_mails.length, 64); assert.ok(backup.tables.family_invites.every(i => 'sent_at' in i));
+    assert.equal(backup.version, 10); assert.equal(backup.tables.invite_mails.length, 65); assert.ok(backup.tables.family_invites.every(i => 'sent_at' in i));
     await target.admin('restore', 'POST', backup);
-    assert.equal((await target.admin('state')).invite_mails.length, 64);
+    assert.equal((await target.admin('state')).invite_mails.length, 65);
     const old = structuredClone(backup); delete old.tables.invite_mails; for (const row of old.tables.family_invites) delete row.sent_at;
     const empty = await server(); try { await empty.admin('restore', 'POST', old); const s = await empty.admin('state'); assert.equal(s.invite_mails.length, 0); assert.ok(s.invites.every(i => i.sent_at === '')); } finally { await empty.close(); }
   } finally { await f.close(); await target.close(); }
+});
+
+test('Fix lỗi sets the Family status: owner mail reported → Bị quét, case done → Đang hoạt động', async () => {
+  const f = await server(); try {
+    const a = f.admin, { oldFamily, calm, minh } = await incident(a);
+    const status = async id => (await a('state')).family_statuses.find(s => s.family_id === id) || { status: 'active', note: '' };
+    const created = await a('issues', 'POST', { family_id: oldFamily.id, target_type: 'manager', title: 'Mail chủ bị quét' }, 201);
+    let s = await status(oldFamily.id);
+    assert.equal(s.status, 'scanned'); assert.match(s.note, /Family 04 bị Google quét/);
+    assert.equal((await f.customer()('verify', 'POST', { email: 'minhanh@example.com', code: (await a('state')).lookup_codes['minhanh@example.com'] })).items[0].view, 'incident', 'customers see the incident at once');
+    let issue = (await a('state')).issues.find(i => i.id === created.id);
+    await a(`issues/${created.id}`, 'PATCH', { revision: issue.revision, status: 'done', resolution: 'replace', replacement_email: 'owner04-new@example.com', expected_email: 'owner04@example.com' });
+    s = await status(oldFamily.id); assert.equal(s.status, 'active'); assert.equal(s.note, '');
+    const journal = await a('journal');
+    assert.ok(journal.entries.some(e => e.message.includes('Tự động: đặt trạng thái Family 04 là Bị quét')));
+    assert.ok(journal.entries.some(e => e.message.includes('Tự động: đặt trạng thái Family 04 là Đang hoạt động')));
+    // Reopening the case marks it again; a customer mail case never touches the Family status.
+    issue = (await a('state')).issues.find(i => i.id === created.id);
+    await a(`issues/${created.id}`, 'PATCH', { revision: issue.revision, status: 'todo' });
+    assert.equal((await status(oldFamily.id)).status, 'scanned');
+    const nam = (await a('state')).members.find(m => m.family_id === calm.id);
+    await a('issues', 'POST', { family_id: calm.id, target_type: 'member', target_id: nam.id, title: 'Mail khách lỗi' }, 201);
+    assert.equal((await status(calm.id)).status, 'active');
+    // A status set by hand (e.g. Bị vô hiệu hoá) is not overwritten by a new report.
+    const other = await a('families', 'POST', { name: 'Family 11', manager_email: 'owner11@example.com' }, 201);
+    await a(`families/${other.id}/status`, 'PATCH', { status: 'disabled', note: 'Tự đặt', revision: 0 });
+    await a('issues', 'POST', { family_id: other.id, target_type: 'manager', title: 'Lỗi' }, 201);
+    assert.deepEqual([(await status(other.id)).status, (await status(other.id)).note], ['disabled', 'Tự đặt']);
+    assert.ok(minh);
+  } finally { await f.close(); }
 });

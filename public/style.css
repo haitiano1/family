@@ -708,6 +708,11 @@ code { background: #f0f4fa; color: #3c5679; padding: 3px 6px; border-radius: 5px
 .lookup-pending-mails { align-items: flex-start; margin: 0 0 16px; }
 .lookup-pending-mails .subtext { margin-top: 2px; }
 .lookup-sent-row { margin-top: 8px; }
+.gen-menu { position: relative; }
+.gen-menu > summary { list-style: none; display: inline-flex; align-items: center; cursor: pointer; border-radius: 10px; padding: 11px 16px; font-weight: 650; }
+.gen-menu > summary::-webkit-details-marker { display: none; }
+.gen-menu > summary::after { content: '▾'; margin-left: 6px; font-size: 11px; }
+.gen-menu-list { position: absolute; right: 0; top: calc(100% + 6px); z-index: 20; display: grid; gap: 6px; padding: 8px; min-width: 120px; background: #fff; border: 1px solid #d9e2ef; border-radius: 10px; box-shadow: 0 10px 24px rgb(16 36 66 / 14%); }
 .lookup-sent { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 600; color: var(--ink-strong); white-space: nowrap; cursor: pointer; padding: 4px 8px; border: 1px solid #d9e2ef; border-radius: 8px; background: #fff; }
 .lookup-sent input { width: 16px; height: 16px; margin: 0; accent-color: #b45309; }
 .lookup-sent:has(input:checked) { background: #fff7e6; border-color: #f3c77a; color: #8a4b00; }

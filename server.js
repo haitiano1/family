@@ -34,7 +34,7 @@ const actor = { username:'Cục bộ' };
 const { email,text,label,service,calendarDate,memberData } = validators(fail);
 const saveOtherProduct=initOtherProducts(db,{fail,text,email,calendarDate,log});
 const productImport=initProductImport(db,{fail,text,email,calendarDate,log,saveOtherProduct});
-const issues=initIssues(db,{fail,text,email,log});
+const issues=initIssues(db,{fail,text,email,log,familyStatus:(familyId,event)=>lookup.issueStatus(familyId,event)});
 const transferMember=initTransfers(db,{fail,email,log});
 const vaultRoute=initVault(db,{fail,email,text,commonPassword:process.env.ACCESS_PASSWORD||'',secure:access.enabled});
 const archive = initArchive(db, { fail,log });

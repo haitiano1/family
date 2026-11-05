@@ -13,6 +13,9 @@ export const optionalBackupTables = ['invite_mails'];
 // Gen mail mời: random tag after "+" on the shop's Gmail, e.g. haihoangrr+k7p2qx@gmail.com.
 export const inviteMailAlphabet = 'abcdefghjkmnpqrstuvwxyz23456789';
 export const inviteMailMax = 5;
+// The shop Gmail that receives every invitation (the Apps Script mailbox).
+export const inviteMailInbox = 'haihoangrr@gmail.com';
+export const autoScannedNote = name => `${name} bị Google quét nên một số thành viên có thể mất Premium. Shop đang xử lý và sẽ cập nhật tại đây; hạn dùng của bạn giữ nguyên.`;
 export function inviteMailBase(address) {
   const at = address.lastIndexOf('@'), local = address.slice(0, at).split('+')[0];
   return local && at > 0 ? local + address.slice(at) : '';
@@ -111,17 +114,12 @@ export function initLookup(db, { fail, email, text, calendarDate, log }) {
     });
   }
 
-  function setting(name) { return one('SELECT value FROM lookup_settings WHERE name=?', name)?.value || ''; }
-  function putSetting(name, value) {
-    if (one('SELECT id FROM lookup_settings WHERE name=?', name)) run('UPDATE lookup_settings SET value=? WHERE name=?', value, name);
-    else run('INSERT INTO lookup_settings(name,value) VALUES (?,?)', name, value);
-  }
   // Every generated address is remembered, so a tag is never handed out twice, and no
   // address collides with a label already in an invite pool.
   function generateInviteMails(familyId, data) {
     const family = activeFamily(familyId); if (!family) fail('Không tìm thấy Family đang hoạt động.', 404);
     const count = data.count; if (!Number.isInteger(count) || count < 1 || count > inviteMailMax) fail('Chọn từ 1 đến 5 mail mời.');
-    const base = inviteMailBase(email(data.base_email)); if (!base) fail('Nhập Gmail nhận lời mời, ví dụ tenban@gmail.com.');
+    const base = data.base_email ? inviteMailBase(email(data.base_email)) : inviteMailInbox; if (!base) fail('Gmail nhận lời mời không hợp lệ.');
     if (base === inviteMailBase(family.manager_email)) fail('Gmail nhận lời mời phải khác mail chủ của Family này.');
     return atomic('invite_mails_generate', () => {
       const taken = new Set([...all('SELECT email FROM invite_mails').map(r => r.email), ...all('SELECT label FROM family_invites').map(r => String(r.label).toLowerCase())]);
@@ -133,7 +131,6 @@ export function initLookup(db, { fail, email, text, calendarDate, log }) {
       }
       const time = now();
       for (const address of mails) run('INSERT INTO invite_mails(family_id,email,created_at) VALUES (?,?,?)', family.id, address, time);
-      putSetting('invite_base_email', base);
       log(`Cá nhân: tạo ${count} mail mời cho ${family.name}: ${mails.join(', ')}`);
       return { ok: true, family_id: family.id, family_name: family.name, base_email: base, mails };
     });
@@ -149,6 +146,18 @@ export function initLookup(db, { fail, email, text, calendarDate, log }) {
     run('UPDATE family_invites SET sent_at=?,revision=revision+1,updated_at=? WHERE id=?', data.sent ? now() : '', now(), invite.id);
     log(`Cá nhân: ${data.sent ? 'đánh dấu đã gửi' : 'bỏ đánh dấu đã gửi'} link mời ${invite.label || '#' + invite.id} của ${family.name}`);
     return { ok: true };
+  }
+
+  // Fix lỗi drives the status customers see: reporting the owner Gmail marks an active Family
+  // "Bị quét"; completing the case (or keeping the mail) puts it back to "Đang hoạt động".
+  function issueStatus(familyId, event) {
+    const family = activeFamily(familyId); if (!family) return;
+    const old = one('SELECT * FROM family_statuses WHERE family_id=?', family.id), current = old?.status || 'active';
+    if (event === 'reported' ? current !== 'active' : current === 'active') return;
+    const next = event === 'reported' ? 'scanned' : 'active', note = event === 'reported' ? autoScannedNote(family.name) : '';
+    if (old) run('UPDATE family_statuses SET status=?,note=?,updated_at=?,revision=revision+1 WHERE family_id=?', next, note, now(), family.id);
+    else run('INSERT INTO family_statuses(family_id,status,note,updated_at,revision) VALUES (?,?,?,?,1)', family.id, next, note, now());
+    log(`Tự động: đặt trạng thái ${family.name} là ${label(next)} ${event === 'reported' ? 'khi báo lỗi mail quản lý' : 'khi hoàn tất Fix lỗi'}`);
   }
 
   function saveStatus(familyId, data) {
@@ -288,7 +297,7 @@ export function initLookup(db, { fail, email, text, calendarDate, log }) {
       lookup_supported: true, lookup_settings: settings(),
       family_statuses: all('SELECT family_id,status,note,updated_at,revision FROM family_statuses'),
       invites, moves, lookup_codes: Object.fromEntries(all('SELECT DISTINCT email FROM members').map(r => [r.email, codeFor(r.email, key)])),
-      invite_mails: all('SELECT id,family_id,email,created_at FROM invite_mails ORDER BY id'), invite_base_email: setting('invite_base_email')
+      invite_mails: all('SELECT id,family_id,email,created_at FROM invite_mails ORDER BY id'), invite_base_email: inviteMailInbox
     };
   }
 
@@ -371,5 +380,5 @@ export function initLookup(db, { fail, email, text, calendarDate, log }) {
     return result(address);
   }
 
-  return { adminState, settings, saveSettings, rotateCode, generateInviteMails, markInviteSent, saveStatus, saveInvite, deleteInvite, bulkMove, updateMove, result, verify, sessionEmail, logout, customerOpen, customerJoined, customerReport };
+  return { adminState, settings, saveSettings, rotateCode, generateInviteMails, markInviteSent, issueStatus, saveStatus, saveInvite, deleteInvite, bulkMove, updateMove, result, verify, sessionEmail, logout, customerOpen, customerJoined, customerReport };
 }

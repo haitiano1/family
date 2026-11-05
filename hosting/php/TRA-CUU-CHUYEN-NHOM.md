@@ -22,7 +22,8 @@ Vào **Thêm → Tra cứu khách → Sửa thông tin** để đặt tên shop,
 
 ## Khi Family gặp sự cố
 
-1. Mở Family lỗi → **Đổi trạng thái**: chọn *Đang kiểm tra*, *Bị quét* hoặc *Bị vô hiệu hoá* và viết lời nhắn cho khách. Ô lời nhắn có sẵn câu mẫu khi còn trống.
+0. Từ 0.24.0, **Báo lỗi** cho mail quản lý ở mục Fix lỗi sẽ tự đặt Family thành **Bị quét** kèm lời nhắn mẫu, nên khách thấy ngay trên trang tra cứu. Khi case chuyển sang **Đã fix** (đổi sang mail mới hoặc giữ mail), Family tự về **Đang hoạt động**. Mở lại case thì Family lại thành Bị quét. Báo lỗi mail khách không đổi trạng thái Family. Nếu bạn đã tự đặt trạng thái khác (ví dụ *Bị vô hiệu hoá*), báo lỗi không ghi đè trạng thái đó.
+1. Muốn chọn trạng thái hoặc lời nhắn khác: mở Family lỗi → **Đổi trạng thái**, chọn *Đang kiểm tra*, *Bị quét* hoặc *Bị vô hiệu hoá* và viết lời nhắn cho khách. Ô lời nhắn có sẵn câu mẫu khi còn trống.
 2. Ở Family mới: gửi lời mời từ tài khoản chủ tới các mail của bạn (ví dụ `mail+1@gmail.com`, `mail+2@gmail.com`…). Trong email của Google, chuột phải nút **Chấp nhận lời mời** → sao chép link, rồi bấm **+ Thêm link mời** và dán link vào. Nhập ngày gửi để web nhắc khi lời mời sắp hết hạn (Google cho 2 tuần).
 3. Quay lại Family lỗi → **Chuyển khách sang nhóm mới**. Chọn Family mới; web tự ghép mỗi khách còn hạn với một link sẵn sàng. Khách quá hạn mặc định *Không chuyển* và trên trang tra cứu chỉ thấy lời nhắc gia hạn. Có thể đổi link hoặc bỏ chuyển từng khách trước khi xác nhận.
 4. Khách được chuyển ở trạng thái **Đã mời, chưa vào**. Gói, ngày mua, hạn, Contact, thanh toán và lịch sử giữ nguyên. Case Fix lỗi gắn với mail khách được xóa như khi Chuyển Family. Nhật ký ghi thao tác vào nhóm **Chuyển Family**.

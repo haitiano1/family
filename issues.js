@@ -1,6 +1,6 @@
 import {randomBytes,createHash} from 'node:crypto';
 import {today,trialUsageDays} from './domain.js';
-export function initIssues(db,{fail,text,email,log}) {
+export function initIssues(db,{fail,text,email,log,familyStatus=()=>{}}) {
   const one=(sql,...args)=>db.prepare(sql).get(...args),run=(sql,...args)=>db.prepare(sql).run(...args);
   // Display preferences stay separate from business rows and vault metadata.
   db.exec('CREATE TABLE IF NOT EXISTS app_meta(name TEXT PRIMARY KEY,value TEXT NOT NULL)');
@@ -53,7 +53,7 @@ export function initIssues(db,{fail,text,email,log}) {
     if(old&&data.expected_created_at!==undefined&&data.expected_created_at!==old.created_at)fail('Case đã thay đổi. Tải lại rồi thử lại.',409);
     const title=text(data.title??old?.title,200);if(!title)fail('Nhập nội dung lỗi.');const note=text(data.note??old?.note);const status=data.status??old?.status??'todo';if(!['todo','doing','done'].includes(status))fail('Trạng thái lỗi không hợp lệ.');
     const now=new Date().toISOString();
-    if(!old){if(status!=='todo')fail('Lỗi mới bắt đầu ở Chờ fix.');const f=one('SELECT f.*,a.email AS manager_email FROM families f JOIN accounts a ON a.id=f.manager_id WHERE f.id=?',Number(data.family_id));if(!f||f.archived_at)fail('Chọn Family đang tồn tại.');requireNoOpenIssue(f.id);const type=data.target_type??'manager';if(!['manager','member'].includes(type))fail('Chọn mail gặp lỗi.');const row=type==='manager'?one('SELECT * FROM accounts WHERE id=?',f.manager_id):one('SELECT * FROM members WHERE id=? AND family_id=?',Number(data.target_id),f.id);if(!row)fail('Mail khách không thuộc Family này.');const result=run('INSERT INTO issues(family_id,family_name,target_type,target_id,subject_email,original_email,title,note,created_at,updated_at,trial_date,reported_on) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)',f.id,f.name,type,row.id,row.email,row.email,title,note,now,now,f.trial_date,today(new Date(now)));log(`Cá nhân: báo lỗi ${row.email}: ${title}`);return {id:Number(result.lastInsertRowid)};}
+    if(!old){if(status!=='todo')fail('Lỗi mới bắt đầu ở Chờ fix.');const f=one('SELECT f.*,a.email AS manager_email FROM families f JOIN accounts a ON a.id=f.manager_id WHERE f.id=?',Number(data.family_id));if(!f||f.archived_at)fail('Chọn Family đang tồn tại.');requireNoOpenIssue(f.id);const type=data.target_type??'manager';if(!['manager','member'].includes(type))fail('Chọn mail gặp lỗi.');const row=type==='manager'?one('SELECT * FROM accounts WHERE id=?',f.manager_id):one('SELECT * FROM members WHERE id=? AND family_id=?',Number(data.target_id),f.id);if(!row)fail('Mail khách không thuộc Family này.');const result=run('INSERT INTO issues(family_id,family_name,target_type,target_id,subject_email,original_email,title,note,created_at,updated_at,trial_date,reported_on) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)',f.id,f.name,type,row.id,row.email,row.email,title,note,now,now,f.trial_date,today(new Date(now)));log(`Cá nhân: báo lỗi ${row.email}: ${title}`);if(type==='manager')familyStatus(f.id,'reported');return {id:Number(result.lastInsertRowid)};}
     if(old.status==='done'&&status!=='done')requireNoOpenIssue(old.family_id,old.id);
     let subject=old.subject_email,resolution=old.resolution,resolutionEmail=old.resolution_email,resolutionNote=old.resolution_note,done=old.done_at;
     if(status==='done'&&old.status!=='done'){
@@ -70,7 +70,9 @@ export function initIssues(db,{fail,text,email,log}) {
     }else if(status!=='done'){resolution='';resolutionEmail='';resolutionNote='';done='';}
     if(status!==old.status)forgetOrder(old.id,old.created_at);
     run('UPDATE issues SET title=?,note=?,status=?,subject_email=?,resolution=?,resolution_email=?,resolution_note=?,done_at=?,updated_at=?,revision=revision+1 WHERE id=?',title,note,status,subject,resolution,resolutionEmail,resolutionNote,done,now,id);
-    log(`Cá nhân: lỗi #${id} → ${status}${resolutionNote?' · '+resolutionNote:''}`);return {ok:true};
+    log(`Cá nhân: lỗi #${id} → ${status}${resolutionNote?' · '+resolutionNote:''}`);
+    if(old.target_type==='manager'&&(status==='done')!==(old.status==='done'))familyStatus(old.family_id,status==='done'?'resolved':'reported');
+    return {ok:true};
   }
   function remove(id,data){const old=one('SELECT * FROM issues WHERE id=?',id);if(!old)fail('Không tìm thấy case lỗi.',404);if(!Number.isInteger(data.revision)||data.revision!==old.revision||data.expected_created_at!==old.created_at)fail('Case đã thay đổi. Tải lại rồi thử lại.',409);if(old.status!=='done')fail('Chỉ xóa case ở cột Đã fix.');forgetOrder(old.id,old.created_at);run('DELETE FROM issues WHERE id=?',id);log(`Cá nhân: xóa case đã fix ${old.subject_email} #${id}`);return {ok:true};}
   function list(){return statuses.flatMap(status=>{const order=ordered(status);return order.items.map((i,index)=>{const row=target(i);const reported=i.reported_on||(i.created_at?today(new Date(i.created_at)):'');return {...i,reported_on:reported,days_used:trialUsageDays(i.trial_date,reported),target_current_email:row?.email||'',target_available:!!row,sort_position:index,order_token:order.token,order_custom:order.custom};});});}

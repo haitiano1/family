@@ -11,6 +11,8 @@ const LOOKUP_BACKUP_TABLES=['family_statuses','family_invites','member_moves','l
 // Gen mail mời: random tag after "+" on the shop's Gmail, e.g. haihoangrr+k7p2qx@gmail.com.
 const LOOKUP_INVITE_MAIL_ALPHABET='abcdefghjkmnpqrstuvwxyz23456789';
 const LOOKUP_INVITE_MAIL_MAX=5;
+// The shop Gmail that receives every invitation (the Apps Script mailbox).
+const LOOKUP_INVITE_MAIL_INBOX='haihoangrr@gmail.com';
 const LOOKUP_CODE_ALPHABET='ABCDEFGHJKMNPQRSTUVWXYZ23456789';
 const LOOKUP_SETTING_NAMES=['shop_name','contact_url','contact_label','help_text'];
 const LOOKUP_WINDOW_MS=900000,LOOKUP_EMAIL_LIMIT=8,LOOKUP_IP_LIMIT=40,LOOKUP_SESSION_MS=3600000,LOOKUP_MOVE_LIMIT=50;
@@ -98,9 +100,17 @@ function lookupRotateCode(PDO $db,array $d): array {
     });
 }
 
-function lookupSetting(PDO $db,string $name): string {return (string)(one($db,'SELECT value FROM lookup_settings WHERE name=?',[$name])['value']??'');}
-function lookupPutSetting(PDO $db,string $name,string $value): void {
-    if(one($db,'SELECT id FROM lookup_settings WHERE name=?',[$name]))q($db,'UPDATE lookup_settings SET value=? WHERE name=?',[$value,$name]);else q($db,'INSERT INTO lookup_settings(name,value) VALUES (?,?)',[$name,$value]);
+// Fix lỗi drives the status customers see: reporting the owner Gmail marks an active Family
+// "Bị quét"; completing the case (or keeping the mail) puts it back to "Đang hoạt động".
+function lookupAutoScannedNote(string $name): string {return "$name bị Google quét nên một số thành viên có thể mất Premium. Shop đang xử lý và sẽ cập nhật tại đây; hạn dùng của bạn giữ nguyên.";}
+function lookupIssueStatus(PDO $db,int $familyId,string $event): void {
+    $f=lookupActiveFamily($db,$familyId);if(!$f)return;
+    $old=one($db,'SELECT * FROM family_statuses WHERE family_id=?',[$f['id']]);$current=$old['status']??'active';
+    if($event==='reported'?$current!=='active':$current==='active')return;
+    $next=$event==='reported'?'scanned':'active';$note=$event==='reported'?lookupAutoScannedNote($f['name']):'';
+    if($old)q($db,'UPDATE family_statuses SET status=?,note=?,updated_at=?,revision=revision+1 WHERE family_id=?',[$next,$note,lookupNow(),$f['id']]);
+    else q($db,'INSERT INTO family_statuses(family_id,status,note,updated_at,revision) VALUES (?,?,?,?,1)',[$f['id'],$next,$note,lookupNow()]);
+    logEntry($db,'Tự động: đặt trạng thái '.$f['name'].' là '.LOOKUP_STATUS_LABELS[$next].($event==='reported'?' khi báo lỗi mail quản lý':' khi hoàn tất Fix lỗi'));
 }
 function lookupInviteMailBase(string $address): string {
     $at=strrpos($address,'@');if($at===false||$at===0)return '';$local=explode('+',substr($address,0,$at))[0];return $local===''?'':$local.substr($address,$at);
@@ -110,7 +120,7 @@ function lookupInviteMailBase(string $address): string {
 function lookupGenerateInviteMails(PDO $db,int $familyId,array $d): array {
     $f=lookupActiveFamily($db,$familyId);if(!$f)fail('Không tìm thấy Family đang hoạt động.',404);
     $count=$d['count']??null;if(!is_int($count)||$count<1||$count>LOOKUP_INVITE_MAIL_MAX)fail('Chọn từ 1 đến 5 mail mời.');
-    $base=lookupInviteMailBase(email($d['base_email']??''));if($base==='')fail('Nhập Gmail nhận lời mời, ví dụ tenban@gmail.com.');
+    $base=($d['base_email']??'')!==''?lookupInviteMailBase(email($d['base_email'])):LOOKUP_INVITE_MAIL_INBOX;if($base==='')fail('Gmail nhận lời mời không hợp lệ.');
     if($base===lookupInviteMailBase($f['manager_email']))fail('Gmail nhận lời mời phải khác mail chủ của Family này.');
     return transaction($db,function()use($db,$f,$count,$base){
         $taken=array_fill_keys(array_column(all($db,'SELECT email FROM invite_mails'),'email'),true);foreach(all($db,'SELECT label FROM family_invites') as $r)$taken[strtolower($r['label'])]=true;
@@ -120,7 +130,6 @@ function lookupGenerateInviteMails(PDO $db,int $familyId,array $d): array {
             $address=substr($base,0,$at).'+'.$tag.substr($base,$at);if(isset($taken[$address]))continue;$taken[$address]=true;$mails[]=$address;
         }
         $time=lookupNow();foreach($mails as $address)q($db,'INSERT INTO invite_mails(family_id,email,created_at) VALUES (?,?,?)',[$f['id'],$address,$time]);
-        lookupPutSetting($db,'invite_base_email',$base);
         logEntry($db,"Cá nhân: tạo $count mail mời cho {$f['name']}: ".implode(', ',$mails));
         return ['ok'=>true,'family_id'=>(int)$f['id'],'family_name'=>$f['name'],'base_email'=>$base,'mails'=>$mails];
     });
@@ -301,8 +310,7 @@ function lookupAdminState(PDO $db): array {
     $codes=[];foreach(all($db,'SELECT DISTINCT email FROM members') as $r)$codes[$r['email']]=lookupCodeFor($db,$r['email'],$salt);
     // Gmail import needs the Google Sheet connection (same Apps Script). Plain query: no DDL inside the state audit.
     $gmail=false;$mailbox='';try{$gmail=(bool)one($db,"SELECT name FROM family_sheet_state WHERE name='config'");$row=one($db,"SELECT value FROM family_sheet_state WHERE name='gmail_mailbox'");$mailbox=$row?(string)json_decode($row['value'],true):'';}catch(Throwable $e){}
-    $base=lookupSetting($db,'invite_base_email');
-    return ['lookup_supported'=>true,'gmail_import'=>$gmail,'gmail_mailbox'=>$mailbox,'invite_base_email'=>$base!==''?$base:lookupInviteMailBase($mailbox),'invite_mails'=>array_map(fn($r)=>[...$r,'id'=>(int)$r['id'],'family_id'=>(int)$r['family_id']],all($db,'SELECT id,family_id,email,created_at FROM invite_mails ORDER BY id')),'lookup_settings'=>lookupSettings($db),'family_statuses'=>all($db,'SELECT family_id,status,note,updated_at,revision FROM family_statuses'),'invites'=>$invites,'moves'=>$moves,'lookup_codes'=>(object)$codes];
+    return ['lookup_supported'=>true,'gmail_import'=>$gmail,'gmail_mailbox'=>$mailbox,'invite_base_email'=>LOOKUP_INVITE_MAIL_INBOX,'invite_mails'=>array_map(fn($r)=>[...$r,'id'=>(int)$r['id'],'family_id'=>(int)$r['family_id']],all($db,'SELECT id,family_id,email,created_at FROM invite_mails ORDER BY id')),'lookup_settings'=>lookupSettings($db),'family_statuses'=>all($db,'SELECT family_id,status,note,updated_at,revision FROM family_statuses'),'invites'=>$invites,'moves'=>$moves,'lookup_codes'=>(object)$codes];
 }
 
 // ---- Public lookup (customer) ----

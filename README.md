@@ -1,4 +1,6 @@
-# Hải Premium — Quản lý khách hàng 0.23.0
+# Hải Premium — Quản lý khách hàng 0.24.0
+
+Bản 0.24.0: **Gen mail mời** luôn dùng Gmail nhận lời mời `haihoangrr@gmail.com` và tạo ngay khi chọn số lượng (1–5). **Fix lỗi** tự cập nhật trạng thái cho khách: báo lỗi mail quản lý thì Family thành **Bị quét**, case chuyển sang Đã fix thì Family về **Đang hoạt động**. Xem [hướng dẫn](hosting/php/TRA-CUU-CHUYEN-NHOM.md).
 
 Bản 0.23.0 đổi tiêu đề web thành **Hải Premium**, thêm **Gen mail mời** (khi Thêm Family hoặc trong trang Family: 1–5 Gmail có dấu + với đuôi ngẫu nhiên, không bao giờ trùng), nút **Lấy link mời** hiện link của từng mail đã tạo và lưu vào kho link của Family, và ô **Đã gửi** trên từng link để link đã gửi tay không bị giao cho khách khác. Xem [hướng dẫn](integrations/google-sheets/MA-TRA-CUU-VA-GMAIL.md).
 
