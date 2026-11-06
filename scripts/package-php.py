@@ -31,6 +31,8 @@ with zipfile.ZipFile(DEST,'w',zipfile.ZIP_DEFLATED) as z:
     z.write(ROOT/'hosting/php/NGAY-NHAN-TIEN-GIA-HAN.md','NGAY-NHAN-TIEN-GIA-HAN.md')
     z.write(ROOT/'hosting/php/GIAO-DIEN-HIEN-DAI.md','GIAO-DIEN-HIEN-DAI.md')
     z.write(ROOT/'hosting/php/TRA-CUU-CHUYEN-NHOM.md','TRA-CUU-CHUYEN-NHOM.md')
+    z.write(ROOT/'hosting/php/LINK-NGAN.md','LINK-NGAN.md')
+    z.write(ROOT/'hosting/php/link-ngan/index.php','link-ngan/index.php')
 # Normalize portable read permissions; no executable or secret files are bundled.
 with zipfile.ZipFile(DEST) as z: contents=[(i.filename,z.read(i.filename)) for i in z.infolist()]
 with zipfile.ZipFile(DEST,'w',zipfile.ZIP_DEFLATED) as z:

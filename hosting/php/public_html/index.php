@@ -4,6 +4,8 @@ familyRuntimeEnter();
 require dirname(__DIR__).'/family-private/core.php';
 try {
     $c=config();checkRequest($c);
+    // Short customer link: /?K7P2QX opens the lookup page with the code filled in (no access password).
+    if(preg_match('/^[A-Za-z0-9]{6}$/D',(string)($_SERVER['QUERY_STRING']??''))){header('Cache-Control: no-store');header('Content-Type: text/html; charset=utf-8');readfile(__DIR__.'/tra-cuu.html');exit;}
     if (!authorized($c)) {header('Location: /access',true,302);exit;}
     header('Cache-Control: no-store');header('Content-Type: text/html; charset=utf-8');readfile(__DIR__.'/index.html');
 } catch (Throwable $e) {

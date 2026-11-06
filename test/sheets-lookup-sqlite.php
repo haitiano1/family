@@ -267,4 +267,5 @@ $w=lookupWithFreshLinks($db,$c,lookupResult($db,'wait50@example.com'));check($w[
 q($db,"UPDATE lookup_settings SET value='0' WHERE name='gmail_auto_at'");
 $w=lookupWithFreshLinks($db,$c,lookupResult($db,'wait50@example.com'));check($w['items'][0]['view']==='move'&&$w['items'][0]['move']['invite_url']==='https://families.google.com/join/promo/f50a','link read from Gmail on lookup: '.json_encode($w['items'][0]));
 unset($GLOBALS['family_gmail_transport']);
+check(lookupShortDomain('HaiPre.vn/')==='https://haipre.vn','short domain normalised');try{lookupShortDomain('haipre.vn/x');check(false,'path');}catch(FamilyError $e){check($e->status===400,'short domain with a path refused');}
 echo "Sheet codes and Gmail invite checks passed\n";
