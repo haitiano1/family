@@ -82,13 +82,15 @@ export function initLookup(db, { fail, email, text, calendarDate, log }) {
     if (!['https:', 'http:'].includes(url.protocol) || url.username || url.password) fail('Link liên hệ cần bắt đầu bằng https:// hoặc http://');
     return result;
   }
-  // A spare domain that redirects to this site, used only to build shorter customer links.
+  // A spare domain (optionally with one path, e.g. beeflix.vn/haiytb) that redirects to this
+  // site, used only to build shorter customer links.
   function shortDomain(value) {
     let raw = text(value, 200); if (!raw) return '';
     if (!/^https?:\/\//i.test(raw)) raw = 'https://' + raw;
     let url; try { url = new URL(raw); } catch { fail('Tên miền link ngắn không hợp lệ, ví dụ haipre.vn'); }
-    if (!['https:', 'http:'].includes(url.protocol) || url.username || url.password || (url.pathname !== '/' && url.pathname !== '') || url.search || url.hash || !/^[a-z0-9.-]+\.[a-z]{2,}$/i.test(url.hostname)) fail('Tên miền link ngắn không hợp lệ, ví dụ haipre.vn');
-    return url.origin.toLowerCase();
+    const path = url.pathname.replace(/\/+$/, '');
+    if (!['https:', 'http:'].includes(url.protocol) || url.username || url.password || !/^(\/[A-Za-z0-9_-]{1,40})?$/.test(path) || url.search || url.hash || !/^[a-z0-9.-]+\.[a-z]{2,}$/i.test(url.hostname)) fail('Link ngắn không hợp lệ, ví dụ beeflix.vn hoặc beeflix.vn/haiytb');
+    return url.origin.toLowerCase() + path;
   }
   function saveSettings(data) {
     const values = { shop_name: text(data.shop_name, 100), contact_url: contactUrl(data.contact_url), contact_label: text(data.contact_label, 60), help_text: text(data.help_text, 500), short_domain: shortDomain(data.short_domain) };

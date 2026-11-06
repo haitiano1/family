@@ -76,9 +76,10 @@ function lookupContactUrl(mixed $value): string {
 function lookupShortDomain(mixed $value): string {
     $raw=text(is_string($value)?$value:'',200);if($raw==='')return '';
     if(!preg_match('~^https?://~i',$raw))$raw='https://'.$raw;
-    $u=parse_url($raw);$bad='Tên miền link ngắn không hợp lệ, ví dụ haipre.vn';
-    if(!$u||!in_array(strtolower($u['scheme']??''),['https','http'],true)||isset($u['user'])||isset($u['pass'])||isset($u['query'])||isset($u['fragment'])||!in_array($u['path']??'',['','/'],true)||!preg_match('/^[a-z0-9.-]+\.[a-z]{2,}$/iD',$u['host']??''))fail($bad);
-    return strtolower($u['scheme']).'://'.strtolower($u['host']).(isset($u['port'])?':'.$u['port']:'');
+    $u=parse_url($raw);$bad='Link ngắn không hợp lệ, ví dụ beeflix.vn hoặc beeflix.vn/haiytb';
+    $path=rtrim($u['path']??'','/');
+    if(!$u||!in_array(strtolower($u['scheme']??''),['https','http'],true)||isset($u['user'])||isset($u['pass'])||isset($u['query'])||isset($u['fragment'])||!preg_match('~^(/[A-Za-z0-9_-]{1,40})?$~D',$path)||!preg_match('/^[a-z0-9.-]+\.[a-z]{2,}$/iD',$u['host']??''))fail($bad);
+    return strtolower($u['scheme']).'://'.strtolower($u['host']).(isset($u['port'])?':'.$u['port']:'').$path;
 }
 function lookupSaveSettings(PDO $db,array $d): array {
     $values=['shop_name'=>text($d['shop_name']??'',100),'contact_url'=>lookupContactUrl($d['contact_url']??''),'contact_label'=>text($d['contact_label']??'',60),'help_text'=>text($d['help_text']??'',500),'short_domain'=>lookupShortDomain($d['short_domain']??'')];
