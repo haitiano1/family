@@ -1,3 +1,7 @@
+# 0.28.5 — Link trang tra cứu dùng Link ngắn
+
+Dùng **Cập nhật một chạm**.
+
 # 0.28.4 — Link ngắn kèm đường dẫn
 
 Dùng **Cập nhật một chạm**. Ô Link ngắn nhận dạng `beeflix.vn/haiytb`. Xem LINK-NGAN.md.

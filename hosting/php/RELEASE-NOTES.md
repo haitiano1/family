@@ -1,1 +1,1 @@
-Ô Link ngắn (Thêm → Tra cứu khách → Sửa thông tin) nhận cả đường dẫn, ví dụ beeflix.vn/haiytb: link gửi khách thành https://beeflix.vn/haiytb?MÃ. Tên miền phụ cần file chuyển hướng link-ngan/index.php đặt trong thư mục tương ứng; xem LINK-NGAN.md. Dùng Cập nhật một chạm.
+Nút Copy link trang và Mở trang khách ở Tra cứu khách dùng Link ngắn khi đã điền (ví dụ https://beeflix.vn/haiytb) thay cho …/tra-cuu.html. Dùng Cập nhật một chạm.

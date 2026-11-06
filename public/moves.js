@@ -18,7 +18,8 @@ const statusTemplates = {
   disabled: name => `Tài khoản chủ của ${name} bị Google vô hiệu hoá. Shop đang chuyển bạn sang nhóm mới, hạn dùng giữ nguyên.`
 };
 
-export const lookupPageUrl = () => location.origin + '/tra-cuu.html';
+// The page link the shop shares: the short link when one is set (beeflix.vn/haiytb), else this site.
+export const lookupPageUrl = (state = {}) => { const base = state.lookup_settings?.short_domain; return base ? (/^https?:\/\/[^/]+\/./.test(base) ? base : base + '/') : location.origin + '/tra-cuu.html'; };
 export function familyStatus(state, familyId) {
   return (state.family_statuses || []).find(s => s.family_id === familyId) || { family_id: familyId, status: 'active', note: '', updated_at: '', revision: 0 };
 }
@@ -198,8 +199,8 @@ export function lookupPage(ctx) {
   if (!state.lookup_supported) return ctx.empty('Bản này chưa hỗ trợ trang tra cứu', 'Cập nhật ứng dụng lên bản mới nhất.');
   const settings = state.lookup_settings || {}, incidents = state.families.filter(f => problem(familyStatus(state, f.id).status));
   const moves = state.moves || [], open = moves.filter(m => ['assigned', 'opened', 'failed'].includes(m.effective_state)), waiting = open.filter(m => m.invite_id == null), handed = open.filter(m => m.invite_id != null);
-  const link = lookupPageUrl();
-  return ctx.hero('TRA CỨU KHÁCH', 'Tra cứu & chuyển nhóm', 'Khách nhập Gmail và mã tra cứu để xem tình trạng nhóm và lấy link vào nhóm mới.', ctx.copyButton(link, 'link trang tra cứu', 'Copy link trang') + ` <a class="secondary link-button" href="/tra-cuu.html" target="_blank" rel="noopener">Mở trang khách</a>` + (state.gmail_import ? ' ' + gmailButton(ctx) : ''))
+  const link = lookupPageUrl(state);
+  return ctx.hero('TRA CỨU KHÁCH', 'Tra cứu & chuyển nhóm', 'Khách nhập Gmail và mã tra cứu để xem tình trạng nhóm và lấy link vào nhóm mới.', ctx.copyButton(link, 'link trang tra cứu', 'Copy link trang') + ` <a class="secondary link-button" href="${escape(link)}" target="_blank" rel="noopener">Mở trang khách</a>` + (state.gmail_import ? ' ' + gmailButton(ctx) : ''))
     + `<div class="dashboard-summary stats"><div class="card stat"><h2>Family có sự cố</h2><strong>${incidents.length}</strong></div><div class="card stat"><h2>Khách chờ link</h2><strong>${waiting.length}</strong></div><div class="card stat"><h2>Khách đã nhận link</h2><strong>${handed.length}</strong></div></div>`
     + `<section class="card"><div class="section-heading"><div><h2>Family có sự cố</h2><p>Đặt trạng thái trong trang chi tiết Family.</p></div></div>${incidents.length ? `<div class="table-wrap"><table class="lookup-table"><thead><tr><th scope="col">FAMILY</th><th scope="col">TRẠNG THÁI</th><th scope="col">KHÁCH</th><th scope="col"></th></tr></thead><tbody>${incidents.map(f => { const s = familyStatus(state, f.id); return `<tr><td data-column="family"><a class="email-link" href="#family/${f.id}">${escape(f.name)}</a><span class="subtext">${escape(f.manager_email)}</span></td><td data-column="state"><span class="badge ${statusColors[s.status]}">${escape(familyStatusLabels[s.status])}</span><span class="subtext">${escape(s.note)}</span></td><td data-column="members">${familyOccupancy(state.members, f.id).label}</td><td data-column="actions"><a class="primary link-button tiny" href="#family/${f.id}">Mở Family</a></td></tr>`; }).join('')}</tbody></table></div>` : '<p class="muted">Tất cả Family đang hoạt động bình thường.</p>'}</section>`
     + `<section class="card"><div class="section-heading"><div><h2>Link đã giao cho khách</h2><p>Mới nhất trước. Khách chờ link sẽ tự nhận khi có link Sẵn sàng.</p></div></div>${moveTable(ctx, moves, true)}</section>`
