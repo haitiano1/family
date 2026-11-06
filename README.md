@@ -1,4 +1,6 @@
-# Hải Premium — Quản lý khách hàng 0.28.3
+# Hải Premium — Quản lý khách hàng 0.28.4
+
+Bản 0.28.4: ô **Link ngắn** nhận cả đường dẫn, ví dụ `beeflix.vn/haiytb`; link gửi khách thành `https://beeflix.vn/haiytb?MÃ`. Xem [hướng dẫn](hosting/php/LINK-NGAN.md).
 
 Bản 0.28.3: **link tra cứu ngắn** dạng `https://tên-miền/?K7P2QX` thay cho `…/tra-cuu.html#ma=K7P2QX` (link cũ vẫn mở được), có thể dùng tên miền phụ ngắn hơn ([hướng dẫn](hosting/php/LINK-NGAN.md)). Tin nhắn gửi khách không còn tên Family.
 

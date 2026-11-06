@@ -630,7 +630,8 @@ test('a spare short domain can be saved for customer links', async () => {
   const f = await server(); try {
     const a = f.admin;
     assert.equal((await a('lookup-settings', 'PATCH', { shop_name: 'Hải', short_domain: 'HaiPre.vn/' })).settings.short_domain, 'https://haipre.vn');
-    await a('lookup-settings', 'PATCH', { short_domain: 'haipre.vn/tra-cuu' }, 400);
+    await a('lookup-settings', 'PATCH', { short_domain: 'beeflix.vn/haiytb/x' }, 400);
+    assert.equal((await a('lookup-settings', 'PATCH', { short_domain: 'Beeflix.vn/haiytb/' })).settings.short_domain, 'https://beeflix.vn/haiytb');
     await a('lookup-settings', 'PATCH', { short_domain: 'not a domain' }, 400);
     assert.equal((await a('lookup-settings', 'PATCH', { short_domain: '' })).settings.short_domain, '');
   } finally { await f.close(); }
