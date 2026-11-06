@@ -1,4 +1,6 @@
-# Hải Premium — Quản lý khách hàng 0.28.2
+# Hải Premium — Quản lý khách hàng 0.28.3
+
+Bản 0.28.3: **link tra cứu ngắn** dạng `https://tên-miền/?K7P2QX` thay cho `…/tra-cuu.html#ma=K7P2QX` (link cũ vẫn mở được). Tin nhắn gửi khách không còn tên Family.
 
 Bản 0.28.2: **tự lấy link mời**. Khách đang chờ link mở trang tra cứu thì máy chủ tự đọc Gmail (tối đa một lần mỗi phút), nên mời xong là link tự hiện cho khách, không cần bấm Lấy link mời. Trang quản lý đang mở cũng tự kiểm tra Gmail mỗi phút khi còn mail chờ lấy link.
 

@@ -1,3 +1,7 @@
+# 0.28.3 — Link tra cứu ngắn
+
+Dùng **Cập nhật một chạm**. Link Copy link tra cứu giờ có dạng `https://tên-miền/?K7P2QX`. Link cũ vẫn dùng được.
+
 # 0.28.2 — Tự lấy link mời khi khách tra cứu
 
 Dùng **Cập nhật một chạm**. Không đổi schema hay Apps Script. Cần đã kết nối Google Sheet và cấp quyền đọc Gmail như bản 0.22.0.

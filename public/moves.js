@@ -23,7 +23,8 @@ export function familyStatus(state, familyId) {
   return (state.family_statuses || []).find(s => s.family_id === familyId) || { family_id: familyId, status: 'active', note: '', updated_at: '', revision: 0 };
 }
 const codeOf = (state, address) => state.lookup_codes?.[address] || '';
-const personalLink = code => `${lookupPageUrl()}#ma=${code}`;
+// Short link the shop sends: https://domain/?K7P2QX (older #ma= links keep working).
+const personalLink = code => `${location.origin}/?${code}`;
 export function lookupMessage(state, member) {
   const code = codeOf(state, member.email); if (!code) return '';
   return `Link tra cứu Family của bạn: ${personalLink(code)}\nGmail: ${member.email} · Mã tra cứu: ${code}\nKhi YouTube Premium có vấn đề, mở link bằng Chrome hoặc Safari để xem tình trạng nhóm và nhận link vào nhóm mới.`;
@@ -31,8 +32,9 @@ export function lookupMessage(state, member) {
 const isJoin = move => move.from_family_id == null && !move.from_family_name;
 function moveMessage(state, move) {
   const code = codeOf(state, move.email); if (!code) return '';
-  if (isJoin(move)) return `Chào ${move.customer_name || 'bạn'}, link vào ${move.to_family_name} của bạn ở đây. Mở bằng Chrome hoặc Safari, nhập Gmail ${move.email}: ${personalLink(code)}\nMã tra cứu: ${code}`;
-  return `Chào ${move.customer_name || 'bạn'}, ${move.from_family_name} đang gặp sự cố nên shop đã chuyển bạn sang nhóm mới, hạn dùng giữ nguyên. Mở link này bằng Chrome hoặc Safari, nhập Gmail ${move.email} để lấy link vào nhóm: ${personalLink(code)}\nMã tra cứu: ${code}`;
+  // Customers never see Family names (the shop names them to remember them).
+  if (isJoin(move)) return `Chào bạn, link vào nhóm của bạn ở đây. Mở bằng Chrome hoặc Safari, nhập Gmail ${move.email}: ${personalLink(code)}\nMã tra cứu: ${code}`;
+  return `Chào bạn, nhóm YouTube của bạn đang gặp sự cố nên shop đã chuẩn bị nhóm mới, hạn dùng giữ nguyên. Mở link này bằng Chrome hoặc Safari, nhập Gmail ${move.email} để lấy link vào nhóm mới: ${personalLink(code)}\nMã tra cứu: ${code}`;
 }
 // Result of Lấy link từ Gmail (button and the 10-minute check in sheets.js).
 export function gmailSummary(result) {

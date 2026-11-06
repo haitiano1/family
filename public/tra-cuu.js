@@ -17,6 +17,7 @@ async function call(path, body) {
   return value;
 }
 function codeFromLink() {
+  const short = location.search.match(/^\?([A-Za-z0-9]{6})$/); if (short) return short[1].toUpperCase();
   const hash = decodeURIComponent(location.hash.slice(1));
   const match = hash.match(/(?:^|&)ma=([A-Za-z0-9 -]{6,9})/) || hash.match(/^([A-Za-z0-9]{6})$/);
   return match ? match[1].toUpperCase().replace(/[\s-]/g, '') : '';

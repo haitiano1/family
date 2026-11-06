@@ -1,1 +1,1 @@
-Tự lấy link mời: khi khách đang chờ link mở hoặc đang xem trang tra cứu, máy chủ tự đọc thư mời trong Gmail (tối đa một lần mỗi phút) và đưa link cho khách ngay, không cần bấm Lấy link mời. Trang quản lý đang mở cũng tự kiểm tra Gmail mỗi phút khi còn mail chờ lấy link (bình thường 10 phút). Dùng Cập nhật một chạm; không đổi Apps Script.
+Link tra cứu gửi khách ngắn hơn: https://tên-miền/?MÃ (ví dụ /?K7P2QX) thay cho /tra-cuu.html#ma=MÃ; link cũ khách đã nhận vẫn mở được. Tin nhắn Copy gửi khách không còn tên Family. Dùng Cập nhật một chạm.

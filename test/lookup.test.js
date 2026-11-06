@@ -616,3 +616,12 @@ test('a customer tells the shop Premium stopped: report on the page, in Fix lỗ
     const backup = await a('backup'); assert.equal(backup.tables.customer_reports.length, 4);
   } finally { await f.close(); stub.close(); }
 });
+
+test('short customer link /?CODE opens the lookup page without the access password', async () => {
+  const f = await server({ PUBLIC_ORIGIN: 'https://family.example.com', ACCESS_PASSWORD: 'test-private-access' }); try {
+    const page = await fetch(f.base + '/?K7P2QX', { redirect: 'manual' });
+    assert.equal(page.status, 200); assert.match(await page.text(), /tra-cuu\.js/);
+    assert.equal((await fetch(f.base + '/', { redirect: 'manual' })).status, 302, 'the admin app still asks for the password');
+    assert.equal((await fetch(f.base + '/?K7P2QX&x=1', { redirect: 'manual' })).status, 302);
+  } finally { await f.close(); }
+});

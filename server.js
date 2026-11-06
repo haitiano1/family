@@ -87,6 +87,11 @@ async function handle(req, res) {
       if (result.error) return send(res,result.status,{error:result.error});
       res.setHeader('Set-Cookie',result.cookie);return send(res,200,{ok:true});
     }
+    // Short customer link: /?K7P2QX opens the lookup page with the code filled in (no access password).
+    if (req.method==='GET' && url.pathname==='/' && /^\?[A-Za-z0-9]{6}$/.test(url.search)) {
+      res.writeHead(200,{'Content-Type':'text/html; charset=utf-8','Cache-Control':'no-store','Content-Security-Policy':"default-src 'self'; style-src 'self'; script-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'"});
+      return res.end(readFileSync(path.join(root,'public','tra-cuu.html')));
+    }
     if (access.enabled && !access.authorized(req)) {
       if (url.pathname.startsWith('/api/')) fail('Nhập mật khẩu truy cập để mở dữ liệu.',401);
       if (url.pathname==='/') {res.writeHead(302,{Location:'/access','Cache-Control':'no-store'});return res.end();}
