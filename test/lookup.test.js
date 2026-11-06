@@ -113,7 +113,7 @@ test('incident flow: status, invite pool, bulk move with one link per customer, 
 
     // Customer side: no access password, Gmail + code.
     const info = await f.customer()('info');
-    assert.deepEqual(Object.keys(info.shop).sort(), ['contact_label', 'contact_url', 'help_text', 'shop_name']);
+    assert.deepEqual(Object.keys(info.shop).sort(), ['contact_label', 'contact_url', 'help_text', 'shop_name', 'short_domain']);
     const c = f.customer();
     assert.deepEqual(await c('me'), { signed_in: false });
     await c('verify', 'POST', { email: 'minhanh@example.com', code: 'AAAAAA' }, 401);
@@ -242,7 +242,7 @@ test('lookup settings validate the contact link and backups v10 keep statuses, i
     const a = f.admin, { oldFamily, newFamily, minh } = await incident(a);
     await a('lookup-settings', 'PATCH', { shop_name: 'Shop', contact_url: 'javascript:alert(1)' }, 400);
     await a('lookup-settings', 'PATCH', { shop_name: 'Shop Family', contact_url: 'https://m.me/shop.family', contact_label: 'Nhắn Messenger', help_text: 'Phản hồi 8h–22h' });
-    assert.deepEqual((await f.customer()('info')).shop, { shop_name: 'Shop Family', contact_url: 'https://m.me/shop.family', contact_label: 'Nhắn Messenger', help_text: 'Phản hồi 8h–22h' });
+    assert.deepEqual((await f.customer()('info')).shop, { shop_name: 'Shop Family', contact_url: 'https://m.me/shop.family', contact_label: 'Nhắn Messenger', help_text: 'Phản hồi 8h–22h', short_domain: '' });
     await a(`families/${oldFamily.id}/status`, 'PATCH', { status: 'scanned', note: 'Google quét', revision: 0 });
     const inv = await a(`families/${newFamily.id}/invites`, 'POST', { label: 'slot', url: inviteUrl(7), sent_on: day(-1) }, 201);
     let state = await a('state');
@@ -623,5 +623,15 @@ test('short customer link /?CODE opens the lookup page without the access passwo
     assert.equal(page.status, 200); assert.match(await page.text(), /tra-cuu\.js/);
     assert.equal((await fetch(f.base + '/', { redirect: 'manual' })).status, 302, 'the admin app still asks for the password');
     assert.equal((await fetch(f.base + '/?K7P2QX&x=1', { redirect: 'manual' })).status, 302);
+  } finally { await f.close(); }
+});
+
+test('a spare short domain can be saved for customer links', async () => {
+  const f = await server(); try {
+    const a = f.admin;
+    assert.equal((await a('lookup-settings', 'PATCH', { shop_name: 'Hải', short_domain: 'HaiPre.vn/' })).settings.short_domain, 'https://haipre.vn');
+    await a('lookup-settings', 'PATCH', { short_domain: 'haipre.vn/tra-cuu' }, 400);
+    await a('lookup-settings', 'PATCH', { short_domain: 'not a domain' }, 400);
+    assert.equal((await a('lookup-settings', 'PATCH', { short_domain: '' })).settings.short_domain, '');
   } finally { await f.close(); }
 });

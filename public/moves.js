@@ -24,17 +24,17 @@ export function familyStatus(state, familyId) {
 }
 const codeOf = (state, address) => state.lookup_codes?.[address] || '';
 // Short link the shop sends: https://domain/?K7P2QX (older #ma= links keep working).
-const personalLink = code => `${location.origin}/?${code}`;
+const personalLink = (state, code) => `${state.lookup_settings?.short_domain || location.origin}/?${code}`;
 export function lookupMessage(state, member) {
   const code = codeOf(state, member.email); if (!code) return '';
-  return `Link tra cứu Family của bạn: ${personalLink(code)}\nGmail: ${member.email} · Mã tra cứu: ${code}\nKhi YouTube Premium có vấn đề, mở link bằng Chrome hoặc Safari để xem tình trạng nhóm và nhận link vào nhóm mới.`;
+  return `Link tra cứu Family của bạn: ${personalLink(state, code)}\nGmail: ${member.email} · Mã tra cứu: ${code}\nKhi YouTube Premium có vấn đề, mở link bằng Chrome hoặc Safari để xem tình trạng nhóm và nhận link vào nhóm mới.`;
 }
 const isJoin = move => move.from_family_id == null && !move.from_family_name;
 function moveMessage(state, move) {
   const code = codeOf(state, move.email); if (!code) return '';
   // Customers never see Family names (the shop names them to remember them).
-  if (isJoin(move)) return `Chào bạn, link vào nhóm của bạn ở đây. Mở bằng Chrome hoặc Safari, nhập Gmail ${move.email}: ${personalLink(code)}\nMã tra cứu: ${code}`;
-  return `Chào bạn, nhóm YouTube của bạn đang gặp sự cố nên shop đã chuẩn bị nhóm mới, hạn dùng giữ nguyên. Mở link này bằng Chrome hoặc Safari, nhập Gmail ${move.email} để lấy link vào nhóm mới: ${personalLink(code)}\nMã tra cứu: ${code}`;
+  if (isJoin(move)) return `Chào bạn, link vào nhóm của bạn ở đây. Mở bằng Chrome hoặc Safari, nhập Gmail ${move.email}: ${personalLink(state, code)}\nMã tra cứu: ${code}`;
+  return `Chào bạn, nhóm YouTube của bạn đang gặp sự cố nên shop đã chuẩn bị nhóm mới, hạn dùng giữ nguyên. Mở link này bằng Chrome hoặc Safari, nhập Gmail ${move.email} để lấy link vào nhóm mới: ${personalLink(state, code)}\nMã tra cứu: ${code}`;
 }
 // Result of Lấy link từ Gmail (button and the 10-minute check in sheets.js).
 export function gmailSummary(result) {
@@ -386,7 +386,7 @@ export async function handleLookupAction(ctx, action, button) {
   }
   if (action === 'lookup-settings') {
     const s = state.lookup_settings || {};
-    ctx.modal('Thông tin trang tra cứu', ctx.input('shop_name', 'Tên shop', 'text', s.shop_name, false, 'maxlength="100"') + ctx.input('contact_url', 'Link liên hệ (Messenger, Zalo…)', 'url', s.contact_url, false, 'maxlength="500" placeholder="https://m.me/…"') + ctx.input('contact_label', 'Chữ trên nút liên hệ', 'text', s.contact_label, false, 'maxlength="60" placeholder="Nhắn shop"') + `<div class="form-field"><label for="field-help_text">Ghi chú cho khách</label><textarea id="field-help_text" name="help_text" maxlength="500" placeholder="ví dụ Shop phản hồi trong 30 phút, 8h–22h.">${ctx.escape(s.help_text)}</textarea></div>`, async data => { await ctx.patch('lookup-settings', data); ctx.toast('Đã lưu thông tin trang tra cứu.'); });
+    ctx.modal('Thông tin trang tra cứu', ctx.input('shop_name', 'Tên shop', 'text', s.shop_name, false, 'maxlength="100"') + ctx.input('contact_url', 'Link liên hệ (Messenger, Zalo…)', 'url', s.contact_url, false, 'maxlength="500" placeholder="https://m.me/…"') + ctx.input('contact_label', 'Chữ trên nút liên hệ', 'text', s.contact_label, false, 'maxlength="60" placeholder="Nhắn shop"') + `<div class="form-field"><label for="field-help_text">Ghi chú cho khách</label><textarea id="field-help_text" name="help_text" maxlength="500" placeholder="ví dụ Shop phản hồi trong 30 phút, 8h–22h.">${ctx.escape(s.help_text)}</textarea></div>` + ctx.input('short_domain', 'Tên miền link ngắn (không bắt buộc)', 'text', s.short_domain, false, 'maxlength="200" placeholder="ví dụ haipre.vn" autocapitalize="none" spellcheck="false"') + '<p class="subtext">Tên miền phụ đã chuyển hướng về website này. Link gửi khách sẽ thành tên-miền-phụ/?MÃ. Để trống thì dùng tên miền website.</p>', async data => { await ctx.patch('lookup-settings', data); ctx.toast('Đã lưu thông tin trang tra cứu.'); });
     return true;
   }
   return false;

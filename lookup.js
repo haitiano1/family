@@ -24,7 +24,7 @@ export function inviteMailBase(address) {
 }
 export const codeAlphabet = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
 export const lookupLimits = { window: 15 * 60000, email: 8, ip: 40, session: 60 * 60000, moves: 50 };
-const settingNames = ['shop_name', 'contact_url', 'contact_label', 'help_text'];
+const settingNames = ['shop_name', 'contact_url', 'contact_label', 'help_text', 'short_domain'];
 
 // An invite is "used" once a customer joined with it, "assigned" while an open move still
 // holds it for a customer who is in the target Family, otherwise it is ready to give out.
@@ -82,8 +82,16 @@ export function initLookup(db, { fail, email, text, calendarDate, log }) {
     if (!['https:', 'http:'].includes(url.protocol) || url.username || url.password) fail('Link liên hệ cần bắt đầu bằng https:// hoặc http://');
     return result;
   }
+  // A spare domain that redirects to this site, used only to build shorter customer links.
+  function shortDomain(value) {
+    let raw = text(value, 200); if (!raw) return '';
+    if (!/^https?:\/\//i.test(raw)) raw = 'https://' + raw;
+    let url; try { url = new URL(raw); } catch { fail('Tên miền link ngắn không hợp lệ, ví dụ haipre.vn'); }
+    if (!['https:', 'http:'].includes(url.protocol) || url.username || url.password || (url.pathname !== '/' && url.pathname !== '') || url.search || url.hash || !/^[a-z0-9.-]+\.[a-z]{2,}$/i.test(url.hostname)) fail('Tên miền link ngắn không hợp lệ, ví dụ haipre.vn');
+    return url.origin.toLowerCase();
+  }
   function saveSettings(data) {
-    const values = { shop_name: text(data.shop_name, 100), contact_url: contactUrl(data.contact_url), contact_label: text(data.contact_label, 60), help_text: text(data.help_text, 500) };
+    const values = { shop_name: text(data.shop_name, 100), contact_url: contactUrl(data.contact_url), contact_label: text(data.contact_label, 60), help_text: text(data.help_text, 500), short_domain: shortDomain(data.short_domain) };
     return atomic('lookup_settings_save', () => {
       for (const [name, value] of Object.entries(values)) {
         if (one('SELECT id FROM lookup_settings WHERE name=?', name)) run('UPDATE lookup_settings SET value=? WHERE name=?', value, name);

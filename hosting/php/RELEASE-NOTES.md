@@ -1,1 +1,1 @@
-Link tra cứu gửi khách ngắn hơn: https://tên-miền/?MÃ (ví dụ /?K7P2QX) thay cho /tra-cuu.html#ma=MÃ; link cũ khách đã nhận vẫn mở được. Tin nhắn Copy gửi khách không còn tên Family. Dùng Cập nhật một chạm.
+Link tra cứu gửi khách ngắn hơn: https://tên-miền/?MÃ (ví dụ /?K7P2QX) thay cho /tra-cuu.html#ma=MÃ; link cũ khách đã nhận vẫn mở được. Tin nhắn Copy gửi khách không còn tên Family. Có thể dùng một tên miền phụ ngắn hơn: Thêm → Tra cứu khách → Sửa thông tin → Tên miền link ngắn, xem LINK-NGAN.md. Dùng Cập nhật một chạm.
