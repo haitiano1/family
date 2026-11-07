@@ -85,7 +85,7 @@ const chibi = () => `<svg viewBox="0 0 56 62" aria-hidden="true">
 
 function joinTodo(move, includeLeave) {
   const link = move.invite_url
-    ? `<a class="btn go big" href="${escape(move.invite_url)}" rel="noreferrer" data-open="${move.id}">${includeLeave ? 'Vào nhóm mới' : 'Vào nhóm'}</a><span class="sub">Link riêng của bạn, chỉ dùng được 1 lần. Đừng gửi cho người khác.</span>${move.invite_expires_on ? `<span class="sub">Link còn hiệu lực đến ${day(move.invite_expires_on)}.</span>` : ''}`
+    ? `<a class="btn go big" href="${escape(move.invite_url)}" rel="noreferrer" data-open="${move.id}">${includeLeave ? 'Vào nhóm mới' : 'Vào nhóm'}</a><span class="sub">Link riêng của bạn, chỉ dùng được 1 lần. Đừng gửi cho người khác.</span>${move.invite_expires_on ? `<span class="sub">Link còn hiệu lực đến ${day(move.invite_expires_on)}.</span>` : ''}${shop.contact_url ? `<span class="sub">Bấm link mà Google báo lỗi, không vào được? ${contactLink('Nhắn shop', '')} kèm ảnh chụp lỗi.</span>` : ''}`
     : '';
   return `<ol class="todo">
       ${includeLeave ? `<li><div><h3>Rời nhóm cũ</h3><p>Vào trang Gia đình của Google, chọn Rời khỏi nhóm gia đình. Google báo bạn không còn ở nhóm nào thì bỏ qua bước này.</p><a class="btn small" href="https://g.co/YourFamily" target="_blank" rel="noopener noreferrer">Mở trang Gia đình Google</a></div></li>` : ''}

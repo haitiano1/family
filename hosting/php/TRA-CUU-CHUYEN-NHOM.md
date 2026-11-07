@@ -36,7 +36,10 @@ Web không cần biết khách đã vào nhóm hay chưa. Tín hiệu duy nhất
 - Khi Family hết link Sẵn sàng, link đã giao quá **3 ngày** mà khách chưa bấm sẽ tự chuyển cho khách tra cứu tiếp theo. Khách cũ chuyển về chờ link mới; mở lại trang sẽ thấy Shop đang chuẩn bị link.
 - Muốn làm ngay: bấm **Thu hồi về kho** trên dòng link. Link về Sẵn sàng, khách cũ chờ link mới.
 - Đổi số ngày hoặc tắt (điền 0) ở **Thêm → Tra cứu khách → Sửa thông tin → Tự thu hồi link khách chưa bấm sau (ngày)**.
-- Link khách đã bấm không bao giờ bị thu hồi tự động. Khách bấm mà không vào được thì khách liên hệ shop.
+- Link khách đã bấm không bao giờ bị thu hồi tự động.
+- Khách bấm mà không vào được: dưới nút Vào nhóm mới có dòng *Nhắn shop kèm ảnh chụp lỗi*. Tùy lỗi Google báo:
+  - *Chỉ được đổi nhóm 1 lần trong 12 tháng* hoặc *đang ở nhóm khác*: lời mời chưa bị dùng, bấm **Thu hồi về kho** để giao link cho khách khác.
+  - *Lời mời đã được dùng hoặc hết hạn*: bấm **Đổi link** để giao khách link khác, rồi xóa link cũ khỏi kho.
 
 ## Khách báo mất Premium (0.28.0)
 
