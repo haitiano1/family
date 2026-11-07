@@ -188,8 +188,8 @@ function calmCard(item) {
     + (handled ? note('Shop đã xử lý báo lỗi của bạn' + (item.problem.handled_at ? ' lúc ' + time(item.problem.handled_at) : ''), item.problem.handled_note || 'Mở lại YouTube để kiểm tra. Vẫn lỗi thì báo lại cho shop.', 'green') : '')
     + planCard(item)
     + (expired
-      ? `<section class="card"><h2>Gia hạn gói</h2><p class="muted">Nhắn shop để chọn gói và thanh toán. Shop xác nhận xong, bạn tải lại trang này.</p>${contactButtons()}${open ? '' : `<button type="button" class="btn quiet" data-act="problem-open" data-member="${item.member_ref}">Vẫn đang gia hạn mà mất Premium? Báo cho shop</button>`}</section>`
-      : `<section class="card"><h2>YouTube chưa hiện Premium?</h2><ul class="tips"><li>Kiểm tra YouTube đang đăng nhập đúng ${escape(data.email)}.</li><li>Đăng xuất YouTube rồi đăng nhập lại, đợi vài phút.</li></ul>${open ? '' : `<div class="actions"><button type="button" class="btn" data-act="problem-open" data-member="${item.member_ref}">Báo mất Premium cho shop</button></div>`}</section>`)
+      ? `<section class="card"><h2>Gia hạn gói</h2><p class="muted">Nhắn shop để chọn gói và thanh toán. Shop xác nhận xong, bạn tải lại trang này.</p>${contactButtons()}${open ? '' : `<button type="button" class="btn alert" data-act="problem-open" data-member="${item.member_ref}">Vẫn đang gia hạn mà mất Premium? Báo cho shop</button>`}</section>`
+      : `<section class="card"><h2>YouTube chưa hiện Premium?</h2><ul class="tips"><li>Kiểm tra YouTube đang đăng nhập đúng ${escape(data.email)}.</li><li>Đăng xuất YouTube rồi đăng nhập lại, đợi vài phút.</li></ul>${open ? '' : `<div class="actions"><button type="button" class="btn alert big" data-act="problem-open" data-member="${item.member_ref}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 2 20h20z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><path d="M12 10v4M12 17v.5" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg>Báo mất Premium cho shop</button></div>`}</section>`)
     + (open ? problemForm(item) : '');
 }
 function itemView(item) {

@@ -215,3 +215,8 @@ fieldset { margin: 0; padding: 0; border: 0; min-width: 0; display: grid; gap: 1
 .btn.contact.facebook { background: #1877f2; }
 .btn.contact.other { background: var(--card); color: var(--ink); border-color: var(--line-strong); }
 .btn.contact.zalo:hover { background: #0057d6; } .btn.contact.facebook:hover { background: #1465cf; }
+/* Báo mất Premium: the one red action on a calm page */
+.btn.alert { background: var(--stop); border-color: var(--stop); color: #fff; font-weight: 750; box-shadow: 0 8px 20px -10px rgba(229, 72, 77, .85); }
+.btn.alert:hover { background: #d23c41; }
+.btn.alert svg { width: 20px; height: 20px; flex: none; }
+.actions .btn.alert { flex: 1 1 100%; }
