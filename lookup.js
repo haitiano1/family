@@ -24,7 +24,7 @@ export function inviteMailBase(address) {
 }
 export const codeAlphabet = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
 export const lookupLimits = { window: 15 * 60000, email: 8, ip: 40, session: 60 * 60000, moves: 50 };
-const settingNames = ['shop_name', 'contact_url', 'contact_label', 'help_text', 'short_domain'];
+const settingNames = ['shop_name', 'contact_url', 'contact_label', 'help_text', 'short_domain', 'zalo_url', 'facebook_url'];
 
 // An invite is "used" once a customer joined with it, "assigned" while an open move still
 // holds it for a customer who is in the target Family, otherwise it is ready to give out.
@@ -93,7 +93,7 @@ export function initLookup(db, { fail, email, text, calendarDate, log }) {
     return url.origin.toLowerCase() + path;
   }
   function saveSettings(data) {
-    const values = { shop_name: text(data.shop_name, 100), contact_url: contactUrl(data.contact_url), contact_label: text(data.contact_label, 60), help_text: text(data.help_text, 500), short_domain: shortDomain(data.short_domain) };
+    const values = { shop_name: text(data.shop_name, 100), contact_url: contactUrl(data.contact_url), contact_label: text(data.contact_label, 60), help_text: text(data.help_text, 500), short_domain: shortDomain(data.short_domain), zalo_url: contactUrl(data.zalo_url), facebook_url: contactUrl(data.facebook_url) };
     return atomic('lookup_settings_save', () => {
       for (const [name, value] of Object.entries(values)) {
         if (one('SELECT id FROM lookup_settings WHERE name=?', name)) run('UPDATE lookup_settings SET value=? WHERE name=?', value, name);

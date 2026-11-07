@@ -205,3 +205,13 @@ fieldset { margin: 0; padding: 0; border: 0; min-width: 0; display: grid; gap: 1
   *, *::before, *::after { animation: none !important; transition: none !important; }
 }
 @media (max-width: 420px) { .labels { font-size: 11px; letter-spacing: -.01em; } }
+/* Contact buttons: Zalo, Facebook, other */
+.contacts { display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; }
+.card .contacts { justify-content: stretch; }
+.card .contacts .btn { flex: 1 1 140px; }
+.btn.contact { gap: 8px; color: #fff; border-color: transparent; font-weight: 700; }
+.btn.contact svg { width: 20px; height: 20px; flex: none; }
+.btn.contact.zalo { background: #0068ff; }
+.btn.contact.facebook { background: #1877f2; }
+.btn.contact.other { background: var(--card); color: var(--ink); border-color: var(--line-strong); }
+.btn.contact.zalo:hover { background: #0057d6; } .btn.contact.facebook:hover { background: #1465cf; }

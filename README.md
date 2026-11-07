@@ -1,4 +1,6 @@
-# Hải Premium — Quản lý khách hàng 0.28.5
+# Hải Premium — Quản lý khách hàng 0.28.6
+
+Bản 0.28.6: **Thông tin hiển thị cho khách** có riêng **Link Zalo** và **Link Facebook / Messenger**; trang tra cứu hiện nút Zalo và Facebook kèm biểu tượng.
 
 Bản 0.28.5: nút **Copy link trang** và **Mở trang khách** ở Tra cứu khách dùng Link ngắn (ví dụ `https://beeflix.vn/haiytb`) khi đã điền.
 

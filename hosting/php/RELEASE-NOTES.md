@@ -1,1 +1,1 @@
-Nút Copy link trang và Mở trang khách ở Tra cứu khách dùng Link ngắn khi đã điền (ví dụ https://beeflix.vn/haiytb) thay cho …/tra-cuu.html. Dùng Cập nhật một chạm.
+Thông tin hiển thị cho khách có thêm Link Zalo và Link Facebook / Messenger (Thêm → Tra cứu khách → Sửa thông tin). Trang tra cứu hiện nút Zalo và Facebook kèm biểu tượng ở chân trang, trang đăng nhập và thẻ gia hạn; link liên hệ cũ vẫn dùng được như Link liên hệ khác. Nút Copy link trang và Mở trang khách dùng Link ngắn khi đã điền. Dùng Cập nhật một chạm.

@@ -113,7 +113,7 @@ test('incident flow: status, invite pool, bulk move with one link per customer, 
 
     // Customer side: no access password, Gmail + code.
     const info = await f.customer()('info');
-    assert.deepEqual(Object.keys(info.shop).sort(), ['contact_label', 'contact_url', 'help_text', 'shop_name', 'short_domain']);
+    assert.deepEqual(Object.keys(info.shop).sort(), ['contact_label', 'contact_url', 'facebook_url', 'help_text', 'shop_name', 'short_domain', 'zalo_url']);
     const c = f.customer();
     assert.deepEqual(await c('me'), { signed_in: false });
     await c('verify', 'POST', { email: 'minhanh@example.com', code: 'AAAAAA' }, 401);
@@ -242,7 +242,7 @@ test('lookup settings validate the contact link and backups v10 keep statuses, i
     const a = f.admin, { oldFamily, newFamily, minh } = await incident(a);
     await a('lookup-settings', 'PATCH', { shop_name: 'Shop', contact_url: 'javascript:alert(1)' }, 400);
     await a('lookup-settings', 'PATCH', { shop_name: 'Shop Family', contact_url: 'https://m.me/shop.family', contact_label: 'Nhắn Messenger', help_text: 'Phản hồi 8h–22h' });
-    assert.deepEqual((await f.customer()('info')).shop, { shop_name: 'Shop Family', contact_url: 'https://m.me/shop.family', contact_label: 'Nhắn Messenger', help_text: 'Phản hồi 8h–22h', short_domain: '' });
+    assert.deepEqual((await f.customer()('info')).shop, { shop_name: 'Shop Family', contact_url: 'https://m.me/shop.family', contact_label: 'Nhắn Messenger', help_text: 'Phản hồi 8h–22h', short_domain: '', zalo_url: '', facebook_url: '' });
     await a(`families/${oldFamily.id}/status`, 'PATCH', { status: 'scanned', note: 'Google quét', revision: 0 });
     const inv = await a(`families/${newFamily.id}/invites`, 'POST', { label: 'slot', url: inviteUrl(7), sent_on: day(-1) }, 201);
     let state = await a('state');
@@ -634,5 +634,14 @@ test('a spare short domain can be saved for customer links', async () => {
     assert.equal((await a('lookup-settings', 'PATCH', { short_domain: 'Beeflix.vn/haiytb/' })).settings.short_domain, 'https://beeflix.vn/haiytb');
     await a('lookup-settings', 'PATCH', { short_domain: 'not a domain' }, 400);
     assert.equal((await a('lookup-settings', 'PATCH', { short_domain: '' })).settings.short_domain, '');
+  } finally { await f.close(); }
+});
+
+test('Zalo and Facebook links are saved and shown to customers', async () => {
+  const f = await server(); try {
+    await f.admin('lookup-settings', 'PATCH', { zalo_url: 'https://zalo.me/0901234567', facebook_url: 'https://m.me/hai.premium' });
+    const shop = (await f.customer()('info')).shop;
+    assert.deepEqual([shop.zalo_url, shop.facebook_url], ['https://zalo.me/0901234567', 'https://m.me/hai.premium']);
+    await f.admin('lookup-settings', 'PATCH', { zalo_url: 'javascript:alert(1)' }, 400);
   } finally { await f.close(); }
 });

@@ -22,9 +22,22 @@ function codeFromLink() {
   const match = hash.match(/(?:^|&)ma=([A-Za-z0-9 -]{6,9})/) || hash.match(/^([A-Za-z0-9]{6})$/);
   return match ? match[1].toUpperCase().replace(/[\s-]/g, '') : '';
 }
-const contactLink = (text = shop.contact_label || 'Nhắn shop', type = 'btn') => shop.contact_url ? `<a class="${type}" href="${escape(shop.contact_url)}" target="_blank" rel="noopener noreferrer">${escape(text)}</a>` : '';
+// Simple, generic icons (not the apps' logos) next to the names.
+const icons = {
+  zalo: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3C6.5 3 2 6.9 2 11.7c0 2.6 1.3 4.9 3.4 6.5L4.6 21l3.4-1.7c1.2.4 2.6.6 4 .6 5.5 0 10-3.9 10-8.7S17.5 3 12 3z" fill="currentColor"/><path d="M8 9h5l-5 6h5" fill="none" stroke="#fff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><path d="M15.5 9v6" stroke="#fff" stroke-width="1.8" stroke-linecap="round"/></svg>',
+  facebook: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2.5C6.6 2.5 2.5 6.4 2.5 11.6c0 2.8 1.2 5.2 3.1 6.9v3l2.9-1.6c1.1.3 2.3.5 3.5.5 5.4 0 9.5-3.9 9.5-9.1S17.4 2.5 12 2.5z" fill="currentColor"/><path d="m6.8 14.3 3.2-3.4 2 1.8 3.2-3.4-3.2 5-2-1.8z" fill="#fff" stroke="#fff" stroke-width="1" stroke-linejoin="round"/></svg>',
+  other: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16v11H8l-4 4z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></svg>'
+};
+const contacts = () => [
+  shop.zalo_url && { key: 'zalo', href: shop.zalo_url, text: 'Zalo' },
+  shop.facebook_url && { key: 'facebook', href: shop.facebook_url, text: 'Facebook' },
+  shop.contact_url && { key: 'other', href: shop.contact_url, text: shop.contact_label || 'Nhắn shop' }
+].filter(Boolean);
+// One inline link (first contact the shop set) or the row of contact buttons with icons.
+const contactLink = (text = 'Nhắn shop', type = 'btn') => { const first = contacts()[0]; return first ? `<a class="${type}" href="${escape(first.href)}" target="_blank" rel="noopener noreferrer">${escape(text)}</a>` : ''; };
+const contactButtons = () => { const list = contacts(); return list.length ? `<div class="contacts">${list.map(c => `<a class="btn contact ${c.key}" href="${escape(c.href)}" target="_blank" rel="noopener noreferrer">${icons[c.key]}<span>${escape(c.text)}</span></a>`).join('')}</div>` : ''; };
 function footer() {
-  $('#foot').innerHTML = (shop.help_text ? `<p>${escape(shop.help_text)}</p>` : '') + (shop.contact_url ? `<p>Cần hỗ trợ? ${contactLink(shop.contact_label || 'Nhắn shop', '')}</p>` : '');
+  $('#foot').innerHTML = (shop.help_text ? `<p>${escape(shop.help_text)}</p>` : '') + (contacts().length ? `<p>Cần hỗ trợ? Nhắn shop qua</p>${contactButtons()}` : '');
 }
 function show(html, focus = true) {
   $('#view').innerHTML = html;
@@ -44,7 +57,7 @@ function loginView(error = '', email = '', code = codeFromLink()) {
     </form>
   </section>
   <p class="trust">Trang chỉ hiện thông tin của chính bạn. Shop không bao giờ hỏi mật khẩu Gmail.</p>
-  ${shop.contact_url ? `<p class="muted">Chưa có mã? ${contactLink('Nhắn shop để lấy mã', '')}</p>` : ''}`, false);
+  ${contacts().length ? `<p class="muted">Chưa có mã? Nhắn shop để lấy mã:</p>${contactButtons()}` : ''}`, false);
   (email ? $('#code') : $('#email')).focus();
 }
 
@@ -175,8 +188,8 @@ function calmCard(item) {
     + (handled ? note('Shop đã xử lý báo lỗi của bạn' + (item.problem.handled_at ? ' lúc ' + time(item.problem.handled_at) : ''), item.problem.handled_note || 'Mở lại YouTube để kiểm tra. Vẫn lỗi thì báo lại cho shop.', 'green') : '')
     + planCard(item)
     + (expired
-      ? `<section class="card"><h2>Gia hạn gói</h2><p class="muted">Nhắn shop để chọn gói và thanh toán. Shop xác nhận xong, bạn tải lại trang này.</p>${contactLink('Nhắn shop để gia hạn', 'btn primary big')}${open ? '' : `<button type="button" class="btn quiet" data-act="problem-open" data-member="${item.member_ref}">Vẫn đang gia hạn mà mất Premium? Báo cho shop</button>`}</section>`
-      : `<section class="card"><h2>YouTube chưa hiện Premium?</h2><ul class="tips"><li>Kiểm tra YouTube đang đăng nhập đúng ${escape(data.email)}.</li><li>Đăng xuất YouTube rồi đăng nhập lại, đợi vài phút.</li></ul>${open ? '' : `<div class="actions"><button type="button" class="btn" data-act="problem-open" data-member="${item.member_ref}">Báo mất Premium cho shop</button>${contactLink('Nhắn shop')}</div>`}</section>`)
+      ? `<section class="card"><h2>Gia hạn gói</h2><p class="muted">Nhắn shop để chọn gói và thanh toán. Shop xác nhận xong, bạn tải lại trang này.</p>${contactButtons()}${open ? '' : `<button type="button" class="btn quiet" data-act="problem-open" data-member="${item.member_ref}">Vẫn đang gia hạn mà mất Premium? Báo cho shop</button>`}</section>`
+      : `<section class="card"><h2>YouTube chưa hiện Premium?</h2><ul class="tips"><li>Kiểm tra YouTube đang đăng nhập đúng ${escape(data.email)}.</li><li>Đăng xuất YouTube rồi đăng nhập lại, đợi vài phút.</li></ul>${open ? '' : `<div class="actions"><button type="button" class="btn" data-act="problem-open" data-member="${item.member_ref}">Báo mất Premium cho shop</button></div>`}</section>`)
     + (open ? problemForm(item) : '');
 }
 function itemView(item) {
@@ -186,7 +199,7 @@ function itemView(item) {
 function resultView(focus = true) {
   const items = data.items || [];
   show(`<div class="hello"><h1>Xin chào</h1><p>${escape(data.email)}</p></div>`
-    + (items.length ? items.map(itemView).join('') : `<section class="card"><h2>Chưa tìm thấy nhóm đang hoạt động</h2><p class="muted">Gmail này không còn trong nhóm nào của shop.</p>${contactLink()}</section>`), focus);
+    + (items.length ? items.map(itemView).join('') : `<section class="card"><h2>Chưa tìm thấy nhóm đang hoạt động</h2><p class="muted">Gmail này không còn trong nhóm nào của shop.</p>${contactButtons()}</section>`), focus);
   animateProgress(); watch();
 }
 // The runner starts from where it last stood (0 on first view) and runs to the current stage.
