@@ -26,8 +26,7 @@ a { color: var(--blue-dark); }
 .top { background: var(--night); color: #fff; }
 .top-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 58px; }
 .shop { display: inline-flex; align-items: center; gap: 10px; font-weight: 750; min-width: 0; letter-spacing: -.005em; }
-.shop-mark { flex: none; width: 30px; height: 30px; border-radius: 9px; background: linear-gradient(145deg, #3b6cff, #22c55e); position: relative; }
-.shop-mark::after { content: ""; position: absolute; left: 11px; top: 8px; border-left: 11px solid #fff; border-top: 7px solid transparent; border-bottom: 7px solid transparent; }
+.shop-mark { flex: none; width: 34px; height: 34px; display: block; }
 #shop-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .top .link-button { color: #c7d4f5; }
 
