@@ -283,7 +283,7 @@ document.addEventListener('click', async event => {
 window.addEventListener('hashchange', () => { if (!data && codeFromLink() && $('#code')) $('#code').value = codeFromLink(); });
 
 try { shop = (await call('info')).shop || {}; } catch { shop = {}; }
-if (shop.shop_name) { $('#shop-name').textContent = shop.shop_name; document.title = 'Tra cứu nhóm · ' + shop.shop_name; }
+// The customer page keeps its own heading; the shop name is still used elsewhere (Telegram, notes).
 footer();
 try { const current = await call('me'); if (current.signed_in === false) loginView(); else render(current, false); }
 catch (error) { loginView(error.message); }
