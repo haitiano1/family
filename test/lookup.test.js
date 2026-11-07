@@ -113,7 +113,7 @@ test('incident flow: status, invite pool, bulk move with one link per customer, 
 
     // Customer side: no access password, Gmail + code.
     const info = await f.customer()('info');
-    assert.deepEqual(Object.keys(info.shop).sort(), ['contact_label', 'contact_url', 'help_text', 'shop_name', 'short_domain']);
+    assert.deepEqual(Object.keys(info.shop).sort(), ['contact_label', 'contact_url', 'help_text', 'reclaim_days', 'shop_name', 'short_domain']);
     const c = f.customer();
     assert.deepEqual(await c('me'), { signed_in: false });
     await c('verify', 'POST', { email: 'minhanh@example.com', code: 'AAAAAA' }, 401);
@@ -242,7 +242,7 @@ test('lookup settings validate the contact link and backups v10 keep statuses, i
     const a = f.admin, { oldFamily, newFamily, minh } = await incident(a);
     await a('lookup-settings', 'PATCH', { shop_name: 'Shop', contact_url: 'javascript:alert(1)' }, 400);
     await a('lookup-settings', 'PATCH', { shop_name: 'Shop Family', contact_url: 'https://m.me/shop.family', contact_label: 'Nhắn Messenger', help_text: 'Phản hồi 8h–22h' });
-    assert.deepEqual((await f.customer()('info')).shop, { shop_name: 'Shop Family', contact_url: 'https://m.me/shop.family', contact_label: 'Nhắn Messenger', help_text: 'Phản hồi 8h–22h', short_domain: '' });
+    assert.deepEqual((await f.customer()('info')).shop, { shop_name: 'Shop Family', contact_url: 'https://m.me/shop.family', contact_label: 'Nhắn Messenger', help_text: 'Phản hồi 8h–22h', short_domain: '', reclaim_days: '' });
     await a(`families/${oldFamily.id}/status`, 'PATCH', { status: 'scanned', note: 'Google quét', revision: 0 });
     const inv = await a(`families/${newFamily.id}/invites`, 'POST', { label: 'slot', url: inviteUrl(7), sent_on: day(-1) }, 201);
     let state = await a('state');
@@ -634,5 +634,40 @@ test('a spare short domain can be saved for customer links', async () => {
     assert.equal((await a('lookup-settings', 'PATCH', { short_domain: 'Beeflix.vn/haiytb/' })).settings.short_domain, 'https://beeflix.vn/haiytb');
     await a('lookup-settings', 'PATCH', { short_domain: 'not a domain' }, 400);
     assert.equal((await a('lookup-settings', 'PATCH', { short_domain: '' })).settings.short_domain, '');
+  } finally { await f.close(); }
+});
+
+test('a link the customer never clicked goes to the next customer when the Family runs out of links', async () => {
+  const { DatabaseSync } = await import('node:sqlite');
+  const f = await server(); try {
+    const a = f.admin;
+    const fam = await a('families', 'POST', { name: 'Family 60', manager_email: 'owner60@example.com' }, 201);
+    for (const m of ['an60@example.com', 'binh60@example.com', 'chi60@example.com']) await a('members', 'POST', { family_id: fam.id, email: m, expires_at: day(30), membership_status: 'invited' }, 201);
+    const one = await a(`families/${fam.id}/invites`, 'POST', { label: 'slot1', url: inviteUrl(601), sent_on: day(0) }, 201);
+    const two = await a(`families/${fam.id}/invites`, 'POST', { label: 'slot2', url: inviteUrl(602), sent_on: day(0) }, 201);
+    const codes = (await a('state')).lookup_codes, look = async address => (await f.customer()('verify', 'POST', { email: address, code: codes[address] })).items[0];
+    const an = f.customer(), anItem = (await an('verify', 'POST', { email: 'an60@example.com', code: codes['an60@example.com'] })).items[0];
+    assert.equal(anItem.move.invite_url, inviteUrl(601));
+    assert.equal((await look('binh60@example.com')).move.invite_url, inviteUrl(602));
+    await an('open', 'POST', { move_id: anItem.move.id });
+    assert.equal((await look('chi60@example.com')).view, 'waiting', 'both links are fresh: nothing to reclaim');
+    // Three days later: An clicked the link, Bình never did.
+    const db = new DatabaseSync(path.join(f.dir, 'family.sqlite')); db.exec('PRAGMA busy_timeout=5000');
+    db.prepare('UPDATE family_invites SET sent_at=? WHERE id IN (?,?)').run(new Date(Date.now() - 4 * 86400000).toISOString(), one.id, two.id); db.close();
+    let state = await a('state');
+    const badge = state.invites.find(i => i.id === two.id); assert.equal(badge.holder_state, 'assigned');
+    const chi = await look('chi60@example.com');
+    assert.deepEqual([chi.view, chi.move.invite_url], ['move', inviteUrl(602)], 'Bình\'s unclicked link goes to Chi');
+    const binh = await look('binh60@example.com');
+    assert.deepEqual([binh.view, binh.move.invite_url], ['move', ''], 'Bình waits for a new link');
+    assert.equal((await look('an60@example.com')).move.invite_url, inviteUrl(601), 'a clicked link stays');
+    assert.ok((await a('journal')).entries.some(e => e.message.includes('Tự động: thu hồi link slot2 của binh60@example.com (khách chưa bấm link sau 3 ngày)')));
+    // Manual Thu hồi về kho, and the setting can turn the automatic rule off.
+    state = await a('state');
+    const chiMove = state.moves.find(m => m.email === 'chi60@example.com' && m.invite_id === two.id);
+    await a(`moves/${chiMove.id}`, 'PATCH', { action: 'unassign', revision: chiMove.revision });
+    state = await a('state'); assert.equal(state.invites.find(i => i.id === two.id).holder_state, 'ready');
+    await a('lookup-settings', 'PATCH', { reclaim_days: 0 }); assert.equal((await a('state')).lookup_settings.reclaim_days, '0');
+    await a('lookup-settings', 'PATCH', { reclaim_days: 31 }, 400);
   } finally { await f.close(); }
 });

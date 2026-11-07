@@ -1,4 +1,6 @@
-# Hải Premium — Quản lý khách hàng 0.28.5
+# Hải Premium — Quản lý khách hàng 0.29.0
+
+Bản 0.29.0: **link khách chưa bấm thì giao khách khác**. Bảng link ghi *Khách đã bấm link* (khách đã bấm Vào nhóm mới) hoặc *Khách chưa bấm link · giao N ngày trước*. Khi Family hết link Sẵn sàng, link giao quá 3 ngày mà khách chưa bấm tự chuyển cho khách tra cứu tiếp theo; khách cũ chờ link mới. Có nút **Thu hồi về kho** và chỉnh số ngày (0 = tắt) ở Tra cứu khách → Sửa thông tin.
 
 Bản 0.28.5: nút **Copy link trang** và **Mở trang khách** ở Tra cứu khách dùng Link ngắn (ví dụ `https://beeflix.vn/haiytb`) khi đã điền.
 

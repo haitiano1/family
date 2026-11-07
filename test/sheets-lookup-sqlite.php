@@ -268,4 +268,15 @@ q($db,"UPDATE lookup_settings SET value='0' WHERE name='gmail_auto_at'");
 $w=lookupWithFreshLinks($db,$c,lookupResult($db,'wait50@example.com'));check($w['items'][0]['view']==='move'&&$w['items'][0]['move']['invite_url']==='https://families.google.com/join/promo/f50a','link read from Gmail on lookup: '.json_encode($w['items'][0]));
 unset($GLOBALS['family_gmail_transport']);
 check(lookupShortDomain('HaiPre.vn/')==='https://haipre.vn','short domain normalised');check(lookupShortDomain('beeflix.vn/haiytb/')==='https://beeflix.vn/haiytb','path kept');try{lookupShortDomain('beeflix.vn/a/b');check(false,'two paths');}catch(FamilyError $e){check($e->status===400,'two-level path refused');}
+// ---- A link never clicked goes to the next customer ----
+beginAudit($db,'Dữ liệu giả');$s60=saveFamilyRecord($db,null,['name'=>'Family 60','manager_email'=>'owner60@example.com'])['id'];finishAudit();
+foreach(['a60@example.com','b60@example.com'] as $x)q($db,"INSERT INTO members(family_id,email,customer_name,expires_at,plan_months,membership_status) VALUES (?,?,?,?,1,'invited')",[$s60,$x,'K','2099-01-01']);
+beginAudit($db,'Dữ liệu giả');$l60=lookupSaveInvite($db,$s60,null,['label'=>'slot60','url'=>'https://families.google.com/join/promo/s60','sent_on'=>gmdate('Y-m-d')])['id'];finishAudit();
+$c60=(array)lookupAdminState($db)['lookup_codes'];
+check(lookupVerify($db,['email'=>'a60@example.com','code'=>$c60['a60@example.com']],'1.1.6.6')['result']['items'][0]['move']['invite_url']==='https://families.google.com/join/promo/s60','first customer gets the link');
+check(lookupResult($db,'b60@example.com')['items'][0]['view']==='waiting','fresh link is not taken back');
+q($db,'UPDATE family_invites SET sent_at=? WHERE id=?',[gmdate('Y-m-d\TH:i:s.000\Z',time()-4*86400),$l60]);
+check(lookupResult($db,'b60@example.com')['items'][0]['move']['invite_url']==='https://families.google.com/join/promo/s60','unclicked link moves on after 3 days');
+check(lookupResult($db,'a60@example.com')['items'][0]['move']['invite_url']==='','first customer waits again');
+beginAudit($db,'Cài đặt');lookupSaveSettings($db,['reclaim_days'=>'0']);finishAudit();check(lookupStored($db,'reclaim_days')==='0','rule can be turned off');
 echo "Sheet codes and Gmail invite checks passed\n";

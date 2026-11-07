@@ -24,7 +24,7 @@ export function inviteMailBase(address) {
 }
 export const codeAlphabet = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
 export const lookupLimits = { window: 15 * 60000, email: 8, ip: 40, session: 60 * 60000, moves: 50 };
-const settingNames = ['shop_name', 'contact_url', 'contact_label', 'help_text', 'short_domain'];
+const settingNames = ['shop_name', 'contact_url', 'contact_label', 'help_text', 'short_domain', 'reclaim_days'];
 
 // An invite is "used" once a customer joined with it, "assigned" while an open move still
 // holds it for a customer who is in the target Family, otherwise it is ready to give out.
@@ -92,8 +92,34 @@ export function initLookup(db, { fail, email, text, calendarDate, log }) {
     if (!['https:', 'http:'].includes(url.protocol) || url.username || url.password || !/^(\/[A-Za-z0-9_-]{1,40})?$/.test(path) || url.search || url.hash || !/^[a-z0-9.-]+\.[a-z]{2,}$/i.test(url.hostname)) fail('Link ngắn không hợp lệ, ví dụ beeflix.vn hoặc beeflix.vn/haiytb');
     return url.origin.toLowerCase() + path;
   }
+  // Days after which a link the customer never clicked goes back to the pool ('' = 3, 0 = never).
+  function reclaimDays(value) {
+    if (value === undefined || value === null || value === '') return '';
+    const days = Number(value); if (!Number.isInteger(days) || days < 0 || days > 30) fail('Số ngày tự thu hồi link cần từ 0 đến 30.');
+    return String(days);
+  }
+  const reclaimAfter = () => { const saved = stored('reclaim_days'); return saved === '' ? 3 : Number(saved); };
+  // A customer who never pressed Vào nhóm mới on their link for some days most likely never used
+  // it: when the Family runs out of ready links, the oldest such link goes to the next customer
+  // and its holder waits for a new one. Joining itself is not tracked.
+  function reclaimStale(family, current) {
+    const days = reclaimAfter(); if (!days) return null;
+    const cutoff = new Date(Date.now() - days * 86400000).toISOString();
+    const row = all("SELECT mv.id AS move_id,mv.email,i.* FROM member_moves mv JOIN family_invites i ON i.id=mv.invite_id JOIN members m ON m.id=mv.member_id WHERE mv.to_family_id=? AND m.family_id=? AND mv.state='assigned' AND mv.opened_at='' AND mv.dismissed_at='' AND i.retired_at='' AND i.sent_at<>'' AND i.sent_at<? ORDER BY i.sent_at,i.id", family.id, family.id, cutoff)
+      .find(i => !i.sent_on || inviteExpiry(i.sent_on) >= current);
+    if (!row) return null;
+    unassign(row.move_id, row.id);
+    log(`Tự động: thu hồi link ${row.label || '#' + row.id} của ${row.email} (khách chưa bấm link sau ${days} ngày) để giao khách khác`);
+    return one('SELECT * FROM family_invites WHERE id=?', row.id);
+  }
+  // The customer keeps waiting for a link; the link is ready for someone else.
+  function unassign(moveId, inviteId) {
+    const time = now();
+    run("UPDATE member_moves SET invite_id=NULL,invite_label='',state='assigned',opened_at='',updated_at=?,revision=revision+1 WHERE id=?", time, moveId);
+    run("UPDATE family_invites SET sent_at='',revision=revision+1,updated_at=? WHERE id=?", time, inviteId);
+  }
   function saveSettings(data) {
-    const values = { shop_name: text(data.shop_name, 100), contact_url: contactUrl(data.contact_url), contact_label: text(data.contact_label, 60), help_text: text(data.help_text, 500), short_domain: shortDomain(data.short_domain) };
+    const values = { shop_name: text(data.shop_name, 100), contact_url: contactUrl(data.contact_url), contact_label: text(data.contact_label, 60), help_text: text(data.help_text, 500), short_domain: shortDomain(data.short_domain), reclaim_days: reclaimDays(data.reclaim_days) };
     return atomic('lookup_settings_save', () => {
       for (const [name, value] of Object.entries(values)) {
         if (one('SELECT id FROM lookup_settings WHERE name=?', name)) run('UPDATE lookup_settings SET value=? WHERE name=?', value, name);
@@ -433,6 +459,10 @@ export function initLookup(db, { fail, email, text, calendarDate, log }) {
         run("UPDATE member_moves SET state='joined',joined_at=?,updated_at=?,revision=revision+1 WHERE id=?", stamp, stamp, id);
         run("UPDATE members SET membership_status='active',renewal_revision=renewal_revision+1 WHERE id=?", member.id);
         log(`Cá nhân: ghi nhận ${move.email} đã vào ${move.to_family_name}`);
+      } else if (data.action === 'unassign') {
+        if (!open || !live || !move.invite_id) fail('Chỉ thu hồi được link đang giao cho khách.', 409);
+        unassign(move.id, move.invite_id);
+        log(`Cá nhân: thu hồi link ${move.invite_label || '#' + move.invite_id} của ${move.email} về kho, khách chờ link mới`);
       } else if (data.action === 'release') {
         if (!open) fail('Chỉ thu hồi được link chưa dùng.', 409);
         run("UPDATE member_moves SET state='cancelled',updated_at=?,revision=revision+1 WHERE id=?", stamp, id);
@@ -490,7 +520,7 @@ export function initLookup(db, { fail, email, text, calendarDate, log }) {
     if (pending ? !(openMoveStates.includes(pending.state) && pending.invite_id == null) : !joinable(member)) return false;
     const family = activeFamily(member.family_id); if (!family) return false;
     const invite = all("SELECT * FROM family_invites WHERE family_id=? AND sent_at='' AND retired_at='' ORDER BY CASE WHEN sent_on='' THEN 1 ELSE 0 END,sent_on,id", family.id)
-      .find(i => inviteHolder(inviteRefs(i.id)).state === 'ready' && (!i.sent_on || inviteExpiry(i.sent_on) >= current));
+      .find(i => inviteHolder(inviteRefs(i.id)).state === 'ready' && (!i.sent_on || inviteExpiry(i.sent_on) >= current)) || reclaimStale(family, current);
     if (!invite) return false;
     const time = now();
     if (pending) run('UPDATE member_moves SET invite_id=?,invite_label=?,updated_at=?,revision=revision+1 WHERE id=?', invite.id, invite.label, time, pending.id);

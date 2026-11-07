@@ -28,6 +28,16 @@ Vào **Thêm → Tra cứu khách → Sửa thông tin** để đặt tên shop,
 - Khi shop đang xử lý, trang tự làm mới 30 giây một lần và khi khách quay lại trang, nên link hiện ra mà khách không cần tải lại.
 - Máy bật chế độ giảm chuyển động thì chibi và thanh tiến trình đứng yên.
 
+## Link khách chưa bấm thì giao khách khác (0.29.0)
+
+Web không cần biết khách đã vào nhóm hay chưa. Tín hiệu duy nhất là khách có bấm nút **Vào nhóm mới** trên trang tra cứu hay không: khách muốn vào nhóm thì phải bấm.
+
+- Bảng **Link mời vào Family này** ghi **Khách đã bấm link** (kèm giờ) hoặc **Khách chưa bấm link** (kèm số ngày đã giao).
+- Khi Family hết link Sẵn sàng, link đã giao quá **3 ngày** mà khách chưa bấm sẽ tự chuyển cho khách tra cứu tiếp theo. Khách cũ chuyển về chờ link mới; mở lại trang sẽ thấy Shop đang chuẩn bị link.
+- Muốn làm ngay: bấm **Thu hồi về kho** trên dòng link. Link về Sẵn sàng, khách cũ chờ link mới.
+- Đổi số ngày hoặc tắt (điền 0) ở **Thêm → Tra cứu khách → Sửa thông tin → Tự thu hồi link khách chưa bấm sau (ngày)**.
+- Link khách đã bấm không bao giờ bị thu hồi tự động. Khách bấm mà không vào được thì khách liên hệ shop.
+
 ## Khách báo mất Premium (0.28.0)
 
 Khi nhóm vẫn hiện bình thường mà khách mất Premium, khách bấm **Báo mất Premium cho shop**, chọn lỗi (mất Premium hoặc hiện quảng cáo, bị đưa ra khỏi nhóm, lỗi khác) và ghi chú nếu muốn.

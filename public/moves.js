@@ -115,7 +115,12 @@ function inviteStateBadge(ctx, invite) {
   if (invite.holder_state === 'retired') return `<span class="badge">Link chủ cũ</span><span class="subtext">Không giao cho khách</span>`;
   if (invite.holder_state === 'used') return `<span class="badge green">Đã dùng</span><span class="subtext">${ctx.escape(invite.holder_name || invite.holder_email)}</span>`;
   // Đã gửi is set by the web itself: a link handed to a customer (lookup page or a move).
-  if (invite.holder_state === 'assigned') return `<span class="badge amber">Đã gửi</span><span class="subtext">${ctx.escape(invite.holder_name || invite.holder_email)}</span><span class="subtext">${invite.sent_at ? 'Khách đã xem lúc ' + ctx.date(invite.sent_at) : 'Khách chưa mở trang tra cứu'}</span>`;
+  if (invite.holder_state === 'assigned') {
+    // Whether the customer pressed Vào nhóm mới is the only signal: an unclicked link can go to someone else.
+    const move = (ctx.state.moves || []).find(m => m.id === invite.holder_move_id), clicked = move?.opened_at;
+    const days = invite.sent_at ? Math.floor((Date.now() - Date.parse(invite.sent_at)) / 86400000) : 0;
+    return `<span class="badge ${clicked ? 'green' : 'amber'}">${clicked ? 'Khách đã bấm link' : 'Khách chưa bấm link'}</span><span class="subtext">${ctx.escape(invite.holder_name || invite.holder_email)}</span><span class="subtext">${clicked ? 'Bấm lúc ' + ctx.date(move.opened_at) : invite.sent_at ? `Giao ${days ? days + ' ngày trước' : 'hôm nay'}` : 'Khách chưa mở trang tra cứu'}</span>`;
+  }
   if (invite.holder_state === 'sent') return `<span class="badge amber">Đã gửi</span><span class="subtext">Lúc ${ctx.date(invite.sent_at)} · không giao lại</span>`;
   return '<span class="badge">Sẵn sàng</span>';
 }
@@ -131,7 +136,7 @@ function expiryText(ctx, invite) {
 function inviteTable(ctx, invites) {
   const { escape, btn } = ctx;
   if (!invites.length) return '<p class="muted">Chưa có link mời. Gửi lời mời từ tài khoản chủ Family tới các mail của bạn (ví dụ mail+1, mail+2…), rồi dán link nút <strong>Chấp nhận lời mời</strong> vào đây.</p>';
-  return `<div class="table-wrap"><table class="lookup-table"><thead><tr><th scope="col">LINK MỜI</th><th scope="col">LỜI MỜI HẾT HẠN</th><th scope="col">TRẠNG THÁI</th><th scope="col">THAO TÁC</th></tr></thead><tbody>${invites.map(i => `<tr><td data-column="invite">${inviteTitle(ctx, i)}<span class="subtext lookup-url">${escape(i.url)}</span></td><td data-column="expiry" class="date-cell">${expiryText(ctx, i)}</td><td data-column="state">${inviteStateBadge(ctx, i)}</td><td data-column="actions"><div class="row-actions">${unsendButton(ctx, i)}${ctx.copyButton(i.url, 'link mời', 'Copy link')}${btn('invite-edit', 'Sửa', 'secondary tiny', `data-id="${i.id}"`)}${i.holder_state === 'assigned' ? '' : btn('invite-delete', 'Xóa', 'danger tiny', `data-id="${i.id}"`)}</div></td></tr>`).join('')}</tbody></table></div>`;
+  return `<div class="table-wrap"><table class="lookup-table"><thead><tr><th scope="col">LINK MỜI</th><th scope="col">LỜI MỜI HẾT HẠN</th><th scope="col">TRẠNG THÁI</th><th scope="col">THAO TÁC</th></tr></thead><tbody>${invites.map(i => `<tr><td data-column="invite">${inviteTitle(ctx, i)}<span class="subtext lookup-url">${escape(i.url)}</span></td><td data-column="expiry" class="date-cell">${expiryText(ctx, i)}</td><td data-column="state">${inviteStateBadge(ctx, i)}</td><td data-column="actions"><div class="row-actions">${unsendButton(ctx, i)}${i.holder_state === 'assigned' && !(ctx.state.moves || []).find(m => m.id === i.holder_move_id)?.opened_at ? btn('move-unassign', 'Thu hồi về kho', 'secondary tiny', `data-id="${i.holder_move_id}" title="Khách chưa bấm link: giao link này cho khách khác, khách cũ chờ link mới"`) : ''}${ctx.copyButton(i.url, 'link mời', 'Copy link')}${btn('invite-edit', 'Sửa', 'secondary tiny', `data-id="${i.id}"`)}${i.holder_state === 'assigned' ? '' : btn('invite-delete', 'Xóa', 'danger tiny', `data-id="${i.id}"`)}</div></td></tr>`).join('')}</tbody></table></div>`;
 }
 function moveBadge(ctx, move) {
   const key = move.effective_state === 'assigned' && move.invite_id == null ? 'waiting' : move.effective_state;
@@ -145,7 +150,7 @@ function moveTable(ctx, moves, showTarget = false) {
     const open = ['assigned', 'opened', 'failed'].includes(move.effective_state);
     const message = open ? moveMessage(state, move) : '';
     const actions = open
-      ? (message ? ctx.copyButton(message, 'tin nhắn gửi khách', 'Copy tin nhắn') : '') + ctx.moreActions('Thao tác khác cho ' + (move.customer_name || move.email), btn('move-reassign', 'Đổi link', 'secondary tiny', `data-id="${move.id}"`) + btn('move-release', 'Thu hồi link', 'danger tiny', `data-id="${move.id}"`))
+      ? (message ? ctx.copyButton(message, 'tin nhắn gửi khách', 'Copy tin nhắn') : '') + ctx.moreActions('Thao tác khác cho ' + (move.customer_name || move.email), btn('move-reassign', 'Đổi link', 'secondary tiny', `data-id="${move.id}"`) + (move.invite_id != null && !move.opened_at ? btn('move-unassign', 'Thu hồi về kho', 'secondary tiny', `data-id="${move.id}"`) : '') + btn('move-release', 'Thu hồi link', 'danger tiny', `data-id="${move.id}"`))
       : btn('move-dismiss', 'Ẩn', 'secondary tiny', `data-id="${move.id}"`) + (move.effective_state === 'stale' ? btn('move-release', 'Thu hồi link', 'secondary tiny', `data-id="${move.id}"`) : '');
     return `<tr><td data-column="customer">${ctx.customerInfo({ customer_name: move.customer_name, email: move.email }, false)}</td><td data-column="family">${isJoin(move) ? '<span class="subtext">Khách mới · tự nhận link</span>' : escape(move.from_family_name)}${showTarget ? ` → <a class="email-link" href="#family/${move.to_family_id}">${escape(move.to_family_name)}</a>` : ''}</td><td data-column="invite">${escape(move.invite_label || (move.invite_id ? 'Link #' + move.invite_id : '—'))}</td><td data-column="state">${moveBadge(ctx, move)}<span class="subtext">Cập nhật ${ctx.date(move.updated_at)}</span></td><td data-column="actions"><div class="row-actions">${actions}</div></td></tr>`;
   }).join('')}</tbody></table></div>`;
@@ -360,9 +365,16 @@ export async function handleLookupAction(ctx, action, button) {
     return true;
   }
   const move = (state.moves || []).find(m => m.id === id);
-  if (['move-joined', 'move-release', 'move-reassign', 'move-dismiss'].includes(action) && !move) return ctx.toast('Lượt chuyển nhóm đã thay đổi. Tải lại trang.'), true;
+  if (['move-joined', 'move-release', 'move-reassign', 'move-dismiss', 'move-unassign'].includes(action) && !move) return ctx.toast('Lượt chuyển nhóm đã thay đổi. Tải lại trang.'), true;
   if (action === 'move-joined') {
     ctx.modal('Ghi nhận khách đã vào nhóm?', `${ctx.customerInfo(move, false)}<p>${ctx.escape(move.to_family_name)} · ${ctx.escape(move.invite_label)}</p><p>Khách chuyển sang đang ở nhóm và link được đánh dấu đã dùng.</p>`, async () => { await ctx.patch('moves/' + id, { action: 'joined', revision: move.revision }); ctx.toast('Đã ghi nhận khách vào nhóm.'); }, 'Đã vào nhóm');
+    return true;
+  }
+  if (action === 'move-unassign') {
+    ctx.modal('Thu hồi link về kho?', `${ctx.customerInfo(move, false)}<p>Link ${ctx.escape(move.invite_label)} trở về Sẵn sàng và được giao cho khách tra cứu tiếp theo. Khách này chờ link mới: mở lại trang tra cứu sẽ thấy Shop đang chuẩn bị link.</p>`, async () => {
+      await ctx.patch(`moves/${move.id}`, { action: 'unassign', revision: move.revision });
+      ctx.toast('Đã thu hồi link về kho.');
+    }, 'Thu hồi về kho');
     return true;
   }
   if (action === 'move-release') {
@@ -388,7 +400,8 @@ export async function handleLookupAction(ctx, action, button) {
   }
   if (action === 'lookup-settings') {
     const s = state.lookup_settings || {};
-    ctx.modal('Thông tin trang tra cứu', ctx.input('shop_name', 'Tên shop', 'text', s.shop_name, false, 'maxlength="100"') + ctx.input('contact_url', 'Link liên hệ (Messenger, Zalo…)', 'url', s.contact_url, false, 'maxlength="500" placeholder="https://m.me/…"') + ctx.input('contact_label', 'Chữ trên nút liên hệ', 'text', s.contact_label, false, 'maxlength="60" placeholder="Nhắn shop"') + `<div class="form-field"><label for="field-help_text">Ghi chú cho khách</label><textarea id="field-help_text" name="help_text" maxlength="500" placeholder="ví dụ Shop phản hồi trong 30 phút, 8h–22h.">${ctx.escape(s.help_text)}</textarea></div>` + ctx.input('short_domain', 'Link ngắn (không bắt buộc)', 'text', s.short_domain, false, 'maxlength="200" placeholder="ví dụ beeflix.vn/haiytb" autocapitalize="none" spellcheck="false"') + '<p class="subtext">Tên miền phụ (có thể kèm đường dẫn) đã chuyển hướng về website này. Link gửi khách sẽ thành beeflix.vn/haiytb?MÃ. Để trống thì dùng tên miền website.</p>', async data => { await ctx.patch('lookup-settings', data); ctx.toast('Đã lưu thông tin trang tra cứu.'); });
+    ctx.modal('Thông tin trang tra cứu', ctx.input('shop_name', 'Tên shop', 'text', s.shop_name, false, 'maxlength="100"') + ctx.input('contact_url', 'Link liên hệ (Messenger, Zalo…)', 'url', s.contact_url, false, 'maxlength="500" placeholder="https://m.me/…"') + ctx.input('contact_label', 'Chữ trên nút liên hệ', 'text', s.contact_label, false, 'maxlength="60" placeholder="Nhắn shop"') + `<div class="form-field"><label for="field-help_text">Ghi chú cho khách</label><textarea id="field-help_text" name="help_text" maxlength="500" placeholder="ví dụ Shop phản hồi trong 30 phút, 8h–22h.">${ctx.escape(s.help_text)}</textarea></div>` + ctx.input('short_domain', 'Link ngắn (không bắt buộc)', 'text', s.short_domain, false, 'maxlength="200" placeholder="ví dụ beeflix.vn/haiytb" autocapitalize="none" spellcheck="false"') + ctx.input('reclaim_days', 'Tự thu hồi link khách chưa bấm sau (ngày)', 'number', s.reclaim_days === '' || s.reclaim_days === undefined ? '3' : s.reclaim_days, false, 'min="0" max="30" step="1"') + '<p class="subtext">Khi Family hết link Sẵn sàng, link đã giao mà khách chưa bấm Vào nhóm mới sau số ngày này được giao cho khách tiếp theo. Điền 0 để tắt.</p>'
+      + '<p class="subtext">Tên miền phụ (có thể kèm đường dẫn) đã chuyển hướng về website này. Link gửi khách sẽ thành beeflix.vn/haiytb?MÃ. Để trống thì dùng tên miền website.</p>', async data => { await ctx.patch('lookup-settings', data); ctx.toast('Đã lưu thông tin trang tra cứu.'); });
     return true;
   }
   return false;

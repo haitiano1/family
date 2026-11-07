@@ -86,7 +86,7 @@ lookupVerify($db,['email'=>'minhanh@example.com','code'=>$rotated['code']],'1.1.
 
 lookupSaveSettings($db,['shop_name'=>'Shop','contact_url'=>'https://m.me/shop','contact_label'=>'Nhắn','help_text'=>'8h–22h']);
 fails(fn()=>lookupSaveSettings($db,['contact_url'=>'javascript:alert(1)']),400,'contact URL');
-check(lookupSettings($db)===['shop_name'=>'Shop','contact_url'=>'https://m.me/shop','contact_label'=>'Nhắn','help_text'=>'8h–22h','short_domain'=>''],'settings without salt');
+check(lookupSettings($db)===['shop_name'=>'Shop','contact_url'=>'https://m.me/shop','contact_label'=>'Nhắn','help_text'=>'8h–22h','short_domain'=>'','reclaim_days'=>''],'settings without salt');
 // Gen mail mời: same address shape as the Node build, never repeated, owner Gmail refused.
 $made=lookupGenerateInviteMails($db,$new,['count'=>3,'base_email'=>' HaiHoangrr+x@Gmail.com ']);
 check(count($made['mails'])===3&&count(array_unique($made['mails']))===3&&$made['base_email']==='haihoangrr@gmail.com','generated addresses');

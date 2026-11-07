@@ -17,7 +17,7 @@ const LOOKUP_INVITE_MAIL_MAX=5;
 // The shop Gmail that receives every invitation (the Apps Script mailbox).
 const LOOKUP_INVITE_MAIL_INBOX='haihoangrr@gmail.com';
 const LOOKUP_CODE_ALPHABET='ABCDEFGHJKMNPQRSTUVWXYZ23456789';
-const LOOKUP_SETTING_NAMES=['shop_name','contact_url','contact_label','help_text','short_domain'];
+const LOOKUP_SETTING_NAMES=['shop_name','contact_url','contact_label','help_text','short_domain','reclaim_days'];
 const LOOKUP_WINDOW_MS=900000,LOOKUP_EMAIL_LIMIT=8,LOOKUP_IP_LIMIT=40,LOOKUP_SESSION_MS=3600000,LOOKUP_MOVE_LIMIT=50;
 const LOOKUP_STATUS_LABELS=['active'=>'Đang hoạt động','checking'=>'Đang kiểm tra','scanned'=>'Bị quét','disabled'=>'Bị vô hiệu hoá'];
 
@@ -81,8 +81,35 @@ function lookupShortDomain(mixed $value): string {
     if(!$u||!in_array(strtolower($u['scheme']??''),['https','http'],true)||isset($u['user'])||isset($u['pass'])||isset($u['query'])||isset($u['fragment'])||!preg_match('~^(/[A-Za-z0-9_-]{1,40})?$~D',$path)||!preg_match('/^[a-z0-9.-]+\.[a-z]{2,}$/iD',$u['host']??''))fail($bad);
     return strtolower($u['scheme']).'://'.strtolower($u['host']).(isset($u['port'])?':'.$u['port']:'').$path;
 }
+// Days after which a link the customer never clicked goes back to the pool ('' = 3, 0 = never).
+function lookupReclaimDays(mixed $value): string {
+    if($value===null||$value==='')return '';
+    if(is_string($value)&&preg_match('/^\d+$/D',$value))$value=(int)$value;
+    if(!is_int($value)||$value<0||$value>30)fail('Số ngày tự thu hồi link cần từ 0 đến 30.');
+    return (string)$value;
+}
+// A customer who never pressed Vào nhóm mới on their link for some days most likely never used
+// it: when the Family runs out of ready links, the oldest such link goes to the next customer
+// and its holder waits for a new one. Joining itself is not tracked.
+function lookupReclaimStale(PDO $db,array $f,string $today): ?array {
+    $saved=lookupStored($db,'reclaim_days');$days=$saved===''?3:(int)$saved;if(!$days)return null;
+    $cutoff=gmdate('Y-m-d\TH:i:s.000\Z',time()-$days*86400);
+    foreach(all($db,"SELECT mv.id AS move_id,mv.email,i.* FROM member_moves mv JOIN family_invites i ON i.id=mv.invite_id JOIN members m ON m.id=mv.member_id WHERE mv.to_family_id=? AND m.family_id=? AND mv.state='assigned' AND mv.opened_at='' AND mv.dismissed_at='' AND i.retired_at='' AND i.sent_at<>'' AND i.sent_at<? ORDER BY i.sent_at,i.id",[$f['id'],$f['id'],$cutoff]) as $r){
+        if($r['sent_on']!==''&&lookupInviteExpiry($r['sent_on'])<$today)continue;
+        lookupUnassign($db,(int)$r['move_id'],(int)$r['id']);
+        logEntry($db,'Tự động: thu hồi link '.($r['label']?:'#'.$r['id'])." của {$r['email']} (khách chưa bấm link sau $days ngày) để giao khách khác");
+        return one($db,'SELECT * FROM family_invites WHERE id=?',[$r['id']]);
+    }
+    return null;
+}
+// The customer keeps waiting for a link; the link is ready for someone else.
+function lookupUnassign(PDO $db,int $moveId,int $inviteId): void {
+    $time=lookupNow();
+    q($db,"UPDATE member_moves SET invite_id=NULL,invite_label='',state='assigned',opened_at='',updated_at=?,revision=revision+1 WHERE id=?",[$time,$moveId]);
+    q($db,"UPDATE family_invites SET sent_at='',revision=revision+1,updated_at=? WHERE id=?",[$time,$inviteId]);
+}
 function lookupSaveSettings(PDO $db,array $d): array {
-    $values=['shop_name'=>text($d['shop_name']??'',100),'contact_url'=>lookupContactUrl($d['contact_url']??''),'contact_label'=>text($d['contact_label']??'',60),'help_text'=>text($d['help_text']??'',500),'short_domain'=>lookupShortDomain($d['short_domain']??'')];
+    $values=['shop_name'=>text($d['shop_name']??'',100),'contact_url'=>lookupContactUrl($d['contact_url']??''),'contact_label'=>text($d['contact_label']??'',60),'help_text'=>text($d['help_text']??'',500),'short_domain'=>lookupShortDomain($d['short_domain']??''),'reclaim_days'=>lookupReclaimDays($d['reclaim_days']??'')];
     return transaction($db,function()use($db,$values){
         foreach($values as $name=>$value){if(one($db,'SELECT id FROM lookup_settings WHERE name=?',[$name]))q($db,'UPDATE lookup_settings SET value=? WHERE name=?',[$value,$name]);else q($db,'INSERT INTO lookup_settings(name,value) VALUES (?,?)',[$name,$value]);}
         logEntry($db,'Cá nhân: sửa thông tin trang tra cứu');return ['ok'=>true,'settings'=>lookupSettings($db)];
@@ -458,6 +485,10 @@ function lookupUpdateMove(PDO $db,int $id,array $d): array {
             q($db,"UPDATE member_moves SET state='joined',joined_at=?,updated_at=?,revision=revision+1 WHERE id=?",[$now,$now,$id]);
             q($db,"UPDATE members SET membership_status='active',renewal_revision=renewal_revision+1 WHERE id=?",[$m['id']]);
             logEntry($db,"Cá nhân: ghi nhận {$mv['email']} đã vào {$mv['to_family_name']}");
+        }elseif($action==='unassign'){
+            if(!$open||!$live||$mv['invite_id']===null)fail('Chỉ thu hồi được link đang giao cho khách.',409);
+            lookupUnassign($db,(int)$mv['id'],(int)$mv['invite_id']);
+            logEntry($db,'Cá nhân: thu hồi link '.($mv['invite_label']?:'#'.$mv['invite_id'])." của {$mv['email']} về kho, khách chờ link mới");
         }elseif($action==='release'){
             if(!$open)fail('Chỉ thu hồi được link chưa dùng.',409);
             q($db,"UPDATE member_moves SET state='cancelled',updated_at=?,revision=revision+1 WHERE id=?",[$now,$id]);
@@ -508,6 +539,7 @@ function lookupAllocateJoin(PDO $db,array $m,array $status,array $period): bool 
     if($pending?!(in_array($pending['state'],LOOKUP_OPEN_STATES,true)&&$pending['invite_id']===null):!lookupJoinable($m))return false;
     $f=lookupActiveFamily($db,(int)$m['family_id']);if(!$f)return false;$today=today();$invite=null;
     foreach(all($db,"SELECT * FROM family_invites WHERE family_id=? AND sent_at='' AND retired_at='' ORDER BY CASE WHEN sent_on='' THEN 1 ELSE 0 END,sent_on,id",[$f['id']]) as $i)if(lookupInviteHolder(lookupInviteRefs($db,(int)$i['id']))['state']==='ready'&&($i['sent_on']===''||lookupInviteExpiry($i['sent_on'])>=$today)){$invite=$i;break;}
+    if(!$invite)$invite=lookupReclaimStale($db,$f,$today);
     if(!$invite)return false;
     $time=lookupNow();
     if($pending)q($db,'UPDATE member_moves SET invite_id=?,invite_label=?,updated_at=?,revision=revision+1 WHERE id=?',[$invite['id'],$invite['label'],$time,$pending['id']]);

@@ -1,3 +1,7 @@
+# 0.29.0 — Thu hồi link khách chưa bấm
+
+Dùng **Cập nhật một chạm**. Không đổi schema hay Apps Script. Mặc định 3 ngày; đổi ở Thêm → Tra cứu khách → Sửa thông tin.
+
 # 0.28.5 — Link trang tra cứu dùng Link ngắn
 
 Dùng **Cập nhật một chạm**.
