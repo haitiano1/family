@@ -57,7 +57,7 @@ function loginView(error = '', email = '', code = codeFromLink()) {
     </form>
   </section>
   <p class="trust">Trang chỉ hiện thông tin của chính bạn. Shop không bao giờ hỏi mật khẩu Gmail.</p>
-  ${contacts().length ? `<p class="muted">Chưa có mã? Nhắn shop để lấy mã:</p>${contactButtons()}` : ''}`, false);
+  ${contacts().length ? '<p class="muted">Chưa có mã? Nhắn shop để lấy mã ở nút bên dưới.</p>' : ''}`, false);
   (email ? $('#code') : $('#email')).focus();
 }
 

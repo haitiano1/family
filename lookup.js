@@ -433,6 +433,12 @@ export function initLookup(db, { fail, email, text, calendarDate, log }) {
         run("UPDATE member_moves SET state='joined',joined_at=?,updated_at=?,revision=revision+1 WHERE id=?", stamp, stamp, id);
         run("UPDATE members SET membership_status='active',renewal_revision=renewal_revision+1 WHERE id=?", member.id);
         log(`Cá nhân: ghi nhận ${move.email} đã vào ${move.to_family_name}`);
+      } else if (data.action === 'unassign') {
+        // The shop checked the link is still unused: it goes back to the pool, the customer waits for a new one.
+        if (!open || !live || !move.invite_id) fail('Chỉ trả về kho được link đang giao cho khách.', 409);
+        run("UPDATE member_moves SET invite_id=NULL,invite_label='',state='assigned',opened_at='',updated_at=?,revision=revision+1 WHERE id=?", stamp, id);
+        run("UPDATE family_invites SET sent_at='',revision=revision+1,updated_at=? WHERE id=?", stamp, move.invite_id);
+        log(`Cá nhân: trả link ${move.invite_label || '#' + move.invite_id} của ${move.email} về kho (link chưa ai dùng), khách chờ link mới`);
       } else if (data.action === 'release') {
         if (!open) fail('Chỉ thu hồi được link chưa dùng.', 409);
         run("UPDATE member_moves SET state='cancelled',updated_at=?,revision=revision+1 WHERE id=?", stamp, id);
