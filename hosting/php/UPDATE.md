@@ -1,3 +1,11 @@
+# 0.28.6 — Link Zalo và Facebook
+
+Dùng **Cập nhật một chạm**, rồi điền Link Zalo và Link Facebook ở Thêm → Tra cứu khách → Sửa thông tin.
+
+# 0.28.5 — Link trang tra cứu dùng Link ngắn
+
+Dùng **Cập nhật một chạm**.
+
 # 0.28.4 — Link ngắn kèm đường dẫn
 
 Dùng **Cập nhật một chạm**. Ô Link ngắn nhận dạng `beeflix.vn/haiytb`. Xem LINK-NGAN.md.

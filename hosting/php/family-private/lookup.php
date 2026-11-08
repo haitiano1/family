@@ -17,7 +17,7 @@ const LOOKUP_INVITE_MAIL_MAX=5;
 // The shop Gmail that receives every invitation (the Apps Script mailbox).
 const LOOKUP_INVITE_MAIL_INBOX='haihoangrr@gmail.com';
 const LOOKUP_CODE_ALPHABET='ABCDEFGHJKMNPQRSTUVWXYZ23456789';
-const LOOKUP_SETTING_NAMES=['shop_name','contact_url','contact_label','help_text','short_domain'];
+const LOOKUP_SETTING_NAMES=['shop_name','contact_url','contact_label','help_text','short_domain','zalo_url','facebook_url'];
 const LOOKUP_WINDOW_MS=900000,LOOKUP_EMAIL_LIMIT=8,LOOKUP_IP_LIMIT=40,LOOKUP_SESSION_MS=3600000,LOOKUP_MOVE_LIMIT=50;
 const LOOKUP_STATUS_LABELS=['active'=>'Đang hoạt động','checking'=>'Đang kiểm tra','scanned'=>'Bị quét','disabled'=>'Bị vô hiệu hoá'];
 
@@ -82,7 +82,7 @@ function lookupShortDomain(mixed $value): string {
     return strtolower($u['scheme']).'://'.strtolower($u['host']).(isset($u['port'])?':'.$u['port']:'').$path;
 }
 function lookupSaveSettings(PDO $db,array $d): array {
-    $values=['shop_name'=>text($d['shop_name']??'',100),'contact_url'=>lookupContactUrl($d['contact_url']??''),'contact_label'=>text($d['contact_label']??'',60),'help_text'=>text($d['help_text']??'',500),'short_domain'=>lookupShortDomain($d['short_domain']??'')];
+    $values=['shop_name'=>text($d['shop_name']??'',100),'contact_url'=>lookupContactUrl($d['contact_url']??''),'contact_label'=>text($d['contact_label']??'',60),'help_text'=>text($d['help_text']??'',500),'short_domain'=>lookupShortDomain($d['short_domain']??''),'zalo_url'=>lookupContactUrl($d['zalo_url']??''),'facebook_url'=>lookupContactUrl($d['facebook_url']??'')];
     return transaction($db,function()use($db,$values){
         foreach($values as $name=>$value){if(one($db,'SELECT id FROM lookup_settings WHERE name=?',[$name]))q($db,'UPDATE lookup_settings SET value=? WHERE name=?',[$value,$name]);else q($db,'INSERT INTO lookup_settings(name,value) VALUES (?,?)',[$name,$value]);}
         logEntry($db,'Cá nhân: sửa thông tin trang tra cứu');return ['ok'=>true,'settings'=>lookupSettings($db)];

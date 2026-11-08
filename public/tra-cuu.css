@@ -26,9 +26,9 @@ a { color: var(--blue-dark); }
 .top { background: var(--night); color: #fff; }
 .top-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 58px; }
 .shop { display: inline-flex; align-items: center; gap: 10px; font-weight: 750; min-width: 0; letter-spacing: -.005em; }
-.shop-mark { flex: none; width: 30px; height: 30px; border-radius: 9px; background: linear-gradient(145deg, #3b6cff, #22c55e); position: relative; }
-.shop-mark::after { content: ""; position: absolute; left: 11px; top: 8px; border-left: 11px solid #fff; border-top: 7px solid transparent; border-bottom: 7px solid transparent; }
-#shop-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.shop-mark { flex: none; width: 34px; height: 34px; display: block; }
+#shop-name { font-size: 15px; line-height: 1.25; overflow-wrap: anywhere; }
+.top .link-button { flex: none; white-space: nowrap; }
 .top .link-button { color: #c7d4f5; }
 
 main { padding-top: 22px; padding-bottom: 32px; display: flex; flex-direction: column; gap: 14px; outline: none; }
@@ -205,3 +205,18 @@ fieldset { margin: 0; padding: 0; border: 0; min-width: 0; display: grid; gap: 1
   *, *::before, *::after { animation: none !important; transition: none !important; }
 }
 @media (max-width: 420px) { .labels { font-size: 11px; letter-spacing: -.01em; } }
+/* Contact buttons: Zalo, Facebook, other */
+.contacts { display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; }
+.card .contacts { justify-content: stretch; }
+.card .contacts .btn { flex: 1 1 140px; }
+.btn.contact { gap: 8px; color: #fff; border-color: transparent; font-weight: 700; }
+.btn.contact svg { width: 20px; height: 20px; flex: none; }
+.btn.contact.zalo { background: #0068ff; }
+.btn.contact.facebook { background: #1877f2; }
+.btn.contact.other { background: var(--card); color: var(--ink); border-color: var(--line-strong); }
+.btn.contact.zalo:hover { background: #0057d6; } .btn.contact.facebook:hover { background: #1465cf; }
+/* Báo mất Premium: the one red action on a calm page */
+.btn.alert { background: var(--stop); border-color: var(--stop); color: #fff; font-weight: 750; box-shadow: 0 8px 20px -10px rgba(229, 72, 77, .85); }
+.btn.alert:hover { background: #d23c41; }
+.btn.alert svg { width: 20px; height: 20px; flex: none; }
+.actions .btn.alert { flex: 1 1 100%; }
