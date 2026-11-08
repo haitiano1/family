@@ -268,4 +268,12 @@ q($db,"UPDATE lookup_settings SET value='0' WHERE name='gmail_auto_at'");
 $w=lookupWithFreshLinks($db,$c,lookupResult($db,'wait50@example.com'));check($w['items'][0]['view']==='move'&&$w['items'][0]['move']['invite_url']==='https://families.google.com/join/promo/f50a','link read from Gmail on lookup: '.json_encode($w['items'][0]));
 unset($GLOBALS['family_gmail_transport']);
 check(lookupShortDomain('HaiPre.vn/')==='https://haipre.vn','short domain normalised');check(lookupShortDomain('beeflix.vn/haiytb/')==='https://beeflix.vn/haiytb','path kept');try{lookupShortDomain('beeflix.vn/a/b');check(false,'two paths');}catch(FamilyError $e){check($e->status===400,'two-level path refused');}
+// ---- A checked, unused link goes back to the pool ----
+beginAudit($db,'Dữ liệu giả');$s70=saveFamilyRecord($db,null,['name'=>'Family 70','manager_email'=>'owner70@example.com'])['id'];finishAudit();
+foreach(['a70@example.com','b70@example.com'] as $x)q($db,"INSERT INTO members(family_id,email,customer_name,expires_at,plan_months,membership_status) VALUES (?,?,?,?,1,'invited')",[$s70,$x,'K','2099-01-01']);
+beginAudit($db,'Dữ liệu giả');lookupSaveInvite($db,$s70,null,['label'=>'slot70','url'=>'https://families.google.com/join/promo/s70','sent_on'=>gmdate('Y-m-d')]);finishAudit();
+$c70=(array)lookupAdminState($db)['lookup_codes'];lookupVerify($db,['email'=>'a70@example.com','code'=>$c70['a70@example.com']],'1.1.7.0');
+$mv70=one($db,"SELECT * FROM member_moves WHERE email='a70@example.com'");
+beginAudit($db,'Trả link');lookupUpdateMove($db,(int)$mv70['id'],['action'=>'unassign','revision'=>(int)$mv70['revision']]);finishAudit();
+check(lookupResult($db,'b70@example.com')['items'][0]['move']['invite_url']==='https://families.google.com/join/promo/s70'&&lookupResult($db,'a70@example.com')['items'][0]['move']['invite_url']==='','unassigned link goes to the next customer');
 echo "Sheet codes and Gmail invite checks passed\n";

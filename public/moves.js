@@ -121,7 +121,15 @@ function inviteStateBadge(ctx, invite) {
 }
 // A link that was shown to someone and is no longer held (e.g. after Đổi link) stays out of
 // the pool until the owner puts it back.
-const unsendButton = (ctx, invite) => invite.holder_state === 'sent' ? ctx.btn('invite-unsend', 'Đưa lại vào kho', 'secondary tiny', `data-id="${invite.id}" title="Link này chưa ai dùng: cho phép giao cho khách khác"`) : '';
+// Checking a link: open it with a Gmail that is in no family group (private tab). "You're invited"
+// means nobody used it yet; "no longer valid" means someone joined with it.
+const unsendButton = (ctx, invite) => {
+  const open = ['ready', 'sent', 'assigned'].includes(invite.holder_state) ? `<a class="secondary link-button tiny" href="${ctx.escape(invite.url)}" target="_blank" rel="noopener noreferrer" title="Mở bằng Gmail không ở nhóm gia đình nào, trong tab ẩn danh">Mở để kiểm tra</a>` : '';
+  if (invite.holder_state === 'ready') return open + ctx.btn('invite-mark-used', 'Đã dùng', 'secondary tiny', `data-id="${invite.id}" title="Google báo lời mời không còn hiệu lực: không giao link này nữa"`);
+  if (invite.holder_state === 'sent') return open + ctx.btn('invite-unsend', 'Còn dùng được', 'secondary tiny', `data-id="${invite.id}" title="Google vẫn hiện lời mời: đưa lại vào kho cho khách khác"`);
+  if (invite.holder_state === 'assigned') return open + ctx.btn('move-unassign', 'Còn dùng được', 'secondary tiny', `data-id="${invite.holder_move_id}" title="Google vẫn hiện lời mời: khách chưa vào, đưa link cho khách khác"`);
+  return '';
+};
 function expiryText(ctx, invite) {
   if (!invite.sent_on) return '<span class="subtext">Chưa nhập ngày gửi</span>';
   const left = Math.round((Date.parse(invite.expires_on) - Date.parse(ctx.state.today)) / 86400000);
@@ -190,7 +198,7 @@ export function familyLookupSections(ctx, family) {
   const incoming = (state.moves || []).filter(m => m.to_family_id === family.id);
   const callout = problem(status.status) && members.length ? `<div class="notice lookup-callout"><div><strong>Nhóm đang có sự cố.</strong> Đã có Gmail chủ mới thì vào Fix lỗi → Đã fix → Đổi sang Gmail chủ mới: ${members.length} khách giữ nguyên trong Family này và tự nhận link mới khi tra cứu. Muốn dồn khách sang Family khác thì bấm nút bên cạnh.</div>${btn('move-open', 'Chuyển khách sang nhóm mới', 'primary', `data-id="${family.id}"`)}</div>` : '';
   return `<section class="card lookup-card"><div class="section-heading"><div><h2>Trạng thái cho khách</h2><p>Khách thấy trạng thái và lời nhắn này trên trang tra cứu.</p></div><div class="row-actions">${btn('family-status', 'Đổi trạng thái', 'secondary', `data-id="${family.id}"`)}</div></div><div class="lookup-status"><span class="badge ${statusColors[status.status]}">${escape(familyStatusLabels[status.status])}</span>${status.updated_at ? `<span class="subtext">Cập nhật ${ctx.date(status.updated_at)}</span>` : ''}<p>${escape(status.note || 'Chưa có lời nhắn cho khách.')}</p></div>${callout}</section>`
-    + (problem(status.status) && !invites.length ? '' : `<section class="card lookup-card"><div class="section-heading"><div><h2>Link mời vào Family này <span class="section-count">${ready}/${invites.length}</span></h2><p>Khách <strong>Đã mời, chưa vào</strong>, <strong>Mua mới</strong> hoặc đang chờ link (sau khi đổi chủ hay chuyển nhóm) tra cứu Gmail sẽ tự nhận một link Sẵn sàng, kể cả khách đã quá hạn. Link đã đưa cho khách tự có tag <strong>Đã gửi</strong> và không giao cho ai khác.${retired ? ` Đã bỏ ${retired} link của chủ cũ.` : ''} ${state.gmail_import ? 'Google gửi thư mời mới thì bấm Lấy link mời; web tự thay link chưa dùng của đúng Gmail nhận thư.' : 'Google đổi link thì bấm Sửa và dán link mới.'}</p></div><div class="row-actions">${genMenu(ctx, family)}${state.gmail_import ? btn('invite-mails-fetch', 'Lấy link mời', 'primary', `data-id="${family.id}" title="Đọc thư mời trong Gmail và hiện link của từng mail đã tạo"`) : ''}${btn('invite-add', '+ Thêm link mời', 'secondary', `data-id="${family.id}"`)}</div></div>${pendingNotice(ctx, family)}${inviteTable(ctx, invites)}</section>`)
+    + (problem(status.status) && !invites.length ? '' : `<section class="card lookup-card"><div class="section-heading"><div><h2>Link mời vào Family này <span class="section-count">${ready}/${invites.length}</span></h2><p>Khách <strong>Đã mời, chưa vào</strong>, <strong>Mua mới</strong> hoặc đang chờ link (sau khi đổi chủ hay chuyển nhóm) tra cứu Gmail sẽ tự nhận một link Sẵn sàng, kể cả khách đã quá hạn. Link đã đưa cho khách tự có tag <strong>Đã gửi</strong> và không giao cho ai khác. Muốn biết link còn dùng được không: bấm <strong>Mở để kiểm tra</strong> bằng một Gmail không ở nhóm gia đình nào (tab ẩn danh). Google hiện lời mời thì bấm <strong>Còn dùng được</strong>; báo lời mời không còn hiệu lực thì bấm <strong>Đã dùng</strong>.${retired ? ` Đã bỏ ${retired} link của chủ cũ.` : ''} ${state.gmail_import ? 'Google gửi thư mời mới thì bấm Lấy link mời; web tự thay link chưa dùng của đúng Gmail nhận thư.' : 'Google đổi link thì bấm Sửa và dán link mới.'}</p></div><div class="row-actions">${genMenu(ctx, family)}${state.gmail_import ? btn('invite-mails-fetch', 'Lấy link mời', 'primary', `data-id="${family.id}" title="Đọc thư mời trong Gmail và hiện link của từng mail đã tạo"`) : ''}${btn('invite-add', '+ Thêm link mời', 'secondary', `data-id="${family.id}"`)}</div></div>${pendingNotice(ctx, family)}${inviteTable(ctx, invites)}</section>`)
     + (incoming.length ? `<section class="card lookup-card"><div class="section-heading"><div><h2>Khách nhận link vào Family này</h2><p>Khách chuyển đến và khách mới tự nhận link khi tra cứu Gmail. Giao link là xong, không cần theo dõi khách đã vào hay chưa.</p></div></div>${moveTable(ctx, incoming)}</section>` : '');
 }
 
@@ -320,9 +328,16 @@ export async function handleLookupAction(ctx, action, button) {
     return true;
   }
   if (action === 'move-open') { openBulkMove(ctx, id); return true; }
+  if (action === 'invite-mark-used') {
+    const invite = (state.invites || []).find(i => i.id === id); if (!invite) return ctx.toast('Link đã thay đổi. Tải lại trang.'), true;
+    ctx.modal('Đánh dấu link đã dùng?', `<p>${ctx.escape(inviteName(ctx, invite))}</p><p>Google báo lời mời không còn hiệu lực khi mở bằng Gmail không ở nhóm nào: đã có người vào bằng link này. Web sẽ không giao link này cho khách nữa.</p>`, async () => {
+      await ctx.patch(`invites/${id}/sent`, { sent: true, revision: invite.revision }); ctx.toast('Đã đánh dấu link đã dùng.');
+    }, 'Đã dùng');
+    return true;
+  }
   if (action === 'invite-unsend') {
     const invite = (state.invites || []).find(i => i.id === id); if (!invite) return ctx.toast('Link đã thay đổi. Tải lại trang.'), true;
-    ctx.modal('Đưa link lại vào kho?', `<p>${ctx.escape(inviteName(ctx, invite))}</p><p>Link này đã hiện cho một khách trước đó. Chỉ đưa lại vào kho khi chắc chắn chưa ai dùng; khách tra cứu tiếp theo có thể nhận link này.</p>`, async () => {
+    ctx.modal('Đưa link lại vào kho?', `<p>${ctx.escape(inviteName(ctx, invite))}</p><p>Mở link bằng Gmail không ở nhóm nào mà Google vẫn hiện lời mời thì link chưa ai dùng; khách tra cứu tiếp theo có thể nhận link này.</p>`, async () => {
       await ctx.patch(`invites/${id}/sent`, { sent: false, revision: invite.revision }); ctx.toast('Link quay lại Sẵn sàng.');
     }, 'Đưa lại vào kho');
     return true;
@@ -360,9 +375,16 @@ export async function handleLookupAction(ctx, action, button) {
     return true;
   }
   const move = (state.moves || []).find(m => m.id === id);
-  if (['move-joined', 'move-release', 'move-reassign', 'move-dismiss'].includes(action) && !move) return ctx.toast('Lượt chuyển nhóm đã thay đổi. Tải lại trang.'), true;
+  if (['move-joined', 'move-release', 'move-reassign', 'move-dismiss', 'move-unassign'].includes(action) && !move) return ctx.toast('Lượt chuyển nhóm đã thay đổi. Tải lại trang.'), true;
   if (action === 'move-joined') {
     ctx.modal('Ghi nhận khách đã vào nhóm?', `${ctx.customerInfo(move, false)}<p>${ctx.escape(move.to_family_name)} · ${ctx.escape(move.invite_label)}</p><p>Khách chuyển sang đang ở nhóm và link được đánh dấu đã dùng.</p>`, async () => { await ctx.patch('moves/' + id, { action: 'joined', revision: move.revision }); ctx.toast('Đã ghi nhận khách vào nhóm.'); }, 'Đã vào nhóm');
+    return true;
+  }
+  if (action === 'move-unassign') {
+    ctx.modal('Link còn dùng được?', `${ctx.customerInfo(move, false)}<p>Bạn đã mở link ${ctx.escape(move.invite_label)} bằng Gmail không ở nhóm nào và Google vẫn hiện lời mời, tức là khách chưa vào nhóm bằng link này.</p><p>Link trở về Sẵn sàng để giao cho khách khác. Khách này chờ link mới: mở lại trang tra cứu sẽ thấy Shop đang chuẩn bị link.</p>`, async () => {
+      await ctx.patch(`moves/${move.id}`, { action: 'unassign', revision: move.revision });
+      ctx.toast('Đã đưa link về kho.');
+    }, 'Đưa về kho');
     return true;
   }
   if (action === 'move-release') {

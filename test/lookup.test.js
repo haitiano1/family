@@ -645,3 +645,22 @@ test('Zalo and Facebook links are saved and shown to customers', async () => {
     await f.admin('lookup-settings', 'PATCH', { zalo_url: 'javascript:alert(1)' }, 400);
   } finally { await f.close(); }
 });
+
+test('a checked link a customer never used goes back to the pool and the customer waits for a new one', async () => {
+  const f = await server(); try {
+    const a = f.admin;
+    const fam = await a('families', 'POST', { name: 'Family 70', manager_email: 'owner70@example.com' }, 201);
+    await a('members', 'POST', { family_id: fam.id, email: 'an70@example.com', expires_at: day(30), membership_status: 'invited' }, 201);
+    await a('members', 'POST', { family_id: fam.id, email: 'binh70@example.com', expires_at: day(30), membership_status: 'invited' }, 201);
+    const link = await a(`families/${fam.id}/invites`, 'POST', { label: 'slot70', url: inviteUrl(700), sent_on: day(0) }, 201);
+    const codes = (await a('state')).lookup_codes, look = async m => (await f.customer()('verify', 'POST', { email: m, code: codes[m] })).items[0];
+    assert.equal((await look('an70@example.com')).move.invite_url, inviteUrl(700));
+    assert.equal((await look('binh70@example.com')).view, 'waiting');
+    let state = await a('state'); const move = state.moves.find(m => m.email === 'an70@example.com');
+    await a(`moves/${move.id}`, 'PATCH', { action: 'unassign', revision: move.revision });
+    state = await a('state'); assert.equal(state.invites.find(i => i.id === link.id).holder_state, 'ready');
+    assert.equal((await look('binh70@example.com')).move.invite_url, inviteUrl(700), 'the next customer gets it');
+    assert.deepEqual([(await look('an70@example.com')).view, (await look('an70@example.com')).move.invite_url], ['move', ''], 'the first customer waits');
+    await a(`moves/${move.id}`, 'PATCH', { action: 'unassign', revision: move.revision + 1 }, 409);
+  } finally { await f.close(); }
+});

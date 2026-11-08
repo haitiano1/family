@@ -458,6 +458,12 @@ function lookupUpdateMove(PDO $db,int $id,array $d): array {
             q($db,"UPDATE member_moves SET state='joined',joined_at=?,updated_at=?,revision=revision+1 WHERE id=?",[$now,$now,$id]);
             q($db,"UPDATE members SET membership_status='active',renewal_revision=renewal_revision+1 WHERE id=?",[$m['id']]);
             logEntry($db,"Cá nhân: ghi nhận {$mv['email']} đã vào {$mv['to_family_name']}");
+        }elseif($action==='unassign'){
+            // The shop checked the link is still unused: it goes back to the pool, the customer waits for a new one.
+            if(!$open||!$live||$mv['invite_id']===null)fail('Chỉ trả về kho được link đang giao cho khách.',409);
+            q($db,"UPDATE member_moves SET invite_id=NULL,invite_label='',state='assigned',opened_at='',updated_at=?,revision=revision+1 WHERE id=?",[$now,$id]);
+            q($db,"UPDATE family_invites SET sent_at='',revision=revision+1,updated_at=? WHERE id=?",[$now,$mv['invite_id']]);
+            logEntry($db,'Cá nhân: trả link '.($mv['invite_label']?:'#'.$mv['invite_id'])." của {$mv['email']} về kho (link chưa ai dùng), khách chờ link mới");
         }elseif($action==='release'){
             if(!$open)fail('Chỉ thu hồi được link chưa dùng.',409);
             q($db,"UPDATE member_moves SET state='cancelled',updated_at=?,revision=revision+1 WHERE id=?",[$now,$id]);

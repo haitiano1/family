@@ -1,3 +1,7 @@
+# 0.28.7 — Kiểm tra link mời
+
+Dùng **Cập nhật một chạm**.
+
 # 0.28.6 — Link Zalo và Facebook
 
 Dùng **Cập nhật một chạm**, rồi điền Link Zalo và Link Facebook ở Thêm → Tra cứu khách → Sửa thông tin.
