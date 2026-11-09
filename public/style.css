@@ -739,3 +739,22 @@ code { background: #f0f4fa; color: #3c5679; padding: 3px 6px; border-radius: 5px
 .report-what { display: grid; gap: 4px; justify-items: start; }
 .telegram-steps code { font-size: 12px; }
 @media (max-width: 720px) { .report-row { grid-template-columns: 1fr; } }
+/* Family page: folded sections with counts in the head */
+details.fold { padding: 0; }
+details.fold > summary { list-style: none; cursor: pointer; display: flex; align-items: center; justify-content: space-between; gap: 14px; padding: 18px 22px; }
+details.fold > summary::-webkit-details-marker { display: none; }
+details.fold > summary:focus-visible { outline: 3px solid #93b4ff; outline-offset: -3px; border-radius: inherit; }
+.fold-title { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; min-width: 0; }
+.fold-title h2 { margin: 0; }
+.fold-chips { display: inline-flex; flex-wrap: wrap; gap: 6px; }
+.fold-toggle { flex: none; width: 30px; height: 30px; border-radius: 9px; display: grid; place-items: center; background: #f1f5fb; }
+.fold-toggle::before { content: ""; width: 8px; height: 8px; border-right: 2px solid #536680; border-bottom: 2px solid #536680; transform: translateY(-2px) rotate(45deg); transition: transform .2s; }
+details.fold[open] .fold-toggle::before { transform: translateY(2px) rotate(-135deg); }
+.fold-body { padding: 0 22px 20px; display: grid; gap: 14px; }
+.fold-actions { justify-content: flex-start; }
+.fold-help { margin: 0; }
+@media (prefers-reduced-motion: reduce) { .fold-toggle::before { transition: none; } }
+.family-info h2 .badge { margin-left: 8px; vertical-align: middle; }
+.family-info .section-heading { margin-bottom: 0; }
+.family-info .lookup-callout { margin-top: 14px; }
+.subtext-inline { color: #7d8aa3; font-size: 12px; margin-left: 6px; }

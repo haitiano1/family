@@ -1,6 +1,6 @@
-# Hải Premium — Quản lý khách hàng 0.28.7
+# Hải Premium — Quản lý khách hàng 0.28.8
 
-Bản 0.28.7: bảng link mời có **Mở để kiểm tra**, **Còn dùng được** và **Đã dùng** để tự kiểm tra link bằng Gmail không ở nhóm nào; trang đăng nhập tra cứu chỉ hiện một chỗ liên hệ.
+Bản 0.28.8: trang chi tiết Family gọn hơn — Thông tin Family gộp luôn trạng thái khách thấy (badge, lời nhắn, nút Đổi trạng thái); mục Link mời và Khách nhận link thu gọn, đầu mục hiện số link sẵn sàng / đã gửi, bấm để mở.
 
 Bản 0.28.6: **Thông tin hiển thị cho khách** có riêng **Link Zalo** và **Link Facebook / Messenger**; trang tra cứu hiện nút Zalo và Facebook kèm biểu tượng.
 

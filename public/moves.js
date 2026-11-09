@@ -188,20 +188,44 @@ function telegramCard(ctx) {
   return `<section class="card"><div class="section-heading"><div><h2>Thông báo Telegram</h2><p>${tg.enabled ? `Khi khách báo mất Premium, bot <strong>@${escape(tg.bot)}</strong> nhắn ngay cho <strong>${escape(tg.chat)}</strong>.` : 'Chưa bật. Bật để nhận tin trên điện thoại ngay khi khách báo mất Premium.'}</p></div><div class="row-actions">${tg.enabled ? btn('telegram-test', 'Gửi tin thử', 'secondary') + btn('telegram-setup', 'Đổi bot', 'secondary') + btn('telegram-off', 'Tắt', 'danger') : btn('telegram-setup', 'Cài thông báo Telegram', 'primary')}</div></div></section>`;
 }
 
+// Customer-facing status, shown inside the Family info card: badge, message line, button, and the incident callout.
+export function familyStatusParts(ctx, family) {
+  if (!ctx.state.lookup_supported) return { badge: '', line: '', action: '', callout: '' };
+  const { state, escape, btn } = ctx;
+  const status = familyStatus(state, family.id), members = state.members.filter(m => m.family_id === family.id);
+  return {
+    badge: `<span class="badge ${statusColors[status.status]}" title="Trạng thái khách thấy khi tra cứu">${escape(familyStatusLabels[status.status])}</span>`,
+    line: `<p>Lời nhắn cho khách: ${status.note ? escape(status.note) : 'Chưa có'}${status.updated_at ? ` <span class="subtext-inline">· cập nhật ${ctx.date(status.updated_at)}</span>` : ''}</p>`,
+    action: btn('family-status', 'Đổi trạng thái', 'secondary', `data-id="${family.id}"`),
+    callout: problem(status.status) && members.length ? `<div class="notice lookup-callout"><div><strong>Nhóm đang có sự cố.</strong> Đã có Gmail chủ mới thì vào Fix lỗi → Đã fix → Đổi sang Gmail chủ mới: ${members.length} khách giữ nguyên trong Family này và tự nhận link mới khi tra cứu. Muốn dồn khách sang Family khác thì bấm nút bên cạnh.</div>${btn('move-open', 'Chuyển khách sang nhóm mới', 'primary', `data-id="${family.id}"`)}</div>` : ''
+  };
+}
+
 export function familyLookupSections(ctx, family) {
   if (!ctx.state.lookup_supported) return '';
   const { state, escape, btn } = ctx;
-  const status = familyStatus(state, family.id), members = state.members.filter(m => m.family_id === family.id);
+  const status = familyStatus(state, family.id);
   // Links of a replaced owner stay stored (so Gmail never brings them back) but are not shown.
   const stored = (state.invites || []).filter(i => i.family_id === family.id), invites = stored.filter(i => i.holder_state !== 'retired');
   const ready = invites.filter(i => i.holder_state === 'ready').length, retired = stored.length - invites.length;
   const incoming = (state.moves || []).filter(m => m.to_family_id === family.id);
-  const callout = problem(status.status) && members.length ? `<div class="notice lookup-callout"><div><strong>Nhóm đang có sự cố.</strong> Đã có Gmail chủ mới thì vào Fix lỗi → Đã fix → Đổi sang Gmail chủ mới: ${members.length} khách giữ nguyên trong Family này và tự nhận link mới khi tra cứu. Muốn dồn khách sang Family khác thì bấm nút bên cạnh.</div>${btn('move-open', 'Chuyển khách sang nhóm mới', 'primary', `data-id="${family.id}"`)}</div>` : '';
-  return `<section class="card lookup-card"><div class="section-heading"><div><h2>Trạng thái cho khách</h2><p>Khách thấy trạng thái và lời nhắn này trên trang tra cứu.</p></div><div class="row-actions">${btn('family-status', 'Đổi trạng thái', 'secondary', `data-id="${family.id}"`)}</div></div><div class="lookup-status"><span class="badge ${statusColors[status.status]}">${escape(familyStatusLabels[status.status])}</span>${status.updated_at ? `<span class="subtext">Cập nhật ${ctx.date(status.updated_at)}</span>` : ''}<p>${escape(status.note || 'Chưa có lời nhắn cho khách.')}</p></div>${callout}</section>`
-    + (problem(status.status) && !invites.length ? '' : `<section class="card lookup-card"><div class="section-heading"><div><h2>Link mời vào Family này <span class="section-count">${ready}/${invites.length}</span></h2><p>Khách <strong>Đã mời, chưa vào</strong>, <strong>Mua mới</strong> hoặc đang chờ link (sau khi đổi chủ hay chuyển nhóm) tra cứu Gmail sẽ tự nhận một link Sẵn sàng, kể cả khách đã quá hạn. Link đã đưa cho khách tự có tag <strong>Đã gửi</strong> và không giao cho ai khác. Muốn biết link còn dùng được không: bấm <strong>Mở để kiểm tra</strong> bằng một Gmail không ở nhóm gia đình nào (tab ẩn danh). Google hiện lời mời thì bấm <strong>Còn dùng được</strong>; báo lời mời không còn hiệu lực thì bấm <strong>Đã dùng</strong>.${retired ? ` Đã bỏ ${retired} link của chủ cũ.` : ''} ${state.gmail_import ? 'Google gửi thư mời mới thì bấm Lấy link mời; web tự thay link chưa dùng của đúng Gmail nhận thư.' : 'Google đổi link thì bấm Sửa và dán link mới.'}</p></div><div class="row-actions">${genMenu(ctx, family)}${state.gmail_import ? btn('invite-mails-fetch', 'Lấy link mời', 'primary', `data-id="${family.id}" title="Đọc thư mời trong Gmail và hiện link của từng mail đã tạo"`) : ''}${btn('invite-add', '+ Thêm link mời', 'secondary', `data-id="${family.id}"`)}</div></div>${pendingNotice(ctx, family)}${inviteTable(ctx, invites)}</section>`)
-    + (incoming.length ? `<section class="card lookup-card"><div class="section-heading"><div><h2>Khách nhận link vào Family này</h2><p>Khách chuyển đến và khách mới tự nhận link khi tra cứu Gmail. Giao link là xong, không cần theo dõi khách đã vào hay chưa.</p></div></div>${moveTable(ctx, incoming)}</section>` : '');
+  return ''
+    + (problem(status.status) && !invites.length ? '' : fold(`invites-${family.id}`, pendingMails(state, family.id).length > 0, 'Link mời vào Family này',
+      [[ready, 'sẵn sàng', 'green'], [invites.filter(i => ['assigned', 'sent'].includes(i.holder_state)).length, 'đã gửi', 'amber'], [pendingMails(state, family.id).length, 'mail chờ link', 'blue']],
+      `<div class="row-actions fold-actions">${genMenu(ctx, family)}${state.gmail_import ? btn('invite-mails-fetch', 'Lấy link mời', 'primary', `data-id="${family.id}" title="Đọc thư mời trong Gmail và hiện link của từng mail đã tạo"`) : ''}${btn('invite-add', '+ Thêm link mời', 'secondary', `data-id="${family.id}"`)}</div>${pendingNotice(ctx, family)}${inviteTable(ctx, invites)}`
+      + `<p class="subtext fold-help">Khách chờ link tra cứu Gmail sẽ tự nhận một link Sẵn sàng; link đã đưa cho khách có tag Đã gửi và không giao cho ai khác. Kiểm tra link: <strong>Mở để kiểm tra</strong> bằng Gmail không ở nhóm nào (tab ẩn danh), Google hiện lời mời thì bấm <strong>Còn dùng được</strong>, báo không còn hiệu lực thì bấm <strong>Đã dùng</strong>.${retired ? ` Đã bỏ ${retired} link của chủ cũ.` : ''}</p>`))
+    + (incoming.length ? fold(`incoming-${family.id}`, false, 'Khách nhận link vào Family này',
+      [[incoming.filter(m => ['assigned', 'opened', 'failed'].includes(m.effective_state) && m.invite_id == null).length, 'chờ link', 'amber'], [incoming.filter(m => ['assigned', 'opened', 'failed'].includes(m.effective_state) && m.invite_id != null).length, 'đã nhận link', 'green']],
+      moveTable(ctx, incoming) + '<p class="subtext fold-help">Giao link là xong, không cần theo dõi khách đã vào hay chưa.</p>') : '');
 }
-
+// Long sections of the Family page fold away; the head keeps the counts that matter.
+const openFolds = new Set();
+document.addEventListener('toggle', event => { const box = event.target; if (box instanceof HTMLDetailsElement && box.dataset.fold) { const key = box.dataset.fold; if (box.open) { openFolds.add(key); openFolds.delete('closed:' + key); } else { openFolds.delete(key); openFolds.add('closed:' + key); } } }, true);
+function fold(key, openByDefault, title, counts, body) {
+  if (openByDefault && !openFolds.has('closed:' + key)) openFolds.add(key);
+  const chips = counts.filter(([n]) => n).map(([n, text, tone]) => `<span class="badge ${tone}">${n} ${text}</span>`).join('') || '<span class="badge">Chưa có</span>';
+  return `<details class="card lookup-card fold" data-fold="${key}"${openFolds.has(key) ? ' open' : ''}><summary class="fold-head"><span class="fold-title"><h2>${title}</h2><span class="fold-chips">${chips}</span></span><span class="fold-toggle" aria-hidden="true"></span></summary><div class="fold-body">${body}</div></details>`;
+}
 export function lookupPage(ctx) {
   const { state, escape, btn } = ctx;
   if (!state.lookup_supported) return ctx.empty('Bản này chưa hỗ trợ trang tra cứu', 'Cập nhật ứng dụng lên bản mới nhất.');
