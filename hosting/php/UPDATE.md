@@ -1,3 +1,7 @@
+# 0.28.8 — Trang Family gọn hơn
+
+Dùng **Cập nhật một chạm**.
+
 # 0.28.7 — Kiểm tra link mời
 
 Dùng **Cập nhật một chạm**.
