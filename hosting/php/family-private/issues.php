@@ -101,5 +101,8 @@ function saveIssue(PDO $db,?int $id,array $d): array {
     return $handover?['ok'=>true,'waiting_customers'=>$handover['waiting'],'retired_links'=>$handover['retired'],...($handover['invite_mails']?['invite_mails'=>$handover['invite_mails']]:[])]:['ok'=>true];
 }
 function deleteIssue(PDO $db,int $id,array $d): array {
-    $old=one($db,'SELECT * FROM issues WHERE id=?',[$id]);if(!$old)fail('Không tìm thấy case lỗi.',404);if(!is_int($d['revision']??null)||$d['revision']!==$old['revision']||($d['expected_created_at']??null)!==$old['created_at'])fail('Case đã thay đổi. Tải lại rồi thử lại.',409);if($old['status']!=='done')fail('Chỉ xóa case ở cột Đã fix.');issueOrderForget($db,$old['id'],$old['created_at']);q($db,'DELETE FROM issues WHERE id=?',[$id]);logEntry($db,"Cá nhân: xóa case đã fix {$old['subject_email']} #$id");return ['ok'=>true];
+    $old=one($db,'SELECT * FROM issues WHERE id=?',[$id]);if(!$old)fail('Không tìm thấy case lỗi.',404);if(!is_int($d['revision']??null)||$d['revision']!==$old['revision']||($d['expected_created_at']??null)!==$old['created_at'])fail('Case đã thay đổi. Tải lại rồi thử lại.',409);issueOrderForget($db,$old['id'],$old['created_at']);q($db,'DELETE FROM issues WHERE id=?',[$id]);
+    // An open owner case set the Family to Bị quét; deleting it (reported by mistake) puts the Family back to Hoạt động.
+    if($old['status']!=='done'&&$old['target_type']==='manager'&&$old['family_id']!==null&&function_exists('lookupIssueStatus'))lookupIssueStatus($db,(int)$old['family_id'],'resolved');
+    $label=['todo'=>'chờ fix','doing'=>'đang fix','done'=>'đã fix'][$old['status']]??'';logEntry($db,"Cá nhân: xóa case $label {$old['subject_email']} #$id");return ['ok'=>true];
 }

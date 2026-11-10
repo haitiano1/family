@@ -133,7 +133,7 @@ function restoreArchive(PDO $db,int $id,array $d,bool $wholeFamily=false): array
 }
 const BASE_BACKUP_TABLES=['accounts','families','members','archived_customers','renewal_history','other_purchases','logs'];
 const PURCHASE_BACKUP_TABLES=[...BASE_BACKUP_TABLES,'issues','audit_events','vault_meta','vault_items','new_purchase_history'];
-const BACKUP_TABLES=[...PURCHASE_BACKUP_TABLES,'family_statuses','family_invites','member_moves','lookup_codes','lookup_settings','invite_mails','customer_reports'];
+const BACKUP_TABLES=[...PURCHASE_BACKUP_TABLES,'family_statuses','family_invites','member_moves','lookup_codes','lookup_settings','invite_mails','customer_reports','todos'];
 function backup(PDO $db): array {
     $tables=array_combine(BACKUP_TABLES,array_map(fn($t)=>all($db,"SELECT * FROM `$t` ORDER BY ".($t==='vault_meta'?'name':'id')),BACKUP_TABLES));
     foreach($tables['archived_customers'] as &$row){$saved=json_decode($row['snapshot'],true,512,JSON_THROW_ON_ERROR);if(is_array($saved)&&($saved['record_type']??'')==='other_product'&&!array_key_exists('purchase_source',$saved)){$saved['purchase_source']='';$row['snapshot']=json_encode($saved,JSON_UNESCAPED_UNICODE|JSON_THROW_ON_ERROR);}}unset($row);
@@ -142,9 +142,9 @@ function backup(PDO $db): array {
 function restoreBackup(PDO $db,array $d): array {
     if (($d['format']??'')!=='family-customer-backup' || !in_array($d['version']??null,[1,2,3,4,5,6,7,8,9,10],true) || !is_array($d['tables']??null)) fail('File sao lưu khách hàng không hợp lệ.');
     // Lookup tables (statuses, invites, moves, codes, page settings) exist from backup v10.
-    if($d['version']<10)foreach(['family_statuses','family_invites','member_moves','lookup_codes','lookup_settings','invite_mails','customer_reports'] as $t)$d['tables'][$t]=[];
-    // invite_mails (0.23.0) and customer_reports (0.28.0) joined version 10 later; earlier version-10 files simply have none.
-    foreach(['invite_mails','customer_reports'] as $t)if(!array_key_exists($t,$d['tables']))$d['tables'][$t]=[];
+    if($d['version']<10)foreach(['family_statuses','family_invites','member_moves','lookup_codes','lookup_settings','invite_mails','customer_reports','todos'] as $t)$d['tables'][$t]=[];
+    // invite_mails (0.23.0), customer_reports (0.28.0) and todos (0.30.0) joined version 10 later; earlier version-10 files simply have none.
+    foreach(['invite_mails','customer_reports','todos'] as $t)if(!array_key_exists($t,$d['tables']))$d['tables'][$t]=[];
     if($d['version']<8&&!empty($d['tables']['new_purchase_history']))fail('Lịch sử mua mới cần sao lưu phiên bản 8.');
     if($d['version']<8)$d['tables']['new_purchase_history']=[];
     if($d['version']===1){$d['tables']['issues']=$d['tables']['issues']??[];$d['tables']['audit_events']=$d['tables']['audit_events']??[];}

@@ -664,3 +664,50 @@ test('a checked link a customer never used goes back to the pool and the custome
     await a(`moves/${move.id}`, 'PATCH', { action: 'unassign', revision: move.revision + 1 }, 409);
   } finally { await f.close(); }
 });
+
+test('Việc cần làm: add for a day, tick, edit, delete, and it travels in the backup', async () => {
+  const f = await server(), target = await server(); try {
+    const a = f.admin;
+    await a('todos', 'POST', { text: '   ', due_on: day(1) }, 400);
+    await a('todos', 'POST', { text: 'x'.repeat(301) }, 400);
+    await a('todos', 'POST', { text: 'Nhắc', due_on: '2026-02-30' }, 400);
+    const tomorrow = await a('todos', 'POST', { text: '  Gọi   khách  Minh Anh ', due_on: day(1) }, 201);
+    assert.equal(tomorrow.text, 'Gọi khách Minh Anh'); assert.equal(tomorrow.due_on, day(1)); assert.equal(tomorrow.done_at, '');
+    const loose = await a('todos', 'POST', { text: 'Không đặt ngày' }, 201);
+    assert.equal(loose.due_on, '');
+    let todos = (await a('state')).todos;
+    assert.deepEqual(todos.map(t => t.id), [tomorrow.id, loose.id], 'dated items first, undated last');
+    const ticked = await a(`todos/${tomorrow.id}`, 'PATCH', { done: true });
+    assert.ok(ticked.done_at); assert.equal(ticked.text, 'Gọi khách Minh Anh');
+    assert.equal((await a(`todos/${tomorrow.id}`, 'PATCH', { done: true })).done_at, ticked.done_at, 'ticking again keeps the time');
+    await a(`todos/${tomorrow.id}`, 'PATCH', { done: 'yes' }, 400);
+    const edited = await a(`todos/${tomorrow.id}`, 'PATCH', { text: 'Gọi khách', due_on: '', done: false });
+    assert.deepEqual([edited.text, edited.due_on, edited.done_at], ['Gọi khách', '', '']);
+    await a('todos/9999', 'PATCH', { done: true }, 404);
+    const backup = await a('backup');
+    assert.equal(backup.tables.todos.length, 2);
+    await a(`todos/${loose.id}`, 'DELETE');
+    await a(`todos/${loose.id}`, 'DELETE', undefined, 404);
+    assert.deepEqual((await a('state')).todos.map(t => t.id), [tomorrow.id]);
+    assert.equal((await a('journal')).entries.some(e => /việc cần làm/i.test(e.message)), false, 'personal notes stay out of the journal');
+    await target.admin('restore', 'POST', backup);
+    assert.equal((await target.admin('state')).todos.length, 2);
+    const older = structuredClone(backup); delete older.tables.todos;
+    const empty = await server(); try { await empty.admin('restore', 'POST', older); assert.equal((await empty.admin('state')).todos.length, 0); } finally { await empty.close(); }
+  } finally { await f.close(); await target.close(); }
+});
+
+test('an open owner case can be deleted (reported by mistake) and the Family goes back to Hoạt động', async () => {
+  const f = await server(); try {
+    const a = f.admin;
+    const fam = await a('families', 'POST', { name: 'Family 21', manager_email: 'owner21@example.com' }, 201);
+    const created = await a('issues', 'POST', { family_id: fam.id, target_type: 'manager', title: 'Bị quét' }, 201);
+    let state = await a('state');
+    assert.equal(state.family_statuses.find(s => s.family_id === fam.id).status, 'scanned');
+    const issue = state.issues.find(i => i.id === created.id);
+    await a(`issues/${created.id}`, 'DELETE', { revision: issue.revision, expected_created_at: issue.created_at });
+    state = await a('state');
+    assert.equal(state.issues.length, 0);
+    assert.equal(state.family_statuses.find(s => s.family_id === fam.id).status, 'active');
+  } finally { await f.close(); }
+});

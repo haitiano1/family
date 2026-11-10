@@ -10,7 +10,7 @@ const LOOKUP_REPORT_REASONS=['twelve_months','invite_used','other_family','other
 // What a customer can tell the shop from the lookup page while their group still looks fine.
 const LOOKUP_PROBLEM_REASONS=['lost_premium'=>'Mất Premium hoặc hiện quảng cáo','left_family'=>'Bị đưa ra khỏi nhóm gia đình','other'=>'Lỗi khác'];
 const LOOKUP_REPORT_VISIBLE_MS=259200000;
-const LOOKUP_BACKUP_TABLES=['family_statuses','family_invites','member_moves','lookup_codes','lookup_settings','invite_mails','customer_reports'];
+const LOOKUP_BACKUP_TABLES=['family_statuses','family_invites','member_moves','lookup_codes','lookup_settings','invite_mails','customer_reports','todos'];
 // Gen mail mời: random tag after "+" on the shop's Gmail, e.g. haihoangrr+k7p2qx@gmail.com.
 const LOOKUP_INVITE_MAIL_ALPHABET='abcdefghjkmnpqrstuvwxyz23456789';
 const LOOKUP_INVITE_MAIL_MAX=5;
@@ -499,7 +499,7 @@ function lookupAdminState(PDO $db): array {
     return ['lookup_supported'=>true,'gmail_import'=>$gmail,'gmail_mailbox'=>$mailbox,'invite_base_email'=>LOOKUP_INVITE_MAIL_INBOX,'invite_mails'=>array_map(fn($r)=>[...$r,'id'=>(int)$r['id'],'family_id'=>(int)$r['family_id']],all($db,'SELECT id,family_id,email,created_at FROM invite_mails ORDER BY id')),'lookup_settings'=>lookupSettings($db),'family_statuses'=>all($db,'SELECT family_id,status,note,updated_at,revision FROM family_statuses'),'invites'=>$invites,'moves'=>$moves,'lookup_codes'=>(object)$codes,
         // Open reports, and the ones handled in the last week for context.
         'customer_reports'=>array_map(fn($r)=>[...$r,'id'=>(int)$r['id'],'member_id'=>$r['member_id']===null?null:(int)$r['member_id'],'family_id'=>$r['family_id']===null?null:(int)$r['family_id'],'revision'=>(int)$r['revision']],all($db,"SELECT * FROM customer_reports WHERE handled_at='' OR handled_at>? ORDER BY id DESC LIMIT 300",[gmdate('Y-m-d\TH:i:s.000\Z',time()-604800)])),
-        'problem_reasons'=>LOOKUP_PROBLEM_REASONS,'telegram'=>lookupTelegramState($db)];
+        'problem_reasons'=>LOOKUP_PROBLEM_REASONS,'telegram'=>lookupTelegramState($db),'todos'=>lookupTodoList($db)];
 }
 
 // ---- Public lookup (customer) ----
@@ -625,7 +625,46 @@ function lookupRequest(PDO $db,array $c,string $route,string $method): never {
     fail('Không tìm thấy.',404);
 }
 // Admin routes; called after the access-password check inside the request audit scope.
+// ---- Việc cần làm: personal reminders on Tổng quan, written ahead for a given day ----
+function lookupTodoRow(array $r): array {return [...$r,'id'=>(int)$r['id']];}
+function lookupTodoList(PDO $db): array {
+    // Open items, plus those ticked in the last 3 days so today's finished work stays visible.
+    $since=(new DateTimeImmutable('now',new DateTimeZone('UTC')))->modify('-3 days')->format('Y-m-d\TH:i:s.v\Z');
+    return array_map('lookupTodoRow',all($db,"SELECT * FROM todos WHERE done_at='' OR done_at>? ORDER BY due_on='',due_on,id LIMIT 500",[$since]));
+}
+function lookupTodoFields(array $d,bool $partial): array {
+    $out=[];
+    if(!$partial||array_key_exists('text',$d)){
+        if(!is_string($d['text']??null))fail('Nội dung việc không hợp lệ.');
+        $value=trim((string)preg_replace('/\s+/u',' ',$d['text']));
+        if($value==='')fail('Nhập nội dung việc cần làm.');
+        if(!preg_match('//u',$value)||preg_match_all('/./us',$value)>300)fail('Nội dung việc tối đa 300 ký tự.');
+        $out['text']=$value;
+    }
+    if(!$partial||array_key_exists('due_on',$d))$out['due_on']=calendarDate($d['due_on']??'');
+    if(array_key_exists('done',$d)){if(!is_bool($d['done']))fail('Trạng thái việc không hợp lệ.');$out['done']=$d['done'];}
+    return $out;
+}
+function lookupSaveTodo(PDO $db,?int $id,array $d): array {
+    $f=lookupTodoFields($d,$id!==null);$now=lookupNow();
+    if($id===null){
+        if((int)one($db,"SELECT COUNT(*) AS n FROM todos WHERE done_at=''")['n']>=500)fail('Danh sách đã có 500 việc chưa xong. Xóa bớt việc cũ trước.');
+        q($db,'INSERT INTO todos(text,due_on,done_at,created_at,updated_at) VALUES (?,?,?,?,?)',[$f['text'],$f['due_on'],!empty($f['done'])?$now:'',$now,$now]);
+        return lookupTodoRow(one($db,'SELECT * FROM todos WHERE id=?',[(int)$db->lastInsertId()]));
+    }
+    $r=one($db,'SELECT * FROM todos WHERE id=?',[$id]);if(!$r)fail('Không tìm thấy việc này.',404);
+    $done=!array_key_exists('done',$f)?$r['done_at']:($f['done']?($r['done_at']?:$now):'');
+    q($db,'UPDATE todos SET text=?,due_on=?,done_at=?,updated_at=? WHERE id=?',[$f['text']??$r['text'],$f['due_on']??$r['due_on'],$done,$now,$id]);
+    return lookupTodoRow(one($db,'SELECT * FROM todos WHERE id=?',[$id]));
+}
+function lookupDeleteTodo(PDO $db,int $id): array {
+    if(!one($db,'SELECT id FROM todos WHERE id=?',[$id]))fail('Không tìm thấy việc này.',404);
+    q($db,'DELETE FROM todos WHERE id=?',[$id]);return ['ok'=>true];
+}
 function lookupAdminRequest(PDO $db,string $route,string $method): void {
+    if($route==='/api/todos'&&$method==='POST')reply(lookupSaveTodo($db,null,body()),201);
+    if(preg_match('~^/api/todos/(\d+)$~D',$route,$p)&&$method==='PATCH')reply(lookupSaveTodo($db,(int)$p[1],body()));
+    if(preg_match('~^/api/todos/(\d+)$~D',$route,$p)&&$method==='DELETE')reply(lookupDeleteTodo($db,(int)$p[1]));
     if(preg_match('~^/api/families/(\d+)/status$~D',$route,$p)&&$method==='PATCH')reply(lookupSaveStatus($db,(int)$p[1],body()));
     if(preg_match('~^/api/invites/(\d+)/sent$~D',$route,$p)&&$method==='PATCH')reply(lookupMarkInviteSent($db,(int)$p[1],body()));
     if(preg_match('~^/api/families/(\d+)/hand-over$~D',$route,$p)&&$method==='POST')reply(lookupHandOver($db,(int)$p[1],body()));
@@ -656,5 +695,6 @@ function lookupAuditAction(string $method,string $route): string {
     if($route==='/api/lookup-codes')return 'Sửa mã tra cứu';
     if(preg_match('~^/api/customer-reports/\d+$~D',$route))return 'Xử lý khách báo lỗi';
     if(str_starts_with($route,'/api/telegram'))return 'Sửa thông báo Telegram';
+    if(str_starts_with($route,'/api/todos'))return 'Sửa việc cần làm';
     return '';
 }

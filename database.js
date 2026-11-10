@@ -64,7 +64,8 @@ try {
   CREATE TABLE IF NOT EXISTS invite_mails(id INTEGER PRIMARY KEY,family_id INTEGER NOT NULL REFERENCES families(id) ON DELETE CASCADE,email TEXT NOT NULL UNIQUE,created_at TEXT NOT NULL);
   CREATE INDEX IF NOT EXISTS invite_mails_family ON invite_mails(family_id);
   CREATE TABLE IF NOT EXISTS customer_reports(id INTEGER PRIMARY KEY,member_id INTEGER REFERENCES members(id) ON DELETE SET NULL,email TEXT NOT NULL,family_id INTEGER REFERENCES families(id) ON DELETE SET NULL,family_name TEXT NOT NULL,reason TEXT NOT NULL,note TEXT NOT NULL DEFAULT '',created_at TEXT NOT NULL,handled_at TEXT NOT NULL DEFAULT '',handled_note TEXT NOT NULL DEFAULT '',revision INTEGER NOT NULL DEFAULT 0);
-  CREATE INDEX IF NOT EXISTS customer_reports_member ON customer_reports(member_id);`);
+  CREATE INDEX IF NOT EXISTS customer_reports_member ON customer_reports(member_id);
+  CREATE TABLE IF NOT EXISTS todos(id INTEGER PRIMARY KEY,text TEXT NOT NULL,due_on TEXT NOT NULL DEFAULT '',done_at TEXT NOT NULL DEFAULT '',created_at TEXT NOT NULL,updated_at TEXT NOT NULL);`);
   // 0.23.0: Đã gửi tick on invite links (databases created by 0.21 lack the column).
   if(!db.prepare('PRAGMA table_info(family_invites)').all().some(column=>column.name==='sent_at'))db.exec("ALTER TABLE family_invites ADD COLUMN sent_at TEXT NOT NULL DEFAULT ''");
   // 0.26.0: links of a replaced owner are retired rather than deleted.

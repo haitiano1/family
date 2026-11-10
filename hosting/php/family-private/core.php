@@ -131,7 +131,8 @@ function initializeSchema(PDO $db): void {
 // 2 (0.23.0): invite_mails for Gen mail mời and family_invites.sent_at.
 // 3 (0.26.0): family_invites.retired_at for links of a replaced owner.
 // 4 (0.28.0): customer_reports, a customer telling the shop Premium stopped working.
-const FAMILY_LOOKUP_SCHEMA_VERSION=4;
+// 5 (0.30.0): todos, Việc cần làm on Tổng quan.
+const FAMILY_LOOKUP_SCHEMA_VERSION=5;
 function ensureLookupSchema(PDO $db): void {
     $row=one($db,"SELECT value FROM app_meta WHERE name='lookup_schema'");
     if(($row['value']??'')===(string)FAMILY_LOOKUP_SCHEMA_VERSION)return;

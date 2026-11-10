@@ -1,6 +1,6 @@
-# Hải Premium — Quản lý khách hàng 0.29.0
+# Hải Premium — Quản lý khách hàng 0.30.0
 
-Bản 0.29.0: giao diện gọn và sắc nét hơn — tiêu đề trang không còn khung to; bảng khách mỗi người một dải gọn (mã tra cứu nằm cạnh Gmail, gộp Thanh toán & Gia hạn thành một cột chỉ hiện việc cần xử lý); trang Khách có nút lọc nhanh kèm số đếm thay cho các ô thống kê; ô đếm ở Tổng quan nhỏ lại.
+Bản 0.30.0: **Việc cần làm** ở Tổng quan — ghi việc cho Hôm nay, Ngày mai hoặc ngày bất kỳ; đến ngày việc tự hiện trong danh sách hôm nay, tick khi xong, sửa/xóa từng việc; việc quá hạn chưa xong được đánh dấu đỏ. Fix lỗi: case Chờ fix / Đang fix cũng có nút Xóa (báo nhầm mail chủ thì Family về Hoạt động). Kèm giao diện gọn của 0.29.0.
 
 Bản 0.28.6: **Thông tin hiển thị cho khách** có riêng **Link Zalo** và **Link Facebook / Messenger**; trang tra cứu hiện nút Zalo và Facebook kèm biểu tượng.
 

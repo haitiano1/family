@@ -9,9 +9,10 @@ export const openMoveStates = ['assigned', 'opened', 'failed'];
 export const reportReasons = ['twelve_months', 'invite_used', 'other_family', 'other'];
 // What a customer can tell the shop from the lookup page while their group still looks fine.
 export const problemReasons = { lost_premium: 'Mất Premium hoặc hiện quảng cáo', left_family: 'Bị đưa ra khỏi nhóm gia đình', other: 'Lỗi khác' };
-export const lookupBackupTables = ['family_statuses', 'family_invites', 'member_moves', 'lookup_codes', 'lookup_settings', 'invite_mails', 'customer_reports'];
+export const lookupBackupTables = ['family_statuses', 'family_invites', 'member_moves', 'lookup_codes', 'lookup_settings', 'invite_mails', 'customer_reports', 'todos'];
 // invite_mails (0.23.0) and customer_reports (0.28.0) joined backup version 10 later; earlier version-10 files simply have none.
-export const optionalBackupTables = ['invite_mails', 'customer_reports'];
+// todos (0.30.0, Việc cần làm on Tổng quan) joined version 10 the same way.
+export const optionalBackupTables = ['invite_mails', 'customer_reports', 'todos'];
 // Gen mail mời: random tag after "+" on the shop's Gmail, e.g. haihoangrr+k7p2qx@gmail.com.
 export const inviteMailAlphabet = 'abcdefghjkmnpqrstuvwxyz23456789';
 export const inviteMailMax = 5;
@@ -480,7 +481,7 @@ export function initLookup(db, { fail, email, text, calendarDate, log }) {
       invite_mails: all('SELECT id,family_id,email,created_at FROM invite_mails ORDER BY id'), invite_base_email: inviteMailInbox,
       // Open reports, and the ones handled in the last week for context.
       customer_reports: all("SELECT * FROM customer_reports WHERE handled_at='' OR handled_at>? ORDER BY id DESC LIMIT 300", new Date(Date.now() - 7 * 86400000).toISOString()),
-      problem_reasons: problemReasons, telegram: telegramState()
+      problem_reasons: problemReasons, telegram: telegramState(), todos: todoList()
     };
   }
 
@@ -587,5 +588,40 @@ export function initLookup(db, { fail, email, text, calendarDate, log }) {
     return result(address);
   }
 
-  return { adminState, settings, saveSettings, rotateCode, generateInviteMails, deleteInviteMails, markInviteSent, handOver, issueStatus, ownerReplaced, saveStatus, customerProblem, handleReport, connectTelegram, testTelegram, disconnectTelegram, saveInvite, deleteInvite, bulkMove, updateMove, result, verify, sessionEmail, logout, customerOpen, customerJoined, customerReport };
+  // ---- Việc cần làm: personal reminders on Tổng quan, written ahead for a given day ----
+  function todoFields(data, partial) {
+    const out = {};
+    if (!partial || data.text !== undefined) {
+      const value = typeof data.text === 'string' ? data.text.replace(/\s+/g, ' ').trim() : null;
+      if (value === null) fail('Nội dung việc không hợp lệ.');
+      if (!value) fail('Nhập nội dung việc cần làm.');
+      if ([...value].length > 300) fail('Nội dung việc tối đa 300 ký tự.');
+      out.text = value;
+    }
+    if (!partial || data.due_on !== undefined) out.due_on = calendarDate(data.due_on ?? '');
+    if (data.done !== undefined) { if (typeof data.done !== 'boolean') fail('Trạng thái việc không hợp lệ.'); out.done = data.done; }
+    return out;
+  }
+  function todoList() {
+    // Open items, plus those ticked in the last 3 days so today's finished work stays visible.
+    return all("SELECT * FROM todos WHERE done_at='' OR done_at>? ORDER BY due_on='' ,due_on,id LIMIT 500", new Date(Date.now() - 3 * 86400000).toISOString());
+  }
+  function saveTodo(id, data) {
+    const fields = todoFields(data || {}, id !== null), stamp = now();
+    if (id === null) {
+      if (one("SELECT COUNT(*) AS n FROM todos WHERE done_at=''").n >= 500) fail('Danh sách đã có 500 việc chưa xong. Xóa bớt việc cũ trước.');
+      const created = run('INSERT INTO todos(text,due_on,done_at,created_at,updated_at) VALUES (?,?,?,?,?)', fields.text, fields.due_on, fields.done ? stamp : '', stamp, stamp);
+      return one('SELECT * FROM todos WHERE id=?', Number(created.lastInsertRowid));
+    }
+    const row = one('SELECT * FROM todos WHERE id=?', id); if (!row) fail('Không tìm thấy việc này.', 404);
+    const next = { text: fields.text ?? row.text, due_on: fields.due_on ?? row.due_on, done_at: fields.done === undefined ? row.done_at : fields.done ? (row.done_at || stamp) : '' };
+    run('UPDATE todos SET text=?,due_on=?,done_at=?,updated_at=? WHERE id=?', next.text, next.due_on, next.done_at, stamp, id);
+    return one('SELECT * FROM todos WHERE id=?', id);
+  }
+  function deleteTodo(id) {
+    if (!Number(run('DELETE FROM todos WHERE id=?', id).changes)) fail('Không tìm thấy việc này.', 404);
+    return { ok: true };
+  }
+
+  return { todoList, saveTodo, deleteTodo, adminState, settings, saveSettings, rotateCode, generateInviteMails, deleteInviteMails, markInviteSent, handOver, issueStatus, ownerReplaced, saveStatus, customerProblem, handleReport, connectTelegram, testTelegram, disconnectTelegram, saveInvite, deleteInvite, bulkMove, updateMove, result, verify, sessionEmail, logout, customerOpen, customerJoined, customerReport };
 }

@@ -32,7 +32,8 @@ function exportBackup(databaseFile, outputFile) {
       lookup_codes:{id:null,email:'',code:'',created_at:''},
       lookup_settings:{id:null,name:'',value:''},
       invite_mails:{id:null,family_id:null,email:'',created_at:''},
-      customer_reports:{id:null,member_id:null,email:'',family_id:null,family_name:'',reason:'',note:'',created_at:'',handled_at:'',handled_note:'',revision:0}
+      customer_reports:{id:null,member_id:null,email:'',family_id:null,family_name:'',reason:'',note:'',created_at:'',handled_at:'',handled_note:'',revision:0},
+      todos:{id:null,text:'',due_on:'',done_at:'',created_at:'',updated_at:''}
     };
     const tables={};
     for (const [table,base] of Object.entries(defaults)) {
