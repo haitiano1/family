@@ -1,3 +1,7 @@
+# 0.29.0 — Giao diện gọn hơn
+
+Dùng **Cập nhật một chạm**.
+
 # 0.28.8 — Trang Family gọn hơn
 
 Dùng **Cập nhật một chạm**.

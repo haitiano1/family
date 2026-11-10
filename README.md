@@ -1,6 +1,6 @@
-# Hải Premium — Quản lý khách hàng 0.28.8
+# Hải Premium — Quản lý khách hàng 0.29.0
 
-Bản 0.28.8: trang chi tiết Family gọn hơn — Thông tin Family gộp luôn trạng thái khách thấy (badge, lời nhắn, nút Đổi trạng thái); mục Link mời và Khách nhận link thu gọn, đầu mục hiện số link sẵn sàng / đã gửi, bấm để mở.
+Bản 0.29.0: giao diện gọn và sắc nét hơn — tiêu đề trang không còn khung to; bảng khách mỗi người một dải gọn (mã tra cứu nằm cạnh Gmail, gộp Thanh toán & Gia hạn thành một cột chỉ hiện việc cần xử lý); trang Khách có nút lọc nhanh kèm số đếm thay cho các ô thống kê; ô đếm ở Tổng quan nhỏ lại.
 
 Bản 0.28.6: **Thông tin hiển thị cho khách** có riêng **Link Zalo** và **Link Facebook / Messenger**; trang tra cứu hiện nút Zalo và Facebook kèm biểu tượng.
 

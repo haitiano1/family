@@ -758,3 +758,75 @@ details.fold[open] .fold-toggle::before { transform: translateY(2px) rotate(-135
 .family-info .section-heading { margin-bottom: 0; }
 .family-info .lookup-callout { margin-top: 14px; }
 .subtext-inline { color: #7d8aa3; font-size: 12px; margin-left: 6px; }
+
+/* 0.29 — gọn và sắc nét: page title without a card, crisper cards, denser customer rows, quick filters. */
+:root { --radius: 14px; --shadow: 0 1px 2px rgb(16 36 66 / 4%), 0 2px 10px rgb(16 36 66 / 3%); }
+header, .app-header { min-height: 64px; padding-top: 10px; padding-bottom: 10px; }
+main { padding-top: 24px; }
+.hero { background: none; border: 0; box-shadow: none; border-radius: 0; padding: 2px 2px 0; margin-bottom: 18px; align-items: flex-end; }
+.hero .eyebrow { display: none; }
+.hero h1 { font-size: 26px; line-height: 1.25; letter-spacing: -.6px; margin: 0 0 3px; }
+.hero p { font-size: 13px; line-height: 1.55; margin: 0; }
+.back { margin-bottom: 10px; }
+
+/* Overview counters: smaller tiles, the whole tile is the link. */
+.task-grid { gap: 14px; margin-bottom: 18px; }
+.task-grid .task-card { margin: 0; padding: 16px 18px; gap: 6px 12px; }
+.task-card strong, .task-count { font-size: 28px; line-height: 1.15; }
+.task-icon { width: 36px; height: 36px; border-radius: 10px; }
+.task-icon svg { width: 18px; height: 18px; }
+.task-link { display: none; }
+
+/* Tables: one tidy band per row. */
+th { padding: 11px 13px; }
+td { padding: 13px 13px; vertical-align: middle; }
+.customer-table th:last-child { text-align: right; }
+td[data-column="actions"] .row-actions { justify-content: flex-end; }
+td[data-column="actions"] .more-actions[open] > summary { margin-left: auto; width: 36px; }
+tr:has(.more-actions[open]) > td { vertical-align: top; }
+.customer-info { min-width: 200px; max-width: 320px; }
+.customer-info .info-line { min-height: 24px; }
+.customer-info .subtext { margin-top: 0; line-height: 1.5; }
+.customer-info .copy-info { width: 24px; height: 24px; min-height: 24px; padding: 3px; }
+.code-chip { flex: 0 0 auto; align-self: center; margin: 0; padding: 0 7px; min-height: 22px; border: 1px solid var(--border); border-radius: 6px; background: var(--surface-soft); color: var(--ink-strong); font: 700 11px/20px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; letter-spacing: .06em; }
+.code-chip:hover { border-color: #c4d5f7; background: var(--blue-soft); color: var(--blue-dark); }
+td[data-column="family"] .subtext { margin-top: 1px; }
+.expiry-line { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.status-stack { display: flex; flex-direction: column; align-items: flex-start; gap: 5px; white-space: normal; max-width: 250px; }
+.status-stack .subtext { margin-top: 0; }
+.badge.soft-amber { color: #7a5210; background: #fffaf0; box-shadow: inset 0 0 0 1px #f3e2bd; }
+.muted-dash { color: #9aa8bb; }
+@media (hover: hover) {
+  .customer-table .copy-info { opacity: 0; transition: opacity .12s; }
+  .customer-table tr:hover .copy-info, .customer-table .copy-info:focus-visible { opacity: 1; }
+}
+
+/* Quick filters on the customer list. */
+.list-card .toolbar { margin: 0 0 12px; }
+.filter-chips { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 14px; }
+.chip { display: inline-flex; align-items: center; gap: 8px; min-height: 36px; padding: 6px 8px 6px 13px; border: 1px solid var(--border); border-radius: 999px; background: var(--surface); color: #34537b; font-size: 13px; font-weight: 600; white-space: nowrap; }
+.chip:hover { border-color: #c4d5f7; background: var(--blue-soft); color: var(--blue-dark); }
+.chip-count { min-width: 22px; padding: 0 7px; border-radius: 999px; background: #eef2f7; color: #435a78; font-size: 12px; font-weight: 700; line-height: 22px; text-align: center; }
+.chip.chip-alert .chip-count { background: var(--red-soft); color: #a22d31; }
+.chip.active, .chip.active:hover { background: #142b52; border-color: #142b52; color: #fff; }
+.chip.active .chip-count { background: rgb(255 255 255 / 18%); color: #fff; }
+
+@media (max-width: 760px) {
+  main { padding-top: 16px; }
+  .hero { padding: 0 2px; gap: 12px; margin-bottom: 14px; background: none; align-items: stretch; }
+  .hero h1 { font-size: 23px; margin-bottom: 2px; }
+  .filter-chips { flex-wrap: nowrap; overflow-x: auto; margin-left: -19px; margin-right: -19px; padding: 0 19px 2px; scrollbar-width: none; }
+  .filter-chips::-webkit-scrollbar { display: none; }
+  .record-table.customer-table tr { gap: 0 10px; }
+  .record-table.customer-table td[data-column="customer"] { padding: 10px; }
+  .record-table.customer-table:not(.customer-table--compact) td[data-column="family"], .record-table.customer-table td[data-column="family"] { grid-column: auto; }
+  .record-table.customer-table td[data-column="expiry"] { background: none; padding-left: 3px; font-weight: 400; }
+  .record-table.customer-table td[data-column="status"] { grid-column: 1 / -1; padding-top: 4px; }
+  .record-table.customer-table td[data-column="status"]:has(.muted-dash) { display: none; }
+  .record-table.customer-table td[data-column="status"]::before { display: none; }
+  .record-table.customer-table .status-stack { flex-direction: row; flex-wrap: wrap; max-width: none; }
+  .record-table.customer-table td[data-column="actions"] .row-actions { justify-content: flex-start; }
+  .record-table.customer-table td[data-column="actions"] .row-actions > .primary { flex: 1; }
+  .task-grid .task-card { padding: 14px; }
+  .task-card strong, .task-count { font-size: 26px; }
+}
