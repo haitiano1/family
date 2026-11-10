@@ -213,7 +213,7 @@ test('PHP snapshots trial/report dates, counts five days and deletes only done c
  const family=await a('families','POST',{name:'Trial Family',manager_email:'trial@example.com',trial_date:trial},201);await a('members','POST',{family_id:family.id,email:'guest@example.com',contact:'Original Zalo'},201);
  await a('families/'+family.id,'PATCH',{name:'Trial Family',manager_email:'trial@example.com',trial_date:'2026-02-30'},400);
  const issue=await a('issues','POST',{family_id:family.id,title:'Trial error',reported_on:'1990-01-01',trial_date:'1990-01-01'},201);let row=(await a('state')).issues[0];assert.equal(row.reported_on,current);assert.equal(row.trial_date,trial);assert.equal(row.days_used,5);
- await a('issues/'+issue.id,'DELETE',{revision:0,expected_created_at:row.created_at},400);await a('issues/'+issue.id,'PATCH',{status:'doing',revision:0});
+ await a('issues/'+issue.id,'DELETE',{revision:5,expected_created_at:row.created_at},409);await a('issues/'+issue.id,'PATCH',{status:'doing',revision:0});
  await a('families/'+family.id,'PATCH',{name:'Trial Family',manager_email:'trial@example.com',trial_date:current});assert.equal((await a('state')).issues[0].days_used,5);
  const backup=await a('backup');assert.equal(backup.version,10);for(const version of [1,2]){const old=structuredClone(backup);old.version=version;for(const r of old.tables.families)delete r.trial_date;for(const r of old.tables.issues){delete r.trial_date;delete r.reported_on;r.created_at='2026-08-14T23:30:00.000Z';}if(version===1){delete old.tables.issues;delete old.tables.audit_events;}const target=await fixture();await target.login();await target.req('restore','POST',old);const state=await target.req('state');assert.equal(state.members[0].contact,'Original Zalo');assert.equal(state.families[0].trial_date,'');if(version===2){assert.equal(state.issues[0].reported_on,'2026-08-15');assert.equal(state.issues[0].days_used,null);}}
  await f.restart();assert.equal((await a('state')).issues[0].days_used,5);
@@ -712,7 +712,7 @@ test('PHP updater installs official-shaped releases, keeps real MySQL data, reje
 test('PHP lookup page: Family status, invite pool, bulk move, Gmail + code sign-in and customer progress',async()=>{
  const f=await fixture();await f.login();const a=f.req;
  const page=await fetch(f.base+'/tra-cuu.html');assert.equal(page.status,200);assert.match(await page.text(),/tra-cuu\.js/);
- for(const asset of ['/tra-cuu.js','/tra-cuu.css','/moves.js'])assert.equal((await fetch(f.base+asset)).status,200,asset);
+ for(const asset of ['/tra-cuu.js','/tra-cuu.css','/moves.js','/todos.js'])assert.equal((await fetch(f.base+asset)).status,200,asset);
  const old=await a('families','POST',{name:'Family 04',manager_email:'owner04@example.com'},201),next=await a('families','POST',{name:'Family 09',manager_email:'owner09@example.com'},201);
  const minh=await a('members','POST',{family_id:old.id,email:'minhanh@example.com',customer_name:'Minh Anh',expires_at:'2099-01-01'},201);
  await a('families/'+old.id+'/status','PATCH',{status:'disabled',note:'Chủ nhóm bị khoá',revision:0});
@@ -784,4 +784,12 @@ test('PHP lookup page: Family status, invite pool, bulk move, Gmail + code sign-
  state=await a('state');const landed=state.members.filter(m=>m.family_id===ten.id);assert.equal(landed.length,2);assert.equal(landed.find(m=>m.email==='minhanh@example.com').membership_status,'active');assert.equal(landed.find(m=>m.email==='moi@example.com').membership_status,'invited');assert.equal(landed.find(m=>m.email==='moi@example.com').customer_name,'Khách mới');assert.equal(state.members.some(m=>m.family_id===next.id),false);
  assert.ok((await a('journal')).entries.some(e=>e.action==='Cho khách vào Family mới'));
  await lookup('logout','POST',{},200,signed.cookie);assert.deepEqual((await lookup('me','GET',undefined,200,signed.cookie)).body,{signed_in:false});
+ // Việc cần làm (0.30.0) on MySQL, and deleting an open owner case puts the Family back to Hoạt động.
+ await a('todos','POST',{text:'  '},400);const t1=await a('todos','POST',{text:'  Gọi   khách ',due_on:'2099-01-02'},201);assert.equal(t1.text,'Gọi khách');
+ const t2=await a('todos','POST',{text:'Không ngày'},201);state=await a('state');assert.deepEqual(state.todos.map(t=>t.id),[t1.id,t2.id]);
+ assert.ok((await a('todos/'+t1.id,'PATCH',{done:true})).done_at);const t1e=await a('todos/'+t1.id,'PATCH',{text:'Gọi',due_on:'',done:false});assert.deepEqual([t1e.text,t1e.due_on,t1e.done_at],['Gọi','','']);
+ await a('todos/'+t2.id,'DELETE');await a('todos/'+t2.id,'DELETE',undefined,404);assert.equal((await a('backup')).tables.todos.length,1);
+ const s40=await a('families','POST',{name:'Family 40',manager_email:'owner40@example.com'},201);const c40=await a('issues','POST',{family_id:s40.id,target_type:'manager',title:'Báo nhầm'},201);
+ state=await a('state');assert.equal(state.family_statuses.find(x=>x.family_id===s40.id).status,'scanned');const i40=state.issues.find(i=>i.id===c40.id);
+ await a('issues/'+c40.id,'DELETE',{revision:i40.revision,expected_created_at:i40.created_at});state=await a('state');assert.equal(state.issues.some(i=>i.id===c40.id),false);assert.equal(state.family_statuses.find(x=>x.family_id===s40.id).status,'active');
 });

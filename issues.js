@@ -82,7 +82,10 @@ export function initIssues(db,{fail,text,email,log,familyStatus=()=>{},ownerRepl
     if(old.target_type==='manager'&&(status==='done')!==(old.status==='done')&&!(status==='done'&&resolution==='move'))familyStatus(old.family_id,status==='done'?'resolved':'reported');
     return handover?{ok:true,waiting_customers:handover.waiting,retired_links:handover.retired,...(handover.invite_mails?{invite_mails:handover.invite_mails}:{})}:{ok:true};
   }
-  function remove(id,data){const old=one('SELECT * FROM issues WHERE id=?',id);if(!old)fail('Không tìm thấy case lỗi.',404);if(!Number.isInteger(data.revision)||data.revision!==old.revision||data.expected_created_at!==old.created_at)fail('Case đã thay đổi. Tải lại rồi thử lại.',409);if(old.status!=='done')fail('Chỉ xóa case ở cột Đã fix.');forgetOrder(old.id,old.created_at);run('DELETE FROM issues WHERE id=?',id);log(`Cá nhân: xóa case đã fix ${old.subject_email} #${id}`);return {ok:true};}
+  function remove(id,data){const old=one('SELECT * FROM issues WHERE id=?',id);if(!old)fail('Không tìm thấy case lỗi.',404);if(!Number.isInteger(data.revision)||data.revision!==old.revision||data.expected_created_at!==old.created_at)fail('Case đã thay đổi. Tải lại rồi thử lại.',409);forgetOrder(old.id,old.created_at);run('DELETE FROM issues WHERE id=?',id);
+    // An open owner case set the Family to Bị quét; deleting it (reported by mistake) puts the Family back to Hoạt động.
+    if(old.status!=='done'&&old.target_type==='manager'&&old.family_id)familyStatus(old.family_id,'resolved');
+    log(`Cá nhân: xóa case ${({todo:'chờ fix',doing:'đang fix',done:'đã fix'})[old.status]||''} ${old.subject_email} #${id}`);return {ok:true};}
   function list(){return statuses.flatMap(status=>{const order=ordered(status);return order.items.map((i,index)=>{const row=target(i);const reported=i.reported_on||(i.created_at?today(new Date(i.created_at)):'');return {...i,reported_on:reported,days_used:trialUsageDays(i.trial_date,reported),target_current_email:row?.email||'',target_available:!!row,sort_position:index,order_token:order.token,order_custom:order.custom};});});}
   return {save,list,remove,reorder};
 }

@@ -124,5 +124,15 @@ $mistake=lookupGenerateInviteMails($db,$f12,['count'=>2])['mails'];$mid=fn(strin
 fails(fn()=>lookupDeleteInviteMails($db,$f12,['ids'=>[]]),400,'ids required');fails(fn()=>lookupDeleteInviteMails($db,$new,['ids'=>[$mid($mistake[0])]]),409,'other Family');
 lookupSaveInvite($db,$f12,null,['label'=>$mistake[1],'url'=>'https://families.google.com/join/promo/del','sent_on'=>$day(0)]);fails(fn()=>lookupDeleteInviteMails($db,$f12,['ids'=>[$mid($mistake[1])]]),409,'address with a link stays');
 check(lookupDeleteInviteMails($db,$f12,['ids'=>[$mid($mistake[0])]])===['ok'=>true,'deleted'=>1]&&!one($db,'SELECT id FROM invite_mails WHERE email=?',[$mistake[0]]),'deleted');
+// Việc cần làm (0.30.0)
+fails(fn()=>lookupSaveTodo($db,null,['text'=>'  ']),400,'empty todo');fails(fn()=>lookupSaveTodo($db,null,['text'=>str_repeat('x',301)]),400,'long todo');fails(fn()=>lookupSaveTodo($db,null,['text'=>'a','due_on'=>'2026-02-30']),400,'bad todo day');
+$t1=lookupSaveTodo($db,null,['text'=>'  Gọi   khách ','due_on'=>$day(1)]);$t2=lookupSaveTodo($db,null,['text'=>'Không ngày']);
+check($t1['text']==='Gọi khách'&&$t1['due_on']===$day(1)&&$t1['done_at']===''&&$t2['due_on']==='','todo created');
+check(array_column(lookupTodoList($db),'id')===[$t1['id'],$t2['id']],'todo order');
+$done=lookupSaveTodo($db,$t1['id'],['done'=>true]);check($done['done_at']!==''&&$done['text']==='Gọi khách','todo ticked');
+check(lookupSaveTodo($db,$t1['id'],['done'=>true])['done_at']===$done['done_at'],'tick keeps time');fails(fn()=>lookupSaveTodo($db,$t1['id'],['done'=>'yes']),400,'done bool');
+$e=lookupSaveTodo($db,$t1['id'],['text'=>'Gọi','due_on'=>'','done'=>false]);check([$e['text'],$e['due_on'],$e['done_at']]===['Gọi','',''],'todo edited');
+fails(fn()=>lookupSaveTodo($db,9999,['done'=>true]),404,'missing todo');check(lookupDeleteTodo($db,$t2['id'])===['ok'=>true],'todo deleted');fails(fn()=>lookupDeleteTodo($db,$t2['id']),404,'deleted twice');
+check(array_key_exists('todos',lookupAdminState($db))&&count(lookupAdminState($db)['todos'])===1,'todos in state');
 echo "ok\n";
 function auditActionLabel(string $m,string $r): string {require_once dirname(__DIR__).'/hosting/php/family-private/audit.php';return auditAction($m,$r);}

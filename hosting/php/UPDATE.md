@@ -1,3 +1,7 @@
+# 0.30.0 — Việc cần làm
+
+Dùng **Cập nhật một chạm**. Bảng `todos` được tạo tự động lần đầu mở web sau khi cập nhật.
+
 # 0.29.0 — Giao diện gọn hơn
 
 Dùng **Cập nhật một chạm**.

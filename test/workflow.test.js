@@ -395,7 +395,7 @@ test('Family trial date snapshots stay fixed at report time; only done cases can
   await a('families/'+family.id,'PATCH',{name:'Trial Family',manager_email:'trial@example.com',trial_date:'2026-02-30'},400);assert.equal((await a('state')).families[0].trial_date,trial);
   const issue=await a('issues','POST',{family_id:family.id,title:'Trial error',reported_on:'1990-01-01',trial_date:'1990-01-01'},201);
   let state=await a('state'),row=state.issues[0];assert.equal(row.reported_on,current);assert.equal(row.trial_date,trial);assert.equal(row.days_used,5);
-  await a('issues/'+issue.id,'DELETE',{revision:0,expected_created_at:row.created_at},400);
+  await a('issues/'+issue.id,'DELETE',{revision:5,expected_created_at:row.created_at},409);
   await a('issues/'+issue.id,'PATCH',{status:'doing',revision:0});
   await a('families/'+family.id,'PATCH',{name:'Trial Family',manager_email:'trial@example.com',trial_date:current});
   row=(await a('state')).issues[0];assert.equal(row.days_used,5);assert.equal(row.trial_date,trial);
