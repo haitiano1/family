@@ -151,7 +151,7 @@ async function handle(req, res) {
       const data = await body(req); return send(res,200,archive.restore(Number(url.pathname.split('/')[3]),data.family_id,actor));
     }
     if (req.method === 'GET' && /^\/api\/archives\/\d+\/history$/.test(url.pathname)) return send(res,200,{ history:all('SELECT * FROM renewal_history WHERE archive_id=? ORDER BY id DESC',Number(url.pathname.split('/')[3])) });
-    if(req.method==='POST'&&/^\/api\/members\/\d+\/transfer$/.test(url.pathname))return send(res,200,transferMember(Number(url.pathname.split('/')[3]),await body(req)));
+    if(req.method==='POST'&&/^\/api\/members\/\d+\/transfer$/.test(url.pathname)){const id=Number(url.pathname.split('/')[3]),result=transferMember(id,await body(req)),moved=db.prepare('SELECT family_id FROM members WHERE id=?').get(id);if(moved)lookup.autoAssign(moved.family_id);return send(res,200,result);}
     if (req.method === 'GET' && /^\/api\/members\/\d+\/renewal-history$/.test(url.pathname)) {
       const id = Number(url.pathname.split('/')[3]);
       if (!one('SELECT id FROM members WHERE id=?', id)) fail('Không tìm thấy khách.', 404);
@@ -226,7 +226,10 @@ async function handle(req, res) {
         if (values[9] !== 'invited' && one("SELECT COUNT(*) AS n FROM members WHERE family_id=? AND membership_status!='invited'", family.id).n >= 5) fail('Hồ sơ đã đủ 6 người gồm tài khoản quản lý.');
         const result = run('INSERT INTO members(family_id,email,customer_name,contact,joined_at,expires_at,payment_status,amount,note,plan_months,membership_status) VALUES (?,?,?,?,?,?,?,?,?,?,?)', family.id, ...values);
         recordNewPurchase(db,Number(result.lastInsertRowid));
-        log(`${actor.username}: ghi nhận khách ${values[0]} trong ${family.name}`); return send(res, 201, { id: Number(result.lastInsertRowid) });
+        log(`${actor.username}: ghi nhận khách ${values[0]} trong ${family.name}`);
+        // A ready link of Gen mail made for this new Family goes to the customer at once.
+        const assigned=lookup.autoAssign(family.id).filter(a=>a.email===values[0]);
+        return send(res, 201, { id: Number(result.lastInsertRowid), assigned });
       }
       if (req.method === 'PATCH') {
         if (values[9] !== 'invited' && prior.membership_status === 'invited' && one("SELECT COUNT(*) AS n FROM members WHERE family_id=? AND id!=? AND membership_status!='invited'", family.id,id).n >= 5) fail('Family đã đủ 5 thành viên ghi nhận.');

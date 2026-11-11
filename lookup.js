@@ -169,17 +169,20 @@ export function initLookup(db, { fail, email, text, calendarDate, log }) {
       return { ok: true, deleted: rows.length };
     });
   }
-  // Gán link cho khách: customers of the Family who should get a ready link — not "Đã mời, chưa vào" /
-  // "Mua mới" (they still take a leftover link on lookup), and not holding or having used a link of
-  // this Family. Customers already waiting for a link (after Đổi Gmail chủ) come first.
+  // Gán link cho khách: customers of the Family who still need a link of it — no link held or used,
+  // and not dropped from waiting (Bỏ chờ link / Thu hồi link). Order: customers already waiting for a
+  // link (after Đổi Gmail chủ), then Đang vào / Chưa xác minh, then Mua mới, and "Đã mời, chưa vào" last,
+  // so with more customers than links the ones not yet in the group are the ones left out.
+  const targetRank = t => t.move ? 0 : ({ invited: 3, new: 2 })[t.member.membership_status] ?? 1;
   function linkTargets(familyId) {
-    const list = all("SELECT * FROM members WHERE family_id=? AND membership_status NOT IN ('invited','new') ORDER BY id", familyId)
-      .map(member => ({ member, move: one("SELECT * FROM member_moves WHERE member_id=? AND to_family_id=? AND state!='cancelled' AND dismissed_at='' ORDER BY id DESC LIMIT 1", member.id, familyId) }))
-      .filter(({ move }) => !move || (openMoveStates.includes(move.state) && move.invite_id == null));
-    return [...list.filter(t => t.move), ...list.filter(t => !t.move)];
+    return all('SELECT * FROM members WHERE family_id=? ORDER BY id', familyId)
+      .map(member => ({ member, move: one("SELECT * FROM member_moves WHERE member_id=? AND to_family_id=? AND dismissed_at='' ORDER BY id DESC LIMIT 1", member.id, familyId) }))
+      .filter(({ move }) => !move || (openMoveStates.includes(move.state) && move.invite_id == null))
+      .sort((a, b) => targetRank(a) - targetRank(b) || a.member.id - b.member.id);
   }
   function linkPairs(familyId, inviteIds = null) {
-    const invites = all("SELECT * FROM family_invites WHERE family_id=? AND retired_at='' AND sent_at='' ORDER BY id", familyId).filter(i => inviteState(i) === 'ready' && (!inviteIds || inviteIds.includes(i.id)));
+    const current = today();
+    const invites = all("SELECT * FROM family_invites WHERE family_id=? AND retired_at='' AND sent_at='' ORDER BY id", familyId).filter(i => inviteState(i) === 'ready' && (!i.sent_on || inviteExpiry(i.sent_on) >= current) && (!inviteIds || inviteIds.includes(i.id)));
     const targets = linkTargets(familyId);
     return invites.slice(0, targets.length).map((invite, k) => ({ invite, ...targets[k] }));
   }
@@ -194,6 +197,20 @@ export function initLookup(db, { fail, email, text, calendarDate, log }) {
     }
     if (pairs.length) log(`Tự động: gán ${pairs.length} link mời của ${family.name} cho ${pairs.map(p => p.member.email).join(', ')}`);
     return pairs.map(p => ({ invite_id: p.invite.id, label: p.invite.label, email: p.member.email, name: p.member.customer_name }));
+  }
+  // Links of Gen mail made for a Family with no link yet go to its customers by themselves, whichever
+  // comes first: the link (Lấy link mời / + Thêm link mời) or the customer (Thêm khách / Chuyển Family).
+  function autoAssign(familyId) {
+    if (!activeFamily(familyId)) return [];
+    const auto = new Set(all('SELECT email FROM invite_mails WHERE family_id=? AND auto_assign=1', familyId).map(r => r.email));
+    if (!auto.size) return [];
+    const ids = all("SELECT id,label FROM family_invites WHERE family_id=? AND retired_at='' AND sent_at=''", familyId).filter(i => auto.has(String(i.label).toLowerCase())).map(i => i.id);
+    return ids.length ? assignLinks(familyId, ids) : [];
+  }
+  // A link the shop took back from a customer is not handed out by itself again.
+  function stopAutoAssign(inviteId) {
+    const invite = inviteId ? one('SELECT family_id,label FROM family_invites WHERE id=?', inviteId) : null;
+    if (invite?.label) run('UPDATE invite_mails SET auto_assign=0 WHERE family_id=? AND email=?', invite.family_id, String(invite.label).toLowerCase());
   }
   function assignFamilyLinks(familyId) {
     return atomic('lookup_assign_links', () => { const assigned = assignLinks(familyId); return { ok: true, assigned }; });
@@ -427,8 +444,7 @@ export function initLookup(db, { fail, email, text, calendarDate, log }) {
     }
     const result = run('INSERT INTO family_invites(family_id,label,url,sent_on,revision,created_at,updated_at) VALUES (?,?,?,?,0,?,?)', family.id, inviteLabel, url, sentOn, now(), now());
     log(`Cá nhân: thêm link mời ${inviteLabel || '#' + result.lastInsertRowid} cho ${family.name}`);
-    const created = Number(result.lastInsertRowid), mail = inviteLabel ? one('SELECT auto_assign FROM invite_mails WHERE family_id=? AND email=?', family.id, inviteLabel.toLowerCase()) : null;
-    return { ok: true, id: created, assigned: mail?.auto_assign ? assignLinks(family.id, [created]) : [] };
+    return { ok: true, id: Number(result.lastInsertRowid), assigned: autoAssign(family.id) };
   }
   function deleteInvite(id, data) {
     const old = one('SELECT i.*,f.name AS family_name FROM family_invites i JOIN families f ON f.id=i.family_id WHERE i.id=?', id); if (!old) fail('Không tìm thấy link mời.', 404);
@@ -497,11 +513,12 @@ export function initLookup(db, { fail, email, text, calendarDate, log }) {
         if (!open || !live || !move.invite_id) fail('Chỉ trả về kho được link đang giao cho khách.', 409);
         run("UPDATE member_moves SET invite_id=NULL,invite_label='',state='assigned',opened_at='',updated_at=?,revision=revision+1 WHERE id=?", stamp, id);
         run("UPDATE family_invites SET sent_at='',revision=revision+1,updated_at=? WHERE id=?", stamp, move.invite_id);
+        stopAutoAssign(move.invite_id);
         log(`Cá nhân: trả link ${move.invite_label || '#' + move.invite_id} của ${move.email} về kho (link chưa ai dùng), khách chờ link mới`);
       } else if (data.action === 'release') {
         if (!open) fail('Chỉ thu hồi được link chưa dùng.', 409);
         run("UPDATE member_moves SET state='cancelled',updated_at=?,revision=revision+1 WHERE id=?", stamp, id);
-        if (move.invite_id) run("UPDATE family_invites SET sent_at='',revision=revision+1,updated_at=? WHERE id=?", stamp, move.invite_id);
+        if (move.invite_id) { run("UPDATE family_invites SET sent_at='',revision=revision+1,updated_at=? WHERE id=?", stamp, move.invite_id); stopAutoAssign(move.invite_id); }
         log(`Cá nhân: thu hồi link ${move.invite_label || ''} của ${move.email}, trả về kho ${move.to_family_name}`);
       } else if (data.action === 'reassign') {
         if (!open || !live) fail('Chỉ đổi link cho khách đang chờ vào Family mới.', 409);
@@ -681,5 +698,5 @@ export function initLookup(db, { fail, email, text, calendarDate, log }) {
     return { ok: true };
   }
 
-  return { assignFamilyLinks, saveRecipients, todoList, saveTodo, deleteTodo, adminState, settings, saveSettings, rotateCode, generateInviteMails, deleteInviteMails, markInviteSent, handOver, issueStatus, ownerReplaced, saveStatus, customerProblem, handleReport, connectTelegram, testTelegram, disconnectTelegram, saveInvite, deleteInvite, bulkMove, updateMove, result, verify, sessionEmail, logout, customerOpen, customerJoined, customerReport };
+  return { autoAssign, assignFamilyLinks, saveRecipients, todoList, saveTodo, deleteTodo, adminState, settings, saveSettings, rotateCode, generateInviteMails, deleteInviteMails, markInviteSent, handOver, issueStatus, ownerReplaced, saveStatus, customerProblem, handleReport, connectTelegram, testTelegram, disconnectTelegram, saveInvite, deleteInvite, bulkMove, updateMove, result, verify, sessionEmail, logout, customerOpen, customerJoined, customerReport };
 }

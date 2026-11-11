@@ -747,33 +747,43 @@ test('Gen mail for a new Family hands each arriving link to a customer; Gán lin
     await add(fam, 'cho@example.com', 'invited');
     const gen = await a(`families/${fam.id}/invite-mails`, 'POST', { count: 4 }, 201);
     assert.equal(gen.auto_assign, true);
-    assert.deepEqual(gen.targets.map(t => t.email), ['a1@example.com', 'a2@example.com', 'a3@example.com'], '"Đã mời, chưa vào" is not pre-assigned');
+    assert.deepEqual(gen.targets.map(t => t.email), ['a1@example.com', 'a2@example.com', 'a3@example.com', 'cho@example.com'], '"Đã mời, chưa vào" comes last');
     const links = [];
     for (const [k, mail] of gen.mails.entries()) links.push(await a(`families/${fam.id}/invites`, 'POST', { label: mail, url: inviteUrl(500 + k), sent_on: day(0) }, 201));
-    assert.deepEqual(links.map(l => l.assigned.map(x => x.email)), [['a1@example.com'], ['a2@example.com'], ['a3@example.com'], []]);
+    assert.deepEqual(links.map(l => l.assigned.map(x => x.email)), [['a1@example.com'], ['a2@example.com'], ['a3@example.com'], ['cho@example.com']]);
     let state = await a('state');
-    assert.deepEqual(state.invites.filter(i => i.family_id === fam.id).map(i => i.holder_state), ['assigned', 'assigned', 'assigned', 'ready']);
+    assert.deepEqual(state.invites.filter(i => i.family_id === fam.id).map(i => i.holder_state), ['assigned', 'assigned', 'assigned', 'assigned']);
     const look = async address => (await f.customer()('verify', 'POST', { email: address, code: (await a('state')).lookup_codes[address] })).items[0];
     const a2 = await look('a2@example.com');
     assert.equal(a2.view, 'move'); assert.equal(a2.move.kind, 'join'); assert.equal(a2.move.invite_url, inviteUrl(501), 'the customer sees the link assigned to them');
-    assert.equal((await look('cho@example.com')).move.invite_url, inviteUrl(503), 'the customer not yet in takes the leftover link');
+    assert.equal((await look('cho@example.com')).move.invite_url, inviteUrl(503), 'the customer not yet in sees the link assigned last');
 
     // A running Family (it has links) keeps new links in its pool.
     const more = await a(`families/${fam.id}/invite-mails`, 'POST', { count: 1 }, 201);
     assert.equal(more.auto_assign, false);
     assert.deepEqual((await a(`families/${fam.id}/invites`, 'POST', { label: more.mails[0], url: inviteUrl(510), sent_on: day(0) }, 201)).assigned, []);
 
-    // A Family with no customers yet: links stay ready, then Gán link cho khách after customers are added.
+    // A Family with no customers yet: links wait in the pool and go to customers as they are added.
     const empty = await a('families', 'POST', { name: 'Family 51', manager_email: 'owner51@example.com' }, 201);
     const gen2 = await a(`families/${empty.id}/invite-mails`, 'POST', { count: 3 }, 201);
     assert.equal(gen2.auto_assign, true); assert.deepEqual(gen2.targets, []);
     for (const [k, mail] of gen2.mails.entries()) assert.deepEqual((await a(`families/${empty.id}/invites`, 'POST', { label: mail, url: inviteUrl(520 + k), sent_on: day(0) }, 201)).assigned, []);
-    await add(empty, 'b1@example.com'); await add(empty, 'b2@example.com'); await add(empty, 'moi@example.com', 'new');
-    const manual = await a(`families/${empty.id}/assign-links`, 'POST', {});
-    assert.deepEqual(manual.assigned.map(x => [x.label, x.email]), [[gen2.mails[0], 'b1@example.com'], [gen2.mails[1], 'b2@example.com']]);
+    assert.deepEqual((await add(empty, 'b1@example.com')).assigned.map(x => x.label), [gen2.mails[0]], 'the customer just added gets a waiting link');
+    assert.deepEqual((await add(empty, 'moi@example.com', 'new')).assigned.map(x => x.label), [gen2.mails[1]], 'Mua mới too');
     assert.deepEqual((await a(`families/${empty.id}/assign-links`, 'POST', {})).assigned, [], 'nothing left to assign');
-    assert.equal((await look('b2@example.com')).move.invite_url, inviteUrl(521));
-    assert.ok((await a('journal')).entries.some(e => e.action === 'Gán link cho khách'));
+    assert.equal((await look('moi@example.com')).move.invite_url, inviteUrl(521));
+    // A customer moved in with Chuyển Family gets the last one.
+    await add(fam, 'chuyen@example.com', 'invited');
+    const mover = (await a('state')).members.find(m => m.email === 'chuyen@example.com');
+    await a(`members/${mover.id}/transfer`, 'POST', { family_id: empty.id, expected_manager_email: 'owner51@example.com', revision: mover.renewal_revision, expected_family_id: fam.id, expected_email: mover.email });
+    assert.equal((await look('chuyen@example.com')).move.invite_url, inviteUrl(522));
+    // A link taken back (Thu hồi link) stays in the pool: the next customer added does not get it by itself.
+    state = await a('state');
+    const held = state.moves.find(m => m.email === 'b1@example.com' && m.invite_id);
+    await a(`moves/${held.id}`, 'PATCH', { action: 'release', revision: held.revision });
+    assert.deepEqual((await add(empty, 'b9@example.com')).assigned, []);
+    assert.equal((await a('state')).invites.find(i => i.label === gen2.mails[0]).holder_state, 'ready');
+    assert.ok((await a('journal')).entries.some(e => e.message.includes('Tự động: gán 1 link mời của Family 51 cho b1@example.com')), 'the journal tells which link went to whom');
     const backup = await a('backup');
     assert.ok(backup.tables.invite_mails.every(r => r.auto_assign === 1 || r.auto_assign === 0));
     const older = structuredClone(backup); for (const r of older.tables.invite_mails) delete r.auto_assign;

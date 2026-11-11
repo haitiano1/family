@@ -1,3 +1,7 @@
+# 0.32.4 — Gán link cho khách thêm sau
+
+Dùng **Cập nhật một chạm** (cần **family-private/updater.php** mới từ 0.32.3 trở lên; nếu chưa có, upload riêng file đó một lần).
+
 # 0.32.3 — Cập nhật một chạm khi hosting chặn tự gọi tên miền
 
 Bộ cập nhật không tự thay chính nó. Một lần duy nhất: giải nén **family-hostinger-update.zip**, upload riêng file **family-private/updater.php** vào thư mục **family-private** trên hosting (Replace), rồi dùng **Cập nhật một chạm**.
