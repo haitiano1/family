@@ -386,6 +386,30 @@ function lookupHandOver(PDO $db,int $fromId,array $d): array {
         return ['ok'=>true,'moved'=>count($members),'replaced'=>$replaced,'family_id'=>(int)$to['id'],'family_name'=>$to['name']];
     });
 }
+// Gán mail: which customers the shop sent this link to, by hand (up to 5, optional).
+function lookupRecipientList(mixed $raw): array {
+    if(!is_array($raw)||!array_is_list($raw)||count($raw)>5)fail('Gán tối đa 5 mail cho một link.');
+    $seen=[];$list=[];
+    foreach($raw as $r){
+        if(!is_array($r))fail('Mail gán không hợp lệ.');
+        $address=email($r['email']??'');$name=text($r['name']??'',100);
+        if(isset($seen[$address]))fail("Mail $address bị lặp.");
+        $seen[$address]=true;$list[]=['email'=>$address,'name'=>$name];
+    }
+    return $list;
+}
+function lookupSaveRecipients(PDO $db,int $id,array $d): array {
+    $i=one($db,'SELECT * FROM family_invites WHERE id=?',[$id]);if(!$i)fail('Không tìm thấy link mời.',404);
+    $f=lookupActiveFamily($db,(int)$i['family_id']);if(!$f)fail('Không tìm thấy Family đang hoạt động.',404);
+    if(lookupRevision($d['revision']??null)!==(int)$i['revision'])fail('Link mời vừa được sửa ở nơi khác. Tải lại rồi thử lại.',409);
+    if(array_key_exists('mark_sent',$d)&&!is_bool($d['mark_sent']))fail('Lựa chọn Đã gửi không hợp lệ.');
+    $list=lookupRecipientList($d['recipients']??null);
+    // Marking Đã gửi keeps the web from handing this link to another customer on lookup.
+    $mark=($d['mark_sent']??null)===true&&$list&&($i['sent_at']??'')===''&&($i['retired_at']??'')===''&&lookupInviteHolder(lookupInviteRefs($db,$id))['state']==='ready';
+    q($db,'UPDATE family_invites SET recipients=?,sent_at=?,revision=revision+1,updated_at=? WHERE id=?',[$list?json_encode($list,JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES):'',$mark?lookupNow():$i['sent_at'],lookupNow(),$id]);
+    logEntry($db,'Cá nhân: '.($list?'gán '.implode(', ',array_column($list,'email')).' cho':'bỏ mail gán khỏi').' link mời '.($i['label']?:'#'.$id)." của {$f['name']}");
+    return ['ok'=>true,'recipients'=>$list,'marked_sent'=>$mark];
+}
 function lookupMarkInviteSent(PDO $db,int $id,array $d): array {
     $i=one($db,'SELECT * FROM family_invites WHERE id=?',[$id]);if(!$i)fail('Không tìm thấy link mời.',404);
     $f=lookupActiveFamily($db,(int)$i['family_id']);if(!$f)fail('Không tìm thấy Family đang hoạt động.',404);
@@ -666,6 +690,7 @@ function lookupAdminRequest(PDO $db,string $route,string $method): void {
     if(preg_match('~^/api/todos/(\d+)$~D',$route,$p)&&$method==='PATCH')reply(lookupSaveTodo($db,(int)$p[1],body()));
     if(preg_match('~^/api/todos/(\d+)$~D',$route,$p)&&$method==='DELETE')reply(lookupDeleteTodo($db,(int)$p[1]));
     if(preg_match('~^/api/families/(\d+)/status$~D',$route,$p)&&$method==='PATCH')reply(lookupSaveStatus($db,(int)$p[1],body()));
+    if(preg_match('~^/api/invites/(\d+)/recipients$~D',$route,$p)&&$method==='PATCH')reply(lookupSaveRecipients($db,(int)$p[1],body()));
     if(preg_match('~^/api/invites/(\d+)/sent$~D',$route,$p)&&$method==='PATCH')reply(lookupMarkInviteSent($db,(int)$p[1],body()));
     if(preg_match('~^/api/families/(\d+)/hand-over$~D',$route,$p)&&$method==='POST')reply(lookupHandOver($db,(int)$p[1],body()));
     if(preg_match('~^/api/families/(\d+)/invite-mails$~D',$route,$p)&&$method==='DELETE')reply(lookupDeleteInviteMails($db,(int)$p[1],body()));
@@ -686,6 +711,7 @@ function lookupAuditAction(string $method,string $route): string {
     if(preg_match('~^/api/families/\d+/status$~D',$route))return 'Sửa trạng thái Family';
     if(preg_match('~^/api/families/\d+/invites$~D',$route))return 'Thêm link mời';
     if(preg_match('~^/api/families/\d+/invite-mails$~D',$route))return $method==='DELETE'?'Xóa mail mời':'Tạo mail mời';
+    if(preg_match('~^/api/invites/\d+/recipients$~D',$route))return 'Gán mail cho link mời';
     if(preg_match('~^/api/invites/\d+/sent$~D',$route))return 'Đánh dấu link đã gửi';
     if(preg_match('~^/api/families/\d+/hand-over$~D',$route))return 'Cho khách vào Family mới';
     if(preg_match('~^/api/invites/\d+$~D',$route))return $method==='DELETE'?'Xóa link mời':'Sửa link mời';

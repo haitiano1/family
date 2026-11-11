@@ -124,6 +124,15 @@ $mistake=lookupGenerateInviteMails($db,$f12,['count'=>2])['mails'];$mid=fn(strin
 fails(fn()=>lookupDeleteInviteMails($db,$f12,['ids'=>[]]),400,'ids required');fails(fn()=>lookupDeleteInviteMails($db,$new,['ids'=>[$mid($mistake[0])]]),409,'other Family');
 lookupSaveInvite($db,$f12,null,['label'=>$mistake[1],'url'=>'https://families.google.com/join/promo/del','sent_on'=>$day(0)]);fails(fn()=>lookupDeleteInviteMails($db,$f12,['ids'=>[$mid($mistake[1])]]),409,'address with a link stays');
 check(lookupDeleteInviteMails($db,$f12,['ids'=>[$mid($mistake[0])]])===['ok'=>true,'deleted'=>1]&&!one($db,'SELECT id FROM invite_mails WHERE email=?',[$mistake[0]]),'deleted');
+// Gán mail (0.31.0)
+$g=lookupSaveInvite($db,$new,null,['label'=>'shop+g@gmail.com','url'=>'https://myaccount.google.com/family/join/gan1','sent_on'=>$day(0)])['id'];$gr=fn()=>(int)one($db,'SELECT revision FROM family_invites WHERE id=?',[$g])['revision'];
+fails(fn()=>lookupSaveRecipients($db,$g,['recipients'=>[['email'=>'bad']],'revision'=>$gr()]),400,'bad recipient');fails(fn()=>lookupSaveRecipients($db,$g,['recipients'=>array_fill(0,6,['email'=>'x@example.com']),'revision'=>$gr()]),400,'too many');
+fails(fn()=>lookupSaveRecipients($db,$g,['recipients'=>[['email'=>'a@example.com'],['email'=>'A@example.com']],'revision'=>$gr()]),400,'duplicate');fails(fn()=>lookupSaveRecipients($db,$g,['recipients'=>[],'revision'=>99]),409,'stale');
+$sr=lookupSaveRecipients($db,$g,['recipients'=>[['email'=>' Minh@Example.com ','name'=>' Minh Anh '],['email'=>'huy@example.com']],'revision'=>$gr(),'mark_sent'=>false]);
+check($sr['recipients']===[['email'=>'minh@example.com','name'=>'Minh Anh'],['email'=>'huy@example.com','name'=>'']]&&$sr['marked_sent']===false,'recipients saved');
+check(json_decode(one($db,'SELECT recipients FROM family_invites WHERE id=?',[$g])['recipients'],true)===$sr['recipients']&&one($db,'SELECT sent_at FROM family_invites WHERE id=?',[$g])['sent_at']==='','stored, still ready');
+check(lookupSaveRecipients($db,$g,['recipients'=>[['email'=>'minh@example.com']],'revision'=>$gr(),'mark_sent'=>true])['marked_sent']===true&&one($db,'SELECT sent_at FROM family_invites WHERE id=?',[$g])['sent_at']!=='','marked sent');
+lookupSaveRecipients($db,$g,['recipients'=>[],'revision'=>$gr()]);check(one($db,'SELECT recipients FROM family_invites WHERE id=?',[$g])['recipients']==='','cleared');
 // Việc cần làm (0.30.0)
 fails(fn()=>lookupSaveTodo($db,null,['text'=>'  ']),400,'empty todo');fails(fn()=>lookupSaveTodo($db,null,['text'=>str_repeat('x',301)]),400,'long todo');fails(fn()=>lookupSaveTodo($db,null,['text'=>'a','due_on'=>'2026-02-30']),400,'bad todo day');
 $t1=lookupSaveTodo($db,null,['text'=>'  Gọi   khách ','due_on'=>$day(1)]);$t2=lookupSaveTodo($db,null,['text'=>'Không ngày']);

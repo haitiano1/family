@@ -749,7 +749,7 @@ test('PHP lookup page: Family status, invite pool, bulk move, Gmail + code sign-
  await a('invites/'+invite.id+'/sent','PATCH',{sent:true,revision:state.invites.find(i=>i.id===invite.id).revision},409);assert.ok((await a('journal')).entries.some(e=>e.action==='Đánh dấu link đã gửi'));
  const fresh=await a('backup');assert.equal(fresh.version,10);assert.equal(fresh.tables.invite_mails.length,3);assert.ok(fresh.tables.family_invites.every(i=>'sent_at' in i));
  sql(`ALTER TABLE ${f.db}.family_invites DROP COLUMN sent_at, DROP COLUMN retired_at`);sql(`DROP TABLE ${f.db}.invite_mails`);sql(`UPDATE ${f.db}.app_meta SET value='1' WHERE name='lookup_schema'`);
- state=await a('state');assert.equal(state.invite_mails.length,0);assert.ok(state.invites.every(i=>i.sent_at===''&&i.retired_at===''));assert.equal(sql(`SELECT value FROM ${f.db}.app_meta WHERE name='lookup_schema'`),'5');
+ state=await a('state');assert.equal(state.invite_mails.length,0);assert.ok(state.invites.every(i=>i.sent_at===''&&i.retired_at===''));assert.equal(sql(`SELECT value FROM ${f.db}.app_meta WHERE name='lookup_schema'`),'6');
  // Fix lỗi on the owner mail marks the Family Bị quét; completing the case puts it back to active.
  const issue=await a('issues','POST',{family_id:next.id,target_type:'manager',title:'Mail chủ bị quét'},201);state=await a('state');const auto=state.family_statuses.find(x=>x.family_id===next.id);assert.equal(auto.status,'scanned');assert.match(auto.note,/Nhóm Youtube của bạn bị Google quét/);
  const opened=state.issues.find(x=>x.id===issue.id);await a('issues/'+issue.id,'PATCH',{revision:opened.revision,status:'done',resolution:'keep'});state=await a('state');assert.equal(state.family_statuses.find(x=>x.family_id===next.id).status,'active');
@@ -784,6 +784,13 @@ test('PHP lookup page: Family status, invite pool, bulk move, Gmail + code sign-
  state=await a('state');const landed=state.members.filter(m=>m.family_id===ten.id);assert.equal(landed.length,2);assert.equal(landed.find(m=>m.email==='minhanh@example.com').membership_status,'active');assert.equal(landed.find(m=>m.email==='moi@example.com').membership_status,'invited');assert.equal(landed.find(m=>m.email==='moi@example.com').customer_name,'Khách mới');assert.equal(state.members.some(m=>m.family_id===next.id),false);
  assert.ok((await a('journal')).entries.some(e=>e.action==='Cho khách vào Family mới'));
  await lookup('logout','POST',{},200,signed.cookie);assert.deepEqual((await lookup('me','GET',undefined,200,signed.cookie)).body,{signed_in:false});
+ // Gán mail (0.31.0) on MySQL.
+ const s40pre=await a('families','POST',{name:'Family 31',manager_email:'owner31@example.com'},201);
+ const g31=await a('families/'+s40pre.id+'/invites','POST',{label:'shop+g31@gmail.com',url:'https://families.google.com/join/promo/php-g31',sent_on:''},201);
+ await a('invites/'+g31.id+'/recipients','PATCH',{recipients:[{email:'bad'}],revision:0},400);
+ const g31s=await a('invites/'+g31.id+'/recipients','PATCH',{recipients:[{email:' Khach@Example.com ',name:'Khách Ngọc'}],revision:0,mark_sent:true});assert.equal(g31s.marked_sent,true);
+ state=await a('state');const g31r=state.invites.find(i=>i.id===g31.id);assert.deepEqual(JSON.parse(g31r.recipients),[{email:'khach@example.com',name:'Khách Ngọc'}]);assert.equal(g31r.holder_state,'sent');
+ assert.ok((await a('journal')).entries.some(e=>e.action==='Gán mail cho link mời'));
  // Việc cần làm (0.30.0) on MySQL, and deleting an open owner case puts the Family back to Hoạt động.
  await a('todos','POST',{text:'  '},400);const t1=await a('todos','POST',{text:'  Gọi   khách ',due_on:'2099-01-02'},201);assert.equal(t1.text,'Gọi khách');
  const t2=await a('todos','POST',{text:'Không ngày'},201);state=await a('state');assert.deepEqual(state.todos.map(t=>t.id),[t1.id,t2.id]);

@@ -108,9 +108,15 @@ export function customerLookupAction(ctx, member) {
 const readyInvites = (state, familyId) => (state.invites || []).filter(i => i.family_id === familyId && i.holder_state === 'ready');
 const inviteName = (ctx, invite) => invite.label || 'Link #' + invite.id;
 // Once a customer joined with a link, the row shows that customer's Gmail instead of the + address.
+// Gán mail: customers the shop noted on this link by hand, shown right after the invite mail.
+const recipientsOf = invite => { try { const list = JSON.parse(invite.recipients || '[]'); return Array.isArray(list) ? list.filter(r => r && typeof r.email === 'string') : []; } catch { return []; } };
+const recipientLine = (ctx, invite) => {
+  const list = recipientsOf(invite); if (!list.length) return '';
+  return `<span class="invite-sep" aria-hidden="true">–</span><span class="invite-recipients" title="Mail khách đã gán cho link này">${list.map(r => `<strong class="invite-recipient">${ctx.escape(r.email)}</strong>${r.name ? `<span class="invite-recipient-name"> (${ctx.escape(r.name)})</span>` : ''}`).join('<span class="invite-recipient-comma">, </span>')}</span>`;
+};
 const inviteTitle = (ctx, invite) => invite.holder_state === 'used' && invite.holder_email
-  ? `<strong>${ctx.escape(invite.holder_email)}</strong><span class="subtext">Mail mời: ${ctx.escape(inviteName(ctx, invite))}</span>`
-  : `<strong>${ctx.escape(inviteName(ctx, invite))}</strong>`;
+  ? `<div class="invite-title"><strong>${ctx.escape(invite.holder_email)}</strong>${recipientLine(ctx, invite)}</div><span class="subtext">Mail mời: ${ctx.escape(inviteName(ctx, invite))}</span>`
+  : `<div class="invite-title"><strong>${ctx.escape(inviteName(ctx, invite))}</strong>${recipientLine(ctx, invite)}</div>`;
 function inviteStateBadge(ctx, invite) {
   if (invite.holder_state === 'retired') return `<span class="badge">Link chủ cũ</span><span class="subtext">Không giao cho khách</span>`;
   if (invite.holder_state === 'used') return `<span class="badge green">Đã dùng</span><span class="subtext">${ctx.escape(invite.holder_name || invite.holder_email)}</span>`;
@@ -139,7 +145,7 @@ function expiryText(ctx, invite) {
 function inviteTable(ctx, invites) {
   const { escape, btn } = ctx;
   if (!invites.length) return '<p class="muted">Chưa có link mời. Gửi lời mời từ tài khoản chủ Family tới các mail của bạn (ví dụ mail+1, mail+2…), rồi dán link nút <strong>Chấp nhận lời mời</strong> vào đây.</p>';
-  return `<div class="table-wrap"><table class="lookup-table"><thead><tr><th scope="col">LINK MỜI</th><th scope="col">LỜI MỜI HẾT HẠN</th><th scope="col">TRẠNG THÁI</th><th scope="col">THAO TÁC</th></tr></thead><tbody>${invites.map(i => `<tr><td data-column="invite">${inviteTitle(ctx, i)}<span class="subtext lookup-url">${escape(i.url)}</span></td><td data-column="expiry" class="date-cell">${expiryText(ctx, i)}</td><td data-column="state">${inviteStateBadge(ctx, i)}</td><td data-column="actions"><div class="row-actions">${unsendButton(ctx, i)}${ctx.copyButton(i.url, 'link mời', 'Copy link')}${btn('invite-edit', 'Sửa', 'secondary tiny', `data-id="${i.id}"`)}${i.holder_state === 'assigned' ? '' : btn('invite-delete', 'Xóa', 'danger tiny', `data-id="${i.id}"`)}</div></td></tr>`).join('')}</tbody></table></div>`;
+  return `<div class="table-wrap"><table class="lookup-table"><thead><tr><th scope="col">LINK MỜI</th><th scope="col">LỜI MỜI HẾT HẠN</th><th scope="col">TRẠNG THÁI</th><th scope="col">THAO TÁC</th></tr></thead><tbody>${invites.map(i => `<tr><td data-column="invite">${inviteTitle(ctx, i)}<span class="subtext lookup-url">${escape(i.url)}</span></td><td data-column="expiry" class="date-cell">${expiryText(ctx, i)}</td><td data-column="state">${inviteStateBadge(ctx, i)}</td><td data-column="actions"><div class="row-actions">${unsendButton(ctx, i)}${ctx.copyButton(i.url, 'link mời', 'Copy link')}${btn('invite-recipients', recipientsOf(i).length ? 'Sửa mail gán' : 'Gán mail', 'secondary tiny', `data-id="${i.id}" title="Ghi lại mail khách bạn đã gửi link này"`)}${ctx.moreActions('Thao tác khác cho ' + inviteName(ctx, i), btn('invite-edit', 'Sửa link', 'secondary tiny', `data-id="${i.id}"`) + (i.holder_state === 'assigned' ? '' : btn('invite-delete', 'Xóa link', 'danger tiny', `data-id="${i.id}"`)))}</div></td></tr>`).join('')}</tbody></table></div>`;
 }
 function moveBadge(ctx, move) {
   const key = move.effective_state === 'assigned' && move.invite_id == null ? 'waiting' : move.effective_state;
@@ -344,6 +350,21 @@ export async function handleLookupAction(ctx, action, button) {
   if (action === 'invite-edit') {
     const invite = (state.invites || []).find(i => i.id === id); if (!invite) return ctx.toast('Link đã thay đổi. Tải lại trang.'), true;
     ctx.modal('Sửa link mời', inviteFields(ctx, invite) + (invite.holder_state === 'assigned' ? `<p class="notice">Link đang giao cho ${ctx.escape(invite.holder_name || invite.holder_email)}. Dán link mới thì khách thấy link mới ngay khi tra cứu.</p>` : ''), async data => { await ctx.patch('invites/' + id, { ...data, revision: invite.revision }); ctx.toast('Đã lưu link mời.'); });
+    return true;
+  }
+  if (action === 'invite-recipients') {
+    const invite = (state.invites || []).find(i => i.id === id); if (!invite) return ctx.toast('Link đã thay đổi. Tải lại trang.'), true;
+    const { escape } = ctx, current = recipientsOf(invite), ready = invite.holder_state === 'ready';
+    const members = [...state.members].sort((a, b) => (b.family_id === invite.family_id) - (a.family_id === invite.family_id) || a.email.localeCompare(b.email));
+    const rows = [0, 1, 2, 3, 4].map(k => `<input name="r_email_${k}" type="email" list="recipient-members" maxlength="254" autocomplete="off" aria-label="Mail khách ${k + 1}" placeholder="${k ? '' : 'mailkhach@gmail.com'}" value="${escape(current[k]?.email || '')}"><input name="r_name_${k}" maxlength="100" autocomplete="off" aria-label="Tên khách ${k + 1}" placeholder="${k ? '' : 'Tên (không bắt buộc)'}" value="${escape(current[k]?.name || '')}">`).join('');
+    ctx.modal('Gán mail cho link · ' + inviteName(ctx, invite), `<p class="subtext">Ghi lại mail khách bạn đã gửi link này để dễ quản lý. Không bắt buộc, tối đa 5 mail; để trống hết là bỏ gán.</p><div class="recipient-grid"><span class="recipient-head" aria-hidden="true">Mail khách</span><span class="recipient-head" aria-hidden="true">Tên khách</span>${rows}</div><datalist id="recipient-members">${members.map(m => `<option value="${escape(m.email)}">${escape([m.customer_name, m.family_name].filter(Boolean).join(' · '))}</option>`).join('')}</datalist>${ready ? '<label class="check-line"><input type="checkbox" name="mark_sent" checked> <span>Đánh dấu <strong>Đã gửi</strong> — web không tự giao link này cho khách khác khi tra cứu</span></label>' : ''}`, async data => {
+      const recipients = [0, 1, 2, 3, 4].map(k => ({ email: String(data['r_email_' + k] || '').trim(), name: String(data['r_name_' + k] || '').trim() })).filter(r => r.email);
+      const result = await ctx.patch(`invites/${id}/recipients`, { recipients, revision: invite.revision, mark_sent: data.mark_sent === 'on' });
+      ctx.toast(recipients.length ? `Đã gán ${recipients.length} mail cho link${result.marked_sent ? ' · đánh dấu Đã gửi' : ''}.` : 'Đã bỏ mail gán khỏi link.');
+    });
+    // Picking a customer's Gmail from the list fills the name when it is empty.
+    const box = document.getElementById('modal-fields');
+    box.oninput = event => { const k = /^r_email_(\d)$/.exec(event.target.name || '')?.[1]; if (k === undefined) return; const member = state.members.find(m => m.email === event.target.value.trim().toLowerCase()), name = box.querySelector(`[name="r_name_${k}"]`); if (member && name && !name.value) name.value = member.customer_name || ''; };
     return true;
   }
   if (action === 'invite-delete') {
