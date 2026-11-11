@@ -1,6 +1,6 @@
-# Hải Premium — Quản lý khách hàng 0.31.0
+# Hải Premium — Quản lý khách hàng 0.31.1
 
-Bản 0.31.0: **Gán mail** cho link mời — mỗi link ghi được tối đa 5 mail khách (kèm tên, không bắt buộc), hiện ngay sau mail mời bằng chữ xanh đậm; có thể đánh dấu Đã gửi cùng lúc để web không tự giao link đó cho khách khác. Sửa link / Xóa link chuyển vào nút “…”. Khách web tự giao link cũng hiện chữ xanh ngay sau mail mời; ở Tra cứu khách, mục Link đã giao cho khách được thu gọn (đầu mục hiện số chờ link / đã nhận link) và khách chờ link đã được gán mail thì hiện link đã gán.
+Bản 0.31.1: khách đang chờ link có nút **Bỏ chờ link** (từng khách trong nút “…”, hoặc cả Family trong mục Khách nhận link) để trang tra cứu không còn báo “Shop đang tạo link riêng” khi khách vẫn ở nhóm. Bản 0.31.0: **Gán mail** cho link mời — mỗi link ghi được tối đa 5 mail khách (kèm tên, không bắt buộc), hiện ngay sau mail mời bằng chữ xanh đậm; có thể đánh dấu Đã gửi cùng lúc để web không tự giao link đó cho khách khác. Sửa link / Xóa link chuyển vào nút “…”. Khách web tự giao link cũng hiện chữ xanh ngay sau mail mời; ở Tra cứu khách, mục Link đã giao cho khách được thu gọn (đầu mục hiện số chờ link / đã nhận link) và khách chờ link đã được gán mail thì hiện link đã gán.
 
 Bản 0.28.6: **Thông tin hiển thị cho khách** có riêng **Link Zalo** và **Link Facebook / Messenger**; trang tra cứu hiện nút Zalo và Facebook kèm biểu tượng.
 

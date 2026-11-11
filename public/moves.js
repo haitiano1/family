@@ -164,7 +164,9 @@ function moveTable(ctx, moves, showTarget = false) {
     const open = ['assigned', 'opened', 'failed'].includes(move.effective_state);
     const message = open ? moveMessage(state, move) : '';
     const actions = open
-      ? (message ? ctx.copyButton(message, 'tin nhắn gửi khách', 'Copy tin nhắn') : '') + ctx.moreActions('Thao tác khác cho ' + (move.customer_name || move.email), btn('move-reassign', 'Đổi link', 'secondary tiny', `data-id="${move.id}"`) + btn('move-release', 'Thu hồi link', 'danger tiny', `data-id="${move.id}"`))
+      ? (message ? ctx.copyButton(message, 'tin nhắn gửi khách', 'Copy tin nhắn') : '') + ctx.moreActions('Thao tác khác cho ' + (move.customer_name || move.email), move.invite_id == null
+        ? btn('move-reassign', 'Chọn link cho khách', 'secondary tiny', `data-id="${move.id}"`) + btn('move-release', 'Bỏ chờ link', 'danger tiny', `data-id="${move.id}"`)
+        : btn('move-reassign', 'Đổi link', 'secondary tiny', `data-id="${move.id}"`) + btn('move-release', 'Thu hồi link', 'danger tiny', `data-id="${move.id}"`))
       : btn('move-dismiss', 'Ẩn', 'secondary tiny', `data-id="${move.id}"`) + (move.effective_state === 'stale' ? btn('move-release', 'Thu hồi link', 'secondary tiny', `data-id="${move.id}"`) : '');
     return `<tr><td data-column="customer">${ctx.customerInfo({ customer_name: move.customer_name, email: move.email }, false)}</td><td data-column="family">${isJoin(move) ? '<span class="subtext">Khách mới · tự nhận link</span>' : escape(move.from_family_name)}${showTarget ? ` → <a class="email-link" href="#family/${move.to_family_id}">${escape(move.to_family_name)}</a>` : ''}</td><td data-column="invite">${move.invite_id ? escape(move.invite_label || 'Link #' + move.invite_id) : (noted => noted.length ? `${noted.map(i => `<strong class="invite-recipient">${escape(inviteName(ctx, i))}</strong>`).join('<br>')}<span class="subtext">Đã gán mail ở bảng link Family</span>` : '—')(notedLinks(state, move.email))}</td><td data-column="state">${moveBadge(ctx, move)}<span class="subtext">Cập nhật ${ctx.date(move.updated_at)}</span></td><td data-column="actions"><div class="row-actions">${actions}</div></td></tr>`;
   }).join('')}</tbody></table></div>`;
@@ -227,7 +229,8 @@ export function familyLookupSections(ctx, family) {
       + `<p class="subtext fold-help">Khách chờ link tra cứu Gmail sẽ tự nhận một link Sẵn sàng; link đã đưa cho khách có tag Đã gửi và không giao cho ai khác. Kiểm tra link: <strong>Mở để kiểm tra</strong> bằng Gmail không ở nhóm nào (tab ẩn danh), Google hiện lời mời thì bấm <strong>Còn dùng được</strong>, báo không còn hiệu lực thì bấm <strong>Đã dùng</strong>.${retired ? ` Đã bỏ ${retired} link của chủ cũ.` : ''}</p>`))
     + (incoming.length ? fold(`incoming-${family.id}`, false, 'Khách nhận link vào Family này',
       [[incoming.filter(m => ['assigned', 'opened', 'failed'].includes(m.effective_state) && m.invite_id == null).length, 'chờ link', 'amber'], [incoming.filter(m => ['assigned', 'opened', 'failed'].includes(m.effective_state) && m.invite_id != null).length, 'đã nhận link', 'green']],
-      moveTable(ctx, incoming) + '<p class="subtext fold-help">Giao link là xong, không cần theo dõi khách đã vào hay chưa.</p>') : '');
+      (waitingIn => waitingIn.length ? `<div class="row-actions fold-actions">${btn('moves-release-waiting', `Bỏ chờ link cho ${waitingIn.length} khách`, 'secondary', `data-id="${family.id}" title="Khách vẫn ở nhóm hoặc bạn đã tự mời: tra cứu sẽ không còn báo đang chờ link"`)}</div>` : '')(incoming.filter(m => ['assigned', 'opened', 'failed'].includes(m.effective_state) && m.invite_id == null))
+      + moveTable(ctx, incoming) + '<p class="subtext fold-help">Giao link là xong, không cần theo dõi khách đã vào hay chưa. Khách chờ link thấy “Shop đang tạo link riêng” khi tra cứu cho đến khi nhận link hoặc bạn bấm Bỏ chờ link.</p>') : '');
 }
 // Long sections of the Family page fold away; the head keeps the counts that matter.
 const openFolds = new Set();
@@ -314,6 +317,15 @@ function openBulkMove(ctx, sourceId) {
 // Returns true when the action belongs to this module.
 export async function handleLookupAction(ctx, action, button) {
   const { state } = ctx, id = Number(button.dataset.id);
+  if (action === 'moves-release-waiting') {
+    const family = state.families.find(f => f.id === id), rows = (state.moves || []).filter(m => m.to_family_id === id && ['assigned', 'opened', 'failed'].includes(m.effective_state) && m.invite_id == null);
+    if (!family || !rows.length) return ctx.toast('Danh sách đã thay đổi. Tải lại trang.'), true;
+    ctx.modal(`Bỏ chờ link cho ${rows.length} khách?`, `<p>${rows.map(m => ctx.escape(m.customer_name ? `${m.customer_name} (${m.email})` : m.email)).join(', ')}</p><p>Các khách này sẽ không còn thấy “Shop đang tạo link riêng” khi tra cứu, mà thấy ${ctx.escape(family.name)} hoạt động bình thường. Dùng khi khách vẫn ở trong nhóm hoặc bạn đã tự mời khách.</p>`, async () => {
+      let done = 0; for (const m of rows) { await ctx.patch('moves/' + m.id, { action: 'release', revision: m.revision }); done++; }
+      ctx.toast(`Đã bỏ chờ link cho ${done} khách.`);
+    }, 'Bỏ chờ link');
+    return true;
+  }
   if (action === 'customer-reports-handle') {
     const ids = String(button.dataset.ids || '').split(',').map(Number), rows = ids.map(i => (state.customer_reports || []).find(r => r.id === i && !r.handled_at));
     if (!rows.length || rows.some(r => !r)) return ctx.toast('Báo lỗi đã thay đổi. Tải lại trang.'), true;
@@ -436,6 +448,10 @@ export async function handleLookupAction(ctx, action, button) {
       await ctx.patch(`moves/${move.id}`, { action: 'unassign', revision: move.revision });
       ctx.toast('Đã đưa link về kho.');
     }, 'Đưa về kho');
+    return true;
+  }
+  if (action === 'move-release' && move.invite_id == null) {
+    ctx.modal('Bỏ chờ link?', `${ctx.customerInfo(move, false)}<p>Khách sẽ không còn thấy màn hình “Shop đang tạo link riêng” khi tra cứu, mà thấy nhóm ${ctx.escape(move.to_family_name)} hoạt động bình thường. Dùng khi khách vẫn ở trong nhóm hoặc bạn đã tự mời khách.</p>`, async () => { await ctx.patch('moves/' + id, { action: 'release', revision: move.revision }); ctx.toast('Đã bỏ chờ link cho khách.'); }, 'Bỏ chờ link');
     return true;
   }
   if (action === 'move-release') {
