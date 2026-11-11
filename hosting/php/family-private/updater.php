@@ -219,14 +219,15 @@ final class FamilyUpdater {
     // Boot probe: the new code answers update.php?action=health. Shared hosts often refuse a site
     // calling its own public address (CDN/firewall resets the connection), so the same HTTPS request
     // is also tried straight to this server (CURLOPT_RESOLVE keeps the name and certificate check).
-    // Only when no route answers at all does a local check stand in: every new PHP file must parse
-    // and version.php must declare the release being installed.
+    // Only when the app itself answers on no route (connection reset, TLS refused, a host or CDN page
+    // instead of this app's JSON) does a local check stand in: every new PHP file must parse and
+    // version.php must declare the release being installed.
     private function health(array $candidate,string $nonce,array $files=[]): bool {
         $origin=$this->config['public_origin'];$host=(string)parse_url($origin,PHP_URL_HOST);$scheme=parse_url($origin,PHP_URL_SCHEME)==='http'?'http':'https';$port=(int)(parse_url($origin,PHP_URL_PORT)?:($scheme==='http'?80:443));
         $routes=[''];foreach([$_SERVER['SERVER_ADDR']??'','127.0.0.1'] as $ip)if(is_string($ip)&&$ip!==''&&filter_var($ip,FILTER_VALIDATE_IP)&&!in_array($ip,$routes,true))$routes[]=$ip;
         $notes=[];$answered=false;
         foreach($routes as $ip){
-            $result=$this->probeOnce($candidate,$nonce,$origin,$host,$port,$ip);
+            $result=$this->probeOnce($candidate,$nonce,$origin,$host,$port,$ip,$ip===''?20:10);
             if($result['healthy'])return true;
             $answered=$answered||$result['answered'];$notes[]=($ip===''?$host:$ip).': '.$result['note'];
         }
@@ -234,17 +235,18 @@ final class FamilyUpdater {
         $this->probeNote=substr(implode('; ',$notes),0,400);
         return false;
     }
-    private function probeOnce(array $candidate,string $nonce,string $origin,string $host,int $port,string $ip): array {
+    private function probeOnce(array $candidate,string $nonce,string $origin,string $host,int $port,string $ip,int $timeout=20): array {
         // A unique address and no-cache headers keep a CDN or server cache from answering with an older probe.
         $url=$origin.'/update.php?action=health&probe='.substr(hash('sha256',$nonce),0,16).'-'.time();$ch=curl_init($url);$body='';
-        $options=[CURLOPT_FOLLOWLOCATION=>false,CURLOPT_CONNECTTIMEOUT=>5,CURLOPT_TIMEOUT=>30,CURLOPT_SSL_VERIFYPEER=>true,CURLOPT_SSL_VERIFYHOST=>2,CURLOPT_PROTOCOLS=>CURLPROTO_HTTPS|(getenv('FAMILY_ALLOW_HTTP')==='1'?CURLPROTO_HTTP:0),CURLOPT_HTTPHEADER=>['X-Family-Update-Probe: '.$nonce,'Cookie: fam_access='.($_COOKIE['fam_access']??''),'Cache-Control: no-cache','Pragma: no-cache'],CURLOPT_WRITEFUNCTION=>function($ch,$chunk)use(&$body){if(strlen($body)+strlen($chunk)>65536)return 0;$body.=$chunk;return strlen($chunk);}];
+        $options=[CURLOPT_FOLLOWLOCATION=>false,CURLOPT_CONNECTTIMEOUT=>5,CURLOPT_TIMEOUT=>$timeout,CURLOPT_SSL_VERIFYPEER=>true,CURLOPT_SSL_VERIFYHOST=>2,CURLOPT_PROTOCOLS=>CURLPROTO_HTTPS|(getenv('FAMILY_ALLOW_HTTP')==='1'?CURLPROTO_HTTP:0),CURLOPT_HTTPHEADER=>['X-Family-Update-Probe: '.$nonce,'Cookie: fam_access='.($_COOKIE['fam_access']??''),'Cache-Control: no-cache','Pragma: no-cache'],CURLOPT_WRITEFUNCTION=>function($ch,$chunk)use(&$body){if(strlen($body)+strlen($chunk)>65536)return 0;$body.=$chunk;return strlen($chunk);}];
         if($ip!=='')$options[CURLOPT_RESOLVE]=[$host.':'.$port.':'.(str_contains($ip,':')?'['.$ip.']':$ip)];
         curl_setopt_array($ch,$options);
         $ok=curl_exec($ch);$status=curl_getinfo($ch,CURLINFO_RESPONSE_CODE);$curlError=$ok===false?curl_error($ch):'';curl_close($ch);$value=json_decode($body,true);
         $healthy=$ok!==false&&$status===200&&is_array($value)&&($value['ok']??false)===true&&($value['version']??'')===$candidate['version']&&($value['schema']??null)===$candidate['schema'];
-        $answered=$ok!==false&&$status>0;
+        // The app answered only if update.php itself replied: a JSON object (health result or its error).
+        $answered=$ok!==false&&$status>0&&is_array($value)&&(array_key_exists('ok',$value)||array_key_exists('error',$value));
         // Why the probe failed, shown with the rollback message (no secrets: status, versions, curl error).
-        $note=$healthy?'':(!$answered?'không kết nối được ('.substr($curlError,0,100).')':($status!==200?'trả HTTP '.$status:(!is_array($value)?'phản hồi không phải JSON (cache, CDN hoặc lỗi PHP chen vào)':'trả bản '.(is_string($value['version']??null)?substr($value['version'],0,20):'?').' / dữ liệu '.(is_int($value['schema']??null)?$value['schema']:'?').', cần '.$candidate['version'].' / '.$candidate['schema'])));
+        $note=$healthy?'':($ok===false||$status===0?'không kết nối được ('.substr($curlError,0,100).')':(!$answered?'trả HTTP '.$status.' không phải từ ứng dụng (hosting/CDN chặn)':($status!==200?'ứng dụng trả HTTP '.$status.(is_string($value['error']??null)?' – '.substr($value['error'],0,80):''):'trả bản '.(is_string($value['version']??null)?substr($value['version'],0,20):'?').' / dữ liệu '.(is_int($value['schema']??null)?$value['schema']:'?').', cần '.$candidate['version'].' / '.$candidate['schema'])));
         return ['healthy'=>$healthy,'answered'=>$answered,'note'=>$note];
     }
     private function localCheck(array $candidate,array $files): string {
