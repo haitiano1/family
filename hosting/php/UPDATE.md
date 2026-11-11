@@ -1,3 +1,7 @@
+# 0.32.3 — Cập nhật một chạm khi hosting chặn tự gọi tên miền
+
+Bộ cập nhật không tự thay chính nó. Một lần duy nhất: giải nén **family-hostinger-update.zip**, upload riêng file **family-private/updater.php** vào thư mục **family-private** trên hosting (Replace), rồi dùng **Cập nhật một chạm**.
+
 # 0.32.2 — Hiện trước link sẽ gán cho ai
 
 Dùng **Cập nhật một chạm**.

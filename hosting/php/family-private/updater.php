@@ -202,7 +202,7 @@ final class FamilyUpdater {
             $this->json($this->work.'/transaction.json',$journal);$this->json($this->work.'/maintenance.json',['since'=>time()]);
             foreach($files as $name=>$bytes)$this->write($this->target($name),$bytes);
             $this->unlockRuntime();
-            $healthy=$this->probe?($this->probe)($candidate,$nonce):$this->health($candidate,$nonce);
+            $healthy=$this->probe?($this->probe)($candidate,$nonce):$this->health($candidate,$nonce,array_keys($files));
             $this->lockRuntime();if($healthy!==true)$this->error('Bản mới chưa vượt kiểm tra khởi động.',502);
             $journal['committed']=true;$this->json($this->work.'/transaction.json',$journal);$this->recover();
             return ['ok'=>true,'version'=>$candidate['version'],'message'=>'Đã cập nhật thành công. Tải lại website để dùng bản mới.'];
@@ -216,15 +216,46 @@ final class FamilyUpdater {
             $this->error('Chưa thể hoàn tất cập nhật. Mã hiện tại và dữ liệu được giữ; kiểm tra quyền ghi và thử lại.',503);
         }finally{$this->unlockRuntime();$this->unlockOperation();}
     }
-    private function health(array $candidate,string $nonce): bool {
+    // Boot probe: the new code answers update.php?action=health. Shared hosts often refuse a site
+    // calling its own public address (CDN/firewall resets the connection), so the same HTTPS request
+    // is also tried straight to this server (CURLOPT_RESOLVE keeps the name and certificate check).
+    // Only when no route answers at all does a local check stand in: every new PHP file must parse
+    // and version.php must declare the release being installed.
+    private function health(array $candidate,string $nonce,array $files=[]): bool {
+        $origin=$this->config['public_origin'];$host=(string)parse_url($origin,PHP_URL_HOST);$scheme=parse_url($origin,PHP_URL_SCHEME)==='http'?'http':'https';$port=(int)(parse_url($origin,PHP_URL_PORT)?:($scheme==='http'?80:443));
+        $routes=[''];foreach([$_SERVER['SERVER_ADDR']??'','127.0.0.1'] as $ip)if(is_string($ip)&&$ip!==''&&filter_var($ip,FILTER_VALIDATE_IP)&&!in_array($ip,$routes,true))$routes[]=$ip;
+        $notes=[];$answered=false;
+        foreach($routes as $ip){
+            $result=$this->probeOnce($candidate,$nonce,$origin,$host,$port,$ip);
+            if($result['healthy'])return true;
+            $answered=$answered||$result['answered'];$notes[]=($ip===''?$host:$ip).': '.$result['note'];
+        }
+        if(!$answered&&$files){$local=$this->localCheck($candidate,$files);if($local==='')return true;$notes[]=$local;}
+        $this->probeNote=substr(implode('; ',$notes),0,400);
+        return false;
+    }
+    private function probeOnce(array $candidate,string $nonce,string $origin,string $host,int $port,string $ip): array {
         // A unique address and no-cache headers keep a CDN or server cache from answering with an older probe.
-        $url=$this->config['public_origin'].'/update.php?action=health&probe='.substr(hash('sha256',$nonce),0,16).'-'.time();$ch=curl_init($url);$body='';
-        curl_setopt_array($ch,[CURLOPT_FOLLOWLOCATION=>false,CURLOPT_CONNECTTIMEOUT=>5,CURLOPT_TIMEOUT=>30,CURLOPT_SSL_VERIFYPEER=>true,CURLOPT_SSL_VERIFYHOST=>2,CURLOPT_PROTOCOLS=>CURLPROTO_HTTPS|(getenv('FAMILY_ALLOW_HTTP')==='1'?CURLPROTO_HTTP:0),CURLOPT_HTTPHEADER=>['X-Family-Update-Probe: '.$nonce,'Cookie: fam_access='.($_COOKIE['fam_access']??''),'Cache-Control: no-cache','Pragma: no-cache'],CURLOPT_WRITEFUNCTION=>function($ch,$chunk)use(&$body){if(strlen($body)+strlen($chunk)>65536)return 0;$body.=$chunk;return strlen($chunk);}]);
+        $url=$origin.'/update.php?action=health&probe='.substr(hash('sha256',$nonce),0,16).'-'.time();$ch=curl_init($url);$body='';
+        $options=[CURLOPT_FOLLOWLOCATION=>false,CURLOPT_CONNECTTIMEOUT=>5,CURLOPT_TIMEOUT=>30,CURLOPT_SSL_VERIFYPEER=>true,CURLOPT_SSL_VERIFYHOST=>2,CURLOPT_PROTOCOLS=>CURLPROTO_HTTPS|(getenv('FAMILY_ALLOW_HTTP')==='1'?CURLPROTO_HTTP:0),CURLOPT_HTTPHEADER=>['X-Family-Update-Probe: '.$nonce,'Cookie: fam_access='.($_COOKIE['fam_access']??''),'Cache-Control: no-cache','Pragma: no-cache'],CURLOPT_WRITEFUNCTION=>function($ch,$chunk)use(&$body){if(strlen($body)+strlen($chunk)>65536)return 0;$body.=$chunk;return strlen($chunk);}];
+        if($ip!=='')$options[CURLOPT_RESOLVE]=[$host.':'.$port.':'.(str_contains($ip,':')?'['.$ip.']':$ip)];
+        curl_setopt_array($ch,$options);
         $ok=curl_exec($ch);$status=curl_getinfo($ch,CURLINFO_RESPONSE_CODE);$curlError=$ok===false?curl_error($ch):'';curl_close($ch);$value=json_decode($body,true);
-        $healthy=$ok&&$status===200&&is_array($value)&&($value['ok']??false)===true&&($value['version']??'')===$candidate['version']&&($value['schema']??null)===$candidate['schema'];
+        $healthy=$ok!==false&&$status===200&&is_array($value)&&($value['ok']??false)===true&&($value['version']??'')===$candidate['version']&&($value['schema']??null)===$candidate['schema'];
+        $answered=$ok!==false&&$status>0;
         // Why the probe failed, shown with the rollback message (no secrets: status, versions, curl error).
-        if(!$healthy)$this->probeNote=$ok===false?'không gọi được '.parse_url($this->config['public_origin'],PHP_URL_HOST).' ('.substr($curlError,0,120).')':($status!==200?'máy chủ trả HTTP '.$status:(!is_array($value)?'phản hồi không phải JSON (có thể bị cache, CDN hoặc thông báo lỗi PHP chen vào)':'bản trả về '.(is_string($value['version']??null)?substr($value['version'],0,20):'?').' / dữ liệu '.(is_int($value['schema']??null)?$value['schema']:'?').', cần '.$candidate['version'].' / '.$candidate['schema'].(($value['version']??'')!==$candidate['version']?' (có thể bị cache hoặc CDN trả bản cũ)':'')));
-        return $healthy;
+        $note=$healthy?'':(!$answered?'không kết nối được ('.substr($curlError,0,100).')':($status!==200?'trả HTTP '.$status:(!is_array($value)?'phản hồi không phải JSON (cache, CDN hoặc lỗi PHP chen vào)':'trả bản '.(is_string($value['version']??null)?substr($value['version'],0,20):'?').' / dữ liệu '.(is_int($value['schema']??null)?$value['schema']:'?').', cần '.$candidate['version'].' / '.$candidate['schema'])));
+        return ['healthy'=>$healthy,'answered'=>$answered,'note'=>$note];
+    }
+    private function localCheck(array $candidate,array $files): string {
+        foreach($files as $name){
+            if(!str_ends_with($name,'.php'))continue;
+            $code=@file_get_contents($this->target($name));if(!is_string($code))return 'kiểm tra tại chỗ: không đọc được '.$name;
+            try{token_get_all($code,TOKEN_PARSE);}catch(ParseError $e){return 'kiểm tra tại chỗ: lỗi cú pháp '.$name.' dòng '.$e->getLine();}
+        }
+        $build=(static function(string $file){return require $file;})($this->target('family-private/version.php'));
+        if(!is_array($build)||($build['version']??null)!==$candidate['version']||($build['schema']??null)!==$candidate['schema'])return 'kiểm tra tại chỗ: version.php không khớp bản '.$candidate['version'];
+        return '';
     }
     public function probeAllowed(string $nonce): bool {$journal=$this->read($this->work.'/transaction.json');return $nonce!==''&&is_string($journal['nonce']??null)&&hash_equals($journal['nonce'],$nonce);}
     public function backupFile(): ?string {$saved=$this->read($this->work.'/last-backup.json');$id=$saved['id']??'';return is_string($id)&&preg_match('/^[a-f0-9]{24}$/D',$id)&&is_file($this->work.'/'.$id.'/database.json.gz')?$this->work.'/'.$id.'/database.json.gz':null;}
