@@ -1,3 +1,7 @@
+# 0.31.0 — Gán mail cho link mời
+
+Dùng **Cập nhật một chạm**. Cột lưu mail gán được thêm tự động lần đầu mở web sau khi cập nhật.
+
 # 0.30.0 — Việc cần làm
 
 Dùng **Cập nhật một chạm**. Bảng `todos` được tạo tự động lần đầu mở web sau khi cập nhật.

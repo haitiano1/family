@@ -132,7 +132,8 @@ function initializeSchema(PDO $db): void {
 // 3 (0.26.0): family_invites.retired_at for links of a replaced owner.
 // 4 (0.28.0): customer_reports, a customer telling the shop Premium stopped working.
 // 5 (0.30.0): todos, Việc cần làm on Tổng quan.
-const FAMILY_LOOKUP_SCHEMA_VERSION=5;
+// 6 (0.31.0): family_invites.recipients, customer mails noted on a link (Gán mail).
+const FAMILY_LOOKUP_SCHEMA_VERSION=6;
 function ensureLookupSchema(PDO $db): void {
     $row=one($db,"SELECT value FROM app_meta WHERE name='lookup_schema'");
     if(($row['value']??'')===(string)FAMILY_LOOKUP_SCHEMA_VERSION)return;
@@ -140,6 +141,7 @@ function ensureLookupSchema(PDO $db): void {
     // 0.23.0: Đã gửi tick on invite links (tables created by 0.21 lack the column).
     if(!in_array('sent_at',array_column(all($db,'SHOW COLUMNS FROM family_invites'),'Field'),true))$db->exec("ALTER TABLE family_invites ADD COLUMN sent_at VARCHAR(32) NOT NULL DEFAULT ''");
     if(!in_array('retired_at',array_column(all($db,'SHOW COLUMNS FROM family_invites'),'Field'),true))$db->exec("ALTER TABLE family_invites ADD COLUMN retired_at VARCHAR(32) NOT NULL DEFAULT ''");
+    if(!in_array('recipients',array_column(all($db,'SHOW COLUMNS FROM family_invites'),'Field'),true))$db->exec("ALTER TABLE family_invites ADD COLUMN recipients VARCHAR(3000) NOT NULL DEFAULT ''");
     q($db,"INSERT IGNORE INTO lookup_settings(name,value) VALUES ('code_salt',?)",[bin2hex(random_bytes(32))]);
     q($db,"INSERT INTO app_meta(name,value) VALUES ('lookup_schema',?) ON DUPLICATE KEY UPDATE value=VALUES(value)",[(string)FAMILY_LOOKUP_SCHEMA_VERSION]);
 }

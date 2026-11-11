@@ -711,3 +711,29 @@ test('an open owner case can be deleted (reported by mistake) and the Family goe
     assert.equal(state.family_statuses.find(s => s.family_id === fam.id).status, 'active');
   } finally { await f.close(); }
 });
+
+test('Gán mail: note up to 5 customer mails on a link, optionally ticking it Đã gửi', async () => {
+  const f = await server(), target = await server(); try {
+    const a = f.admin;
+    const fam = await a('families', 'POST', { name: 'Family 31', manager_email: 'owner31@example.com' }, 201);
+    const inv = await a(`families/${fam.id}/invites`, 'POST', { label: 'shop+31@gmail.com', url: inviteUrl(31), sent_on: day(0) }, 201);
+    const rev = async () => (await a('state')).invites.find(i => i.id === inv.id);
+    await a(`invites/${inv.id}/recipients`, 'PATCH', { recipients: [{ email: 'not-a-mail' }], revision: 0 }, 400);
+    await a(`invites/${inv.id}/recipients`, 'PATCH', { recipients: Array.from({ length: 6 }, (_, k) => ({ email: `k${k}@example.com` })), revision: 0 }, 400);
+    await a(`invites/${inv.id}/recipients`, 'PATCH', { recipients: [{ email: 'a@example.com' }, { email: 'A@example.com' }], revision: 0 }, 400);
+    await a(`invites/${inv.id}/recipients`, 'PATCH', { recipients: [], revision: 5 }, 409);
+    let saved = await a(`invites/${inv.id}/recipients`, 'PATCH', { recipients: [{ email: ' Minh@Example.com ', name: ' Minh Anh ' }, { email: 'huy@example.com' }], revision: 0, mark_sent: false });
+    assert.deepEqual(saved.recipients, [{ email: 'minh@example.com', name: 'Minh Anh' }, { email: 'huy@example.com', name: '' }]);
+    let row = await rev();
+    assert.deepEqual(JSON.parse(row.recipients), saved.recipients); assert.equal(row.holder_state, 'ready', 'without the tick the link stays in the pool');
+    saved = await a(`invites/${inv.id}/recipients`, 'PATCH', { recipients: [{ email: 'minh@example.com', name: 'Minh Anh' }], revision: row.revision, mark_sent: true });
+    assert.equal(saved.marked_sent, true); row = await rev(); assert.equal(row.holder_state, 'sent');
+    assert.ok((await a('journal')).entries.some(e => e.action === 'Gán mail cho link mời'));
+    const backup = await a('backup'); await target.admin('restore', 'POST', backup);
+    assert.equal((await target.admin('state')).invites[0].recipients, row.recipients);
+    const older = structuredClone(backup); for (const r of older.tables.family_invites) delete r.recipients;
+    const empty = await server(); try { await empty.admin('restore', 'POST', older); assert.equal((await empty.admin('state')).invites[0].recipients, ''); } finally { await empty.close(); }
+    await a(`invites/${inv.id}/recipients`, 'PATCH', { recipients: [], revision: row.revision });
+    row = await rev(); assert.equal(row.recipients, ''); assert.equal(row.holder_state, 'sent', 'clearing the mails keeps Đã gửi');
+  } finally { await f.close(); await target.close(); }
+});

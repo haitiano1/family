@@ -163,7 +163,7 @@ function restoreBackup(PDO $db,array $d): array {
                 if($d['version']<3)$row=[...($t==='families'?['trial_date'=>'']:($t==='issues'?['trial_date'=>'','reported_on'=>'']:[])),...$row];
                 if($d['version']<4)$row=[...($t==='families'?['archived_at'=>'']:($t==='other_purchases'?['plan_months'=>0]:($t==='archived_customers'?['family_archive_id'=>null]:[]))),...$row];
                 if($t==='other_purchases'&&$d['version']<9&&!array_key_exists('purchase_source',$row))$row['purchase_source']='';
-                if($t==='family_invites')$row=['sent_at'=>'','retired_at'=>'',...$row];
+                if($t==='family_invites')$row=['sent_at'=>'','retired_at'=>'','recipients'=>'',...$row];
                 foreach($columns as $c) if (!array_key_exists($c,$row) || (!is_null($row[$c]) && !is_string($row[$c]) && !is_int($row[$c]) && !is_float($row[$c]))) fail('Dữ liệu sao lưu thiếu trường hoặc sai định dạng.');
                 if($t==='other_purchases'&&(!is_string($row['purchase_source'])||preg_match_all('/./us',$row['purchase_source'])>200))fail('Nguồn mua trong sao lưu không hợp lệ.');
                 if ($t==='archived_customers') {$saved=json_decode($row['snapshot'],true,512,JSON_THROW_ON_ERROR);if(!is_array($saved)||array_is_list($saved))fail('Hồ sơ lưu trữ trong sao lưu không hợp lệ.');if(($saved['record_type']??'')==='other_product'){if(!array_key_exists('purchase_source',$saved)){$saved['purchase_source']='';$row['snapshot']=json_encode($saved,JSON_UNESCAPED_UNICODE|JSON_THROW_ON_ERROR);}if(!is_string($saved['purchase_source'])||preg_match_all('/./us',$saved['purchase_source'])>200)fail('Nguồn mua trong hồ sơ lưu trữ không hợp lệ.');}}

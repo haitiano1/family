@@ -196,6 +196,30 @@ export function initLookup(db, { fail, email, text, calendarDate, log }) {
       return { ok: true, moved: members.length, replaced, family_id: to.id, family_name: to.name };
     });
   }
+  // Gán mail: which customers the shop sent this link to, by hand (up to 5, optional).
+  function recipientList(raw) {
+    if (!Array.isArray(raw) || raw.length > 5) fail('Gán tối đa 5 mail cho một link.');
+    const seen = new Set(), list = [];
+    for (const entry of raw) {
+      if (!entry || typeof entry !== 'object') fail('Mail gán không hợp lệ.');
+      const address = email(entry.email), name = text(entry.name ?? '', 100);
+      if (seen.has(address)) fail('Mail ' + address + ' bị lặp.');
+      seen.add(address); list.push({ email: address, name });
+    }
+    return list;
+  }
+  function saveRecipients(id, data) {
+    const invite = one('SELECT * FROM family_invites WHERE id=?', id); if (!invite) fail('Không tìm thấy link mời.', 404);
+    const family = activeFamily(invite.family_id); if (!family) fail('Không tìm thấy Family đang hoạt động.', 404);
+    if (revision(data.revision) !== invite.revision) fail('Link mời vừa được sửa ở nơi khác. Tải lại rồi thử lại.', 409);
+    if (data.mark_sent !== undefined && typeof data.mark_sent !== 'boolean') fail('Lựa chọn Đã gửi không hợp lệ.');
+    const list = recipientList(data.recipients);
+    // Marking Đã gửi keeps the web from handing this link to another customer on lookup.
+    const mark = data.mark_sent === true && list.length > 0 && !invite.sent_at && !invite.retired_at && inviteHolder(inviteRefs(invite.id)).state === 'ready';
+    run('UPDATE family_invites SET recipients=?,sent_at=?,revision=revision+1,updated_at=? WHERE id=?', list.length ? JSON.stringify(list) : '', mark ? now() : invite.sent_at, now(), invite.id);
+    log(`Cá nhân: ${list.length ? 'gán ' + list.map(r => r.email).join(', ') + ' cho' : 'bỏ mail gán khỏi'} link mời ${invite.label || '#' + invite.id} của ${family.name}`);
+    return { ok: true, recipients: list, marked_sent: mark };
+  }
   function markInviteSent(id, data) {
     const invite = one('SELECT * FROM family_invites WHERE id=?', id); if (!invite) fail('Không tìm thấy link mời.', 404);
     const family = activeFamily(invite.family_id); if (!family) fail('Không tìm thấy Family đang hoạt động.', 404);
@@ -623,5 +647,5 @@ export function initLookup(db, { fail, email, text, calendarDate, log }) {
     return { ok: true };
   }
 
-  return { todoList, saveTodo, deleteTodo, adminState, settings, saveSettings, rotateCode, generateInviteMails, deleteInviteMails, markInviteSent, handOver, issueStatus, ownerReplaced, saveStatus, customerProblem, handleReport, connectTelegram, testTelegram, disconnectTelegram, saveInvite, deleteInvite, bulkMove, updateMove, result, verify, sessionEmail, logout, customerOpen, customerJoined, customerReport };
+  return { saveRecipients, todoList, saveTodo, deleteTodo, adminState, settings, saveSettings, rotateCode, generateInviteMails, deleteInviteMails, markInviteSent, handOver, issueStatus, ownerReplaced, saveStatus, customerProblem, handleReport, connectTelegram, testTelegram, disconnectTelegram, saveInvite, deleteInvite, bulkMove, updateMove, result, verify, sessionEmail, logout, customerOpen, customerJoined, customerReport };
 }

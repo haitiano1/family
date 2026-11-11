@@ -70,6 +70,8 @@ try {
   if(!db.prepare('PRAGMA table_info(family_invites)').all().some(column=>column.name==='sent_at'))db.exec("ALTER TABLE family_invites ADD COLUMN sent_at TEXT NOT NULL DEFAULT ''");
   // 0.26.0: links of a replaced owner are retired rather than deleted.
   if(!db.prepare('PRAGMA table_info(family_invites)').all().some(column=>column.name==='retired_at'))db.exec("ALTER TABLE family_invites ADD COLUMN retired_at TEXT NOT NULL DEFAULT ''");
+  // 0.31.0: customer mails noted on a link by hand (JSON list of {email,name}).
+  if(!db.prepare('PRAGMA table_info(family_invites)').all().some(column=>column.name==='recipients'))db.exec("ALTER TABLE family_invites ADD COLUMN recipients TEXT NOT NULL DEFAULT ''");
   db.prepare("INSERT OR IGNORE INTO lookup_settings(name,value) VALUES ('code_salt',?)").run(randomBytes(32).toString('hex'));
   db.exec('PRAGMA user_version=16; COMMIT');
 } catch (error) { db.exec('ROLLBACK'); throw error; }

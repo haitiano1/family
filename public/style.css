@@ -884,3 +884,17 @@ td[data-column="family"] .subtext { margin-top: 1px; }
   .todo-item .todo-tag { grid-column: 1; grid-row: 2; justify-self: start; margin: 2px 0 2px 30px; }
 }
 @media (prefers-reduced-motion: reduce) { .todo-later > summary::before { transition: none; } }
+
+/* 0.31 — Gán mail: customers noted on an invite link. */
+.invite-title { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 6px; white-space: normal; }
+.invite-sep { color: #8a99ae; }
+.invite-recipients { min-width: 0; overflow-wrap: anywhere; }
+.invite-recipient { color: #0f766e; font-weight: 750; }
+.invite-recipient-name, .invite-recipient-comma { color: #0f766e; }
+.recipient-grid { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr); gap: 8px; margin: 12px 0; }
+.recipient-head { color: #5a6f89; font-size: 11px; font-weight: 750; letter-spacing: .4px; text-transform: uppercase; }
+.recipient-grid input { min-height: 40px; padding: 8px 10px; }
+#modal-fields .check-line { display: flex; align-items: flex-start; gap: 9px; margin-top: 4px; font-size: 13px; color: var(--ink); cursor: pointer; }
+#modal-fields .check-line input { flex: 0 0 auto; margin-top: 2px; }
+@media (max-width: 760px) { .recipient-grid { grid-template-columns: 1fr; } .recipient-head:nth-child(2) { display: none; } }
+#modal-fields .check-line > span { font-weight: 500; }
