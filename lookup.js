@@ -144,9 +144,13 @@ export function initLookup(db, { fail, email, text, calendarDate, log }) {
         if (!taken.has(address)) { taken.add(address); mails.push(address); }
       }
       const time = now();
-      for (const address of mails) run('INSERT INTO invite_mails(family_id,email,created_at) VALUES (?,?,?)', family.id, address, time);
+      // A Family with no link in use (new, or the owner was just replaced) hands each arriving link
+      // to one of its customers; a running Family keeps new links in its pool for new customers.
+      const fresh = !one("SELECT id FROM family_invites WHERE family_id=? AND retired_at='' LIMIT 1", family.id);
+      for (const address of mails) run('INSERT INTO invite_mails(family_id,email,created_at,auto_assign) VALUES (?,?,?,?)', family.id, address, time, fresh ? 1 : 0);
       log(`Cá nhân: tạo ${count} mail mời cho ${family.name}: ${mails.join(', ')}`);
-      return { ok: true, family_id: family.id, family_name: family.name, base_email: base, mails };
+      const targets = fresh ? linkTargets(family.id).slice(0, count).map(t => ({ email: t.member.email, name: t.member.customer_name })) : [];
+      return { ok: true, family_id: family.id, family_name: family.name, base_email: base, mails, auto_assign: fresh, targets };
     });
   }
 
@@ -164,6 +168,35 @@ export function initLookup(db, { fail, email, text, calendarDate, log }) {
       log(`Cá nhân: xóa ${rows.length} mail mời của ${family.name}: ${rows.map(row => row.email).join(', ')}`);
       return { ok: true, deleted: rows.length };
     });
+  }
+  // Gán link cho khách: customers of the Family who should get a ready link — not "Đã mời, chưa vào" /
+  // "Mua mới" (they still take a leftover link on lookup), and not holding or having used a link of
+  // this Family. Customers already waiting for a link (after Đổi Gmail chủ) come first.
+  function linkTargets(familyId) {
+    const list = all("SELECT * FROM members WHERE family_id=? AND membership_status NOT IN ('invited','new') ORDER BY id", familyId)
+      .map(member => ({ member, move: one("SELECT * FROM member_moves WHERE member_id=? AND to_family_id=? AND state!='cancelled' AND dismissed_at='' ORDER BY id DESC LIMIT 1", member.id, familyId) }))
+      .filter(({ move }) => !move || (openMoveStates.includes(move.state) && move.invite_id == null));
+    return [...list.filter(t => t.move), ...list.filter(t => !t.move)];
+  }
+  function linkPairs(familyId, inviteIds = null) {
+    const invites = all("SELECT * FROM family_invites WHERE family_id=? AND retired_at='' AND sent_at='' ORDER BY id", familyId).filter(i => inviteState(i) === 'ready' && (!inviteIds || inviteIds.includes(i.id)));
+    const targets = linkTargets(familyId);
+    return invites.slice(0, targets.length).map((invite, k) => ({ invite, ...targets[k] }));
+  }
+  function assignLinks(familyId, inviteIds = null) {
+    const family = activeFamily(familyId); if (!family) fail('Không tìm thấy Family đang hoạt động.', 404);
+    const pairs = linkPairs(family.id, inviteIds), time = now();
+    for (const { invite, member, move } of pairs) {
+      // A waiting customer keeps their move (and its incident steps); others get a join to this Family.
+      if (move) run('UPDATE member_moves SET invite_id=?,invite_label=?,updated_at=?,revision=revision+1 WHERE id=?', invite.id, invite.label, time, move.id);
+      else run("INSERT INTO member_moves(member_id,email,customer_name,from_family_id,from_family_name,from_status,from_note,to_family_id,to_family_name,invite_id,invite_label,state,created_at,updated_at) VALUES (?,?,?,NULL,'','active','',?,?,?,?,'assigned',?,?)", member.id, member.email, member.customer_name, family.id, family.name, invite.id, invite.label, time, time);
+      run('UPDATE family_invites SET revision=revision+1,updated_at=? WHERE id=?', time, invite.id);
+    }
+    if (pairs.length) log(`Tự động: gán ${pairs.length} link mời của ${family.name} cho ${pairs.map(p => p.member.email).join(', ')}`);
+    return pairs.map(p => ({ invite_id: p.invite.id, label: p.invite.label, email: p.member.email, name: p.member.customer_name }));
+  }
+  function assignFamilyLinks(familyId) {
+    return atomic('lookup_assign_links', () => { const assigned = assignLinks(familyId); return { ok: true, assigned }; });
   }
   // A customer who must (re)join a group without a link yet: the move is open with no invite,
   // and the first ready link of the Family is attached when the customer looks up their Gmail.
@@ -394,7 +427,8 @@ export function initLookup(db, { fail, email, text, calendarDate, log }) {
     }
     const result = run('INSERT INTO family_invites(family_id,label,url,sent_on,revision,created_at,updated_at) VALUES (?,?,?,?,0,?,?)', family.id, inviteLabel, url, sentOn, now(), now());
     log(`Cá nhân: thêm link mời ${inviteLabel || '#' + result.lastInsertRowid} cho ${family.name}`);
-    return { ok: true, id: Number(result.lastInsertRowid) };
+    const created = Number(result.lastInsertRowid), mail = inviteLabel ? one('SELECT auto_assign FROM invite_mails WHERE family_id=? AND email=?', family.id, inviteLabel.toLowerCase()) : null;
+    return { ok: true, id: created, assigned: mail?.auto_assign ? assignLinks(family.id, [created]) : [] };
   }
   function deleteInvite(id, data) {
     const old = one('SELECT i.*,f.name AS family_name FROM family_invites i JOIN families f ON f.id=i.family_id WHERE i.id=?', id); if (!old) fail('Không tìm thấy link mời.', 404);
@@ -502,7 +536,7 @@ export function initLookup(db, { fail, email, text, calendarDate, log }) {
       lookup_supported: true, lookup_settings: settings(),
       family_statuses: all('SELECT family_id,status,note,updated_at,revision FROM family_statuses'),
       invites, moves, lookup_codes: Object.fromEntries(all('SELECT DISTINCT email FROM members').map(r => [r.email, codeFor(r.email, key)])),
-      invite_mails: all('SELECT id,family_id,email,created_at FROM invite_mails ORDER BY id'), invite_base_email: inviteMailInbox,
+      invite_mails: all('SELECT id,family_id,email,created_at,auto_assign FROM invite_mails ORDER BY id'), invite_base_email: inviteMailInbox,
       // Open reports, and the ones handled in the last week for context.
       customer_reports: all("SELECT * FROM customer_reports WHERE handled_at='' OR handled_at>? ORDER BY id DESC LIMIT 300", new Date(Date.now() - 7 * 86400000).toISOString()),
       problem_reasons: problemReasons, telegram: telegramState(), todos: todoList()
@@ -647,5 +681,5 @@ export function initLookup(db, { fail, email, text, calendarDate, log }) {
     return { ok: true };
   }
 
-  return { saveRecipients, todoList, saveTodo, deleteTodo, adminState, settings, saveSettings, rotateCode, generateInviteMails, deleteInviteMails, markInviteSent, handOver, issueStatus, ownerReplaced, saveStatus, customerProblem, handleReport, connectTelegram, testTelegram, disconnectTelegram, saveInvite, deleteInvite, bulkMove, updateMove, result, verify, sessionEmail, logout, customerOpen, customerJoined, customerReport };
+  return { assignFamilyLinks, saveRecipients, todoList, saveTodo, deleteTodo, adminState, settings, saveSettings, rotateCode, generateInviteMails, deleteInviteMails, markInviteSent, handOver, issueStatus, ownerReplaced, saveStatus, customerProblem, handleReport, connectTelegram, testTelegram, disconnectTelegram, saveInvite, deleteInvite, bulkMove, updateMove, result, verify, sessionEmail, logout, customerOpen, customerJoined, customerReport };
 }

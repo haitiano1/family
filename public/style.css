@@ -898,3 +898,7 @@ td[data-column="family"] .subtext { margin-top: 1px; }
 #modal-fields .check-line input { flex: 0 0 auto; margin-top: 2px; }
 @media (max-width: 760px) { .recipient-grid { grid-template-columns: 1fr; } .recipient-head:nth-child(2) { display: none; } }
 #modal-fields .check-line > span { font-weight: 500; }
+.assign-all { margin: 4px 0 14px; padding: 12px 14px; border: 1px solid #cfe5df; border-radius: 12px; background: #f3fbf8; }
+.assign-all p { margin: 0 0 6px; font-size: 13px; color: var(--ink); }
+.assign-all ul { margin: 0 0 10px; padding-left: 18px; font-size: 13px; color: var(--ink); }
+.assign-all .subtext { margin: 8px 0 0; }

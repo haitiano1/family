@@ -163,9 +163,13 @@ function lookupGenerateInviteMails(PDO $db,int $familyId,array $d): array {
             $tag='';for($i=0;$i<6;$i++)$tag.=LOOKUP_INVITE_MAIL_ALPHABET[random_int(0,strlen(LOOKUP_INVITE_MAIL_ALPHABET)-1)];
             $address=substr($base,0,$at).'+'.$tag.substr($base,$at);if(isset($taken[$address]))continue;$taken[$address]=true;$mails[]=$address;
         }
-        $time=lookupNow();foreach($mails as $address)q($db,'INSERT INTO invite_mails(family_id,email,created_at) VALUES (?,?,?)',[$f['id'],$address,$time]);
+        // A Family with no link in use (new, or the owner was just replaced) hands each arriving link
+        // to one of its customers; a running Family keeps new links in its pool for new customers.
+        $fresh=!one($db,"SELECT id FROM family_invites WHERE family_id=? AND retired_at='' LIMIT 1",[$f['id']]);
+        $time=lookupNow();foreach($mails as $address)q($db,'INSERT INTO invite_mails(family_id,email,created_at,auto_assign) VALUES (?,?,?,?)',[$f['id'],$address,$time,$fresh?1:0]);
         logEntry($db,"Cá nhân: tạo $count mail mời cho {$f['name']}: ".implode(', ',$mails));
-        return ['ok'=>true,'family_id'=>(int)$f['id'],'family_name'=>$f['name'],'base_email'=>$base,'mails'=>$mails];
+        $targets=$fresh?array_map(fn($t)=>['email'=>$t['member']['email'],'name'=>$t['member']['customer_name']],array_slice(lookupLinkTargets($db,(int)$f['id']),0,$count)):[];
+        return ['ok'=>true,'family_id'=>(int)$f['id'],'family_name'=>$f['name'],'base_email'=>$base,'mails'=>$mails,'auto_assign'=>$fresh,'targets'=>$targets];
     });
 }
 
@@ -283,6 +287,37 @@ function lookupInviteUrl(mixed $value): string {
     if(!lookupGoogleUrl($url))fail('Link mời cần là link https của Google, ví dụ myaccount.google.com hoặc notifications.googleapis.com.');
     return $url;
 }
+// Gán link cho khách: customers of the Family who should get a ready link — not "Đã mời, chưa vào" /
+// "Mua mới" (they still take a leftover link on lookup), and not holding or having used a link of
+// this Family. Customers already waiting for a link (after Đổi Gmail chủ) come first.
+function lookupLinkTargets(PDO $db,int $familyId): array {
+    $list=[];
+    foreach(all($db,"SELECT * FROM members WHERE family_id=? AND membership_status NOT IN ('invited','new') ORDER BY id",[$familyId]) as $m){
+        $mv=one($db,"SELECT * FROM member_moves WHERE member_id=? AND to_family_id=? AND state<>'cancelled' AND dismissed_at='' ORDER BY id DESC LIMIT 1",[$m['id'],$familyId]);
+        if(!$mv||(in_array($mv['state'],LOOKUP_OPEN_STATES,true)&&$mv['invite_id']===null))$list[]=['member'=>$m,'move'=>$mv?:null];
+    }
+    return [...array_values(array_filter($list,fn($t)=>$t['move']!==null)),...array_values(array_filter($list,fn($t)=>$t['move']===null))];
+}
+function lookupAssignLinks(PDO $db,int $familyId,?array $inviteIds=null): array {
+    $f=lookupActiveFamily($db,$familyId);if(!$f)fail('Không tìm thấy Family đang hoạt động.',404);
+    $invites=array_values(array_filter(all($db,"SELECT * FROM family_invites WHERE family_id=? AND retired_at='' AND sent_at='' ORDER BY id",[$familyId]),fn($i)=>lookupInviteState($db,$i)==='ready'&&($inviteIds===null||in_array((int)$i['id'],$inviteIds,true))));
+    $targets=lookupLinkTargets($db,$familyId);$time=lookupNow();$out=[];
+    foreach(array_slice($invites,0,count($targets)) as $k=>$i){
+        $m=$targets[$k]['member'];$mv=$targets[$k]['move'];
+        // A waiting customer keeps their move (and its incident steps); others get a join to this Family.
+        if($mv)q($db,'UPDATE member_moves SET invite_id=?,invite_label=?,updated_at=?,revision=revision+1 WHERE id=?',[$i['id'],$i['label'],$time,$mv['id']]);
+        else q($db,"INSERT INTO member_moves(member_id,email,customer_name,from_family_id,from_family_name,from_status,from_note,to_family_id,to_family_name,invite_id,invite_label,state,created_at,updated_at) VALUES (?,?,?,NULL,'','active','',?,?,?,?,'assigned',?,?)",[$m['id'],$m['email'],$m['customer_name'],$f['id'],$f['name'],$i['id'],$i['label'],$time,$time]);
+        q($db,'UPDATE family_invites SET revision=revision+1,updated_at=? WHERE id=?',[$time,$i['id']]);
+        $out[]=['invite_id'=>(int)$i['id'],'label'=>$i['label'],'email'=>$m['email'],'name'=>$m['customer_name']];
+    }
+    if($out)logEntry($db,'Tự động: gán '.count($out)." link mời của {$f['name']} cho ".implode(', ',array_column($out,'email')));
+    return $out;
+}
+function lookupAssignFamilyLinks(PDO $db,int $familyId): array {return transaction($db,fn()=>['ok'=>true,'assigned'=>lookupAssignLinks($db,$familyId)]);}
+function lookupAutoAssigned(PDO $db,int $familyId,string $label,int $inviteId): array {
+    $mail=$label!==''?one($db,'SELECT auto_assign FROM invite_mails WHERE family_id=? AND email=?',[$familyId,strtolower($label)]):null;
+    return $mail&&(int)$mail['auto_assign']===1?lookupAssignLinks($db,$familyId,[$inviteId]):[];
+}
 function lookupSaveInvite(PDO $db,?int $familyId,?int $id,array $d): array {
     $old=null;
     if($id){$old=one($db,'SELECT * FROM family_invites WHERE id=?',[$id]);if(!$old)fail('Không tìm thấy link mời.',404);if(lookupRevision($d['revision']??null)!==(int)$old['revision'])fail('Link mời vừa được sửa ở nơi khác. Tải lại rồi thử lại.',409);$familyId=(int)$old['family_id'];}
@@ -297,7 +332,7 @@ function lookupSaveInvite(PDO $db,?int $familyId,?int $id,array $d): array {
     }
     q($db,'INSERT INTO family_invites(family_id,label,url,sent_on,revision,created_at,updated_at) VALUES (?,?,?,?,0,?,?)',[$f['id'],$label,$url,$sent,lookupNow(),lookupNow()]);$new=(int)$db->lastInsertId();
     logEntry($db,'Cá nhân: thêm link mời '.($label?:'#'.$new)." cho {$f['name']}");
-    return ['ok'=>true,'id'=>$new];
+    return ['ok'=>true,'id'=>$new,'assigned'=>lookupAutoAssigned($db,(int)$f['id'],$label,$new)];
 }
 // Invite mails read from Gmail by Apps Script. Each link is filed under the active Family whose
 // owner Gmail appears in the mail (the group the link really joins), otherwise under the Family a
@@ -317,7 +352,7 @@ function lookupImportInvites(PDO $db,array $items): array {
         $mails[]=['url'=>$url,'to'=>$to,'date'=>$date,'at'=>$at,'family'=>$owner??$alias,'moved'=>$owner&&$alias&&(int)$owner['id']!==(int)$alias['id']?$alias['name']:''];
     }
     usort($mails,fn($a,$b)=>strcmp($b['at'],$a['at']));
-    $out=['found'=>count($mails),'added'=>0,'updated'=>0,'unchanged'=>0];$unmatched=[];$families=[];$seen=[];$mismatched=[];
+    $out=['found'=>count($mails),'added'=>0,'updated'=>0,'unchanged'=>0,'assigned'=>0];$unmatched=[];$families=[];$seen=[];$mismatched=[];
     foreach($mails as $m){
         $f=$m['family'];if(!$f){$unmatched[$m['to']]=true;continue;}
         $key=$f['id']."\0".$m['to'];if(isset($seen[$key]))continue;$seen[$key]=true;
@@ -333,8 +368,9 @@ function lookupImportInvites(PDO $db,array $items): array {
             q($db,'UPDATE family_invites SET url=?,sent_on=?,revision=revision+1,updated_at=? WHERE id=?',[$m['url'],$m['date'],lookupNow(),$old['id']]);
             logEntry($db,"Cá nhân: đổi link mời {$m['to']} của {$f['name']} theo thư mới trong Gmail");$out['updated']++;
         }else{
-            q($db,'INSERT INTO family_invites(family_id,label,url,sent_on,revision,created_at,updated_at) VALUES (?,?,?,?,0,?,?)',[$f['id'],$m['to'],$m['url'],$m['date'],lookupNow(),lookupNow()]);
+            q($db,'INSERT INTO family_invites(family_id,label,url,sent_on,revision,created_at,updated_at) VALUES (?,?,?,?,0,?,?)',[$f['id'],$m['to'],$m['url'],$m['date'],lookupNow(),lookupNow()]);$new=(int)$db->lastInsertId();
             logEntry($db,"Cá nhân: thêm link mời {$m['to']} cho {$f['name']} từ Gmail");$out['added']++;
+            $out['assigned']+=count(lookupAutoAssigned($db,(int)$f['id'],$m['to'],$new));
         }
         $families[$f['name']]=true;
     }
@@ -520,7 +556,7 @@ function lookupAdminState(PDO $db): array {
     $codes=[];foreach(all($db,'SELECT DISTINCT email FROM members') as $r)$codes[$r['email']]=lookupCodeFor($db,$r['email'],$salt);
     // Gmail import needs the Google Sheet connection (same Apps Script). Plain query: no DDL inside the state audit.
     $gmail=false;$mailbox='';try{$gmail=(bool)one($db,"SELECT name FROM family_sheet_state WHERE name='config'");$row=one($db,"SELECT value FROM family_sheet_state WHERE name='gmail_mailbox'");$mailbox=$row?(string)json_decode($row['value'],true):'';}catch(Throwable $e){}
-    return ['lookup_supported'=>true,'gmail_import'=>$gmail,'gmail_mailbox'=>$mailbox,'invite_base_email'=>LOOKUP_INVITE_MAIL_INBOX,'invite_mails'=>array_map(fn($r)=>[...$r,'id'=>(int)$r['id'],'family_id'=>(int)$r['family_id']],all($db,'SELECT id,family_id,email,created_at FROM invite_mails ORDER BY id')),'lookup_settings'=>lookupSettings($db),'family_statuses'=>all($db,'SELECT family_id,status,note,updated_at,revision FROM family_statuses'),'invites'=>$invites,'moves'=>$moves,'lookup_codes'=>(object)$codes,
+    return ['lookup_supported'=>true,'gmail_import'=>$gmail,'gmail_mailbox'=>$mailbox,'invite_base_email'=>LOOKUP_INVITE_MAIL_INBOX,'invite_mails'=>array_map(fn($r)=>[...$r,'id'=>(int)$r['id'],'family_id'=>(int)$r['family_id'],'auto_assign'=>(int)$r['auto_assign']],all($db,'SELECT id,family_id,email,created_at,auto_assign FROM invite_mails ORDER BY id')),'lookup_settings'=>lookupSettings($db),'family_statuses'=>all($db,'SELECT family_id,status,note,updated_at,revision FROM family_statuses'),'invites'=>$invites,'moves'=>$moves,'lookup_codes'=>(object)$codes,
         // Open reports, and the ones handled in the last week for context.
         'customer_reports'=>array_map(fn($r)=>[...$r,'id'=>(int)$r['id'],'member_id'=>$r['member_id']===null?null:(int)$r['member_id'],'family_id'=>$r['family_id']===null?null:(int)$r['family_id'],'revision'=>(int)$r['revision']],all($db,"SELECT * FROM customer_reports WHERE handled_at='' OR handled_at>? ORDER BY id DESC LIMIT 300",[gmdate('Y-m-d\TH:i:s.000\Z',time()-604800)])),
         'problem_reasons'=>LOOKUP_PROBLEM_REASONS,'telegram'=>lookupTelegramState($db),'todos'=>lookupTodoList($db)];
@@ -690,6 +726,7 @@ function lookupAdminRequest(PDO $db,string $route,string $method): void {
     if(preg_match('~^/api/todos/(\d+)$~D',$route,$p)&&$method==='PATCH')reply(lookupSaveTodo($db,(int)$p[1],body()));
     if(preg_match('~^/api/todos/(\d+)$~D',$route,$p)&&$method==='DELETE')reply(lookupDeleteTodo($db,(int)$p[1]));
     if(preg_match('~^/api/families/(\d+)/status$~D',$route,$p)&&$method==='PATCH')reply(lookupSaveStatus($db,(int)$p[1],body()));
+    if(preg_match('~^/api/families/(\d+)/assign-links$~D',$route,$p)&&$method==='POST')reply(lookupAssignFamilyLinks($db,(int)$p[1]));
     if(preg_match('~^/api/invites/(\d+)/recipients$~D',$route,$p)&&$method==='PATCH')reply(lookupSaveRecipients($db,(int)$p[1],body()));
     if(preg_match('~^/api/invites/(\d+)/sent$~D',$route,$p)&&$method==='PATCH')reply(lookupMarkInviteSent($db,(int)$p[1],body()));
     if(preg_match('~^/api/families/(\d+)/hand-over$~D',$route,$p)&&$method==='POST')reply(lookupHandOver($db,(int)$p[1],body()));
@@ -712,6 +749,7 @@ function lookupAuditAction(string $method,string $route): string {
     if(preg_match('~^/api/families/\d+/invites$~D',$route))return 'Thêm link mời';
     if(preg_match('~^/api/families/\d+/invite-mails$~D',$route))return $method==='DELETE'?'Xóa mail mời':'Tạo mail mời';
     if(preg_match('~^/api/invites/\d+/recipients$~D',$route))return 'Gán mail cho link mời';
+    if(preg_match('~^/api/families/\d+/assign-links$~D',$route))return 'Gán link cho khách';
     if(preg_match('~^/api/invites/\d+/sent$~D',$route))return 'Đánh dấu link đã gửi';
     if(preg_match('~^/api/families/\d+/hand-over$~D',$route))return 'Cho khách vào Family mới';
     if(preg_match('~^/api/invites/\d+$~D',$route))return $method==='DELETE'?'Xóa link mời':'Sửa link mời';

@@ -31,7 +31,7 @@ function exportBackup(databaseFile, outputFile) {
       member_moves:{id:null,member_id:null,email:'',customer_name:'',from_family_id:null,from_family_name:'',from_status:'active',from_note:'',to_family_id:null,to_family_name:'',invite_id:null,invite_label:'',state:'assigned',report_reason:'',report_note:'',created_at:'',updated_at:'',opened_at:'',joined_at:'',reported_at:'',dismissed_at:'',revision:0},
       lookup_codes:{id:null,email:'',code:'',created_at:''},
       lookup_settings:{id:null,name:'',value:''},
-      invite_mails:{id:null,family_id:null,email:'',created_at:''},
+      invite_mails:{id:null,family_id:null,email:'',created_at:'',auto_assign:0},
       customer_reports:{id:null,member_id:null,email:'',family_id:null,family_name:'',reason:'',note:'',created_at:'',handled_at:'',handled_note:'',revision:0},
       todos:{id:null,text:'',due_on:'',done_at:'',created_at:'',updated_at:''}
     };

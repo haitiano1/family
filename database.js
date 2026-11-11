@@ -71,6 +71,8 @@ try {
   // 0.26.0: links of a replaced owner are retired rather than deleted.
   if(!db.prepare('PRAGMA table_info(family_invites)').all().some(column=>column.name==='retired_at'))db.exec("ALTER TABLE family_invites ADD COLUMN retired_at TEXT NOT NULL DEFAULT ''");
   // 0.31.0: customer mails noted on a link by hand (JSON list of {email,name}).
+  // 0.32.0: Gen mail made for a Family with no link yet hands each arriving link to a customer.
+  if(!db.prepare('PRAGMA table_info(invite_mails)').all().some(column=>column.name==='auto_assign'))db.exec('ALTER TABLE invite_mails ADD COLUMN auto_assign INTEGER NOT NULL DEFAULT 0');
   if(!db.prepare('PRAGMA table_info(family_invites)').all().some(column=>column.name==='recipients'))db.exec("ALTER TABLE family_invites ADD COLUMN recipients TEXT NOT NULL DEFAULT ''");
   db.prepare("INSERT OR IGNORE INTO lookup_settings(name,value) VALUES ('code_salt',?)").run(randomBytes(32).toString('hex'));
   db.exec('PRAGMA user_version=16; COMMIT');
