@@ -902,3 +902,5 @@ td[data-column="family"] .subtext { margin-top: 1px; }
 .assign-all p { margin: 0 0 6px; font-size: 13px; color: var(--ink); }
 .assign-all ul { margin: 0 0 10px; padding-left: 18px; font-size: 13px; color: var(--ink); }
 .assign-all .subtext { margin: 8px 0 0; }
+.pending-plan { margin-left: 6px; font-size: 12px; color: #0f766e; }
+.pending-plan.muted { color: var(--muted); }
