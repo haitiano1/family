@@ -73,7 +73,9 @@ export function showInviteMails(ctx, result) {
   const { escape, state } = ctx, family = state.families.find(f => f.id === result.family_id), all = result.mails.join(', ');
   const autoNote = result.auto_assign ? (result.targets?.length
     ? `<p class="notice">Family chưa có link nào: khi link về, web tự gán sẵn cho ${result.targets.length} khách theo thứ tự — ${result.targets.map(t => `<strong>${escape(t.name || t.email)}</strong>`).join(', ')}. Khách tra cứu sẽ thấy đúng link của mình.</p>`
-    : '<p class="notice">Family chưa có khách để gán link. Link về sẽ nằm trong kho; sau khi thêm khách, bấm <strong>Gán mail</strong> ở một link → <strong>Gán link cho khách trong Family</strong>.</p>') : '';
+    : state.members.some(m => m.family_id === result.family_id)
+      ? '<p class="notice">Khách trong Family đều là <strong>Mua mới</strong> hoặc <strong>Đã mời, chưa vào</strong> nên không gán sẵn: link về nằm trong kho và khách tự nhận link khi tra cứu Gmail.</p>'
+      : '<p class="notice">Family chưa có khách để gán link. Link về sẽ nằm trong kho; sau khi thêm khách, bấm <strong>Gán mail</strong> ở một link → <strong>Gán link cho khách trong Family</strong>.</p>') : '';
   ctx.modal('Mail mời · ' + result.family_name, `<p>Đã tạo ${result.mails.length} mail mời mới.</p>${autoNote}<div class="lookup-mail-list">${result.mails.map(address => `<div class="info-line"><strong class="info-text">${escape(address)}</strong>${ctx.copyButton(address, 'mail mời')}</div>`).join('')}</div><div class="row-actions">${ctx.copyButton(all, 'tất cả mail mời', 'Copy tất cả mail')}</div>`
     + `<ol class="lookup-steps"><li>Đăng nhập tài khoản chủ Family${family ? ` <strong>${escape(family.manager_email)}</strong>` : ''}, mở trang quản lý nhóm gia đình và mời các mail trên.</li><li>${state.gmail_import ? 'Quay lại Family này, bấm <strong>Lấy link mời</strong>: web hiện link của từng mail và lưu vào kho link.' : 'Mở từng thư mời trong Gmail, chuột phải nút Accept invitation → sao chép link, rồi bấm <strong>+ Thêm link mời</strong>.'}</li></ol>`, async () => {}, 'Đóng');
 }
@@ -97,8 +99,13 @@ function showFetchedMails(ctx, family, result) {
 }
 function pendingNotice(ctx, family) {
   const mails = pendingMails(ctx.state, family.id); if (!mails.length) return '';
-  const { escape } = ctx;
-  return `<div class="notice lookup-callout lookup-pending-mails"><div><strong>${mails.length} mail chờ lấy link</strong><span class="subtext">Mời các mail này từ tài khoản chủ ${escape(family.manager_email)}, rồi bấm ${ctx.state.gmail_import ? 'Lấy link mời' : '+ Thêm link mời để dán link'}.</span><div class="lookup-mail-list">${mails.map(m => `<div class="info-line"><span class="info-text">${escape(m.email)}</span>${ctx.copyButton(m.email, 'mail mời')}<button type="button" class="copy-info lookup-mail-delete" data-action="invite-mails-delete" data-id="${family.id}" data-mails="${m.id}" title="Xóa ${escape(m.email)}" aria-label="Xóa ${escape(m.email)}">×</button></div>`).join('')}</div></div><div class="row-actions lookup-pending-actions">${ctx.copyButton(mails.map(m => m.email).join(', '), 'tất cả mail chờ mời', 'Copy tất cả mail')}${ctx.btn('invite-mails-delete', mails.length > 1 ? 'Xóa tất cả' : 'Xóa mail', 'danger tiny', `data-id="${family.id}" data-mails="${mails.map(m => m.id).join(',')}"`)}</div></div>`;
+  const { escape, state } = ctx;
+  // Mails made for a Family with no link yet: show who each arriving link will go to.
+  const targets = linkTargets(state, family.id), plan = new Map(), auto = mails.filter(m => m.auto_assign).sort((a, b) => a.id - b.id);
+  auto.forEach((m, k) => plan.set(m.id, targets[k]?.member || null));
+  const waitingNew = state.members.some(m => m.family_id === family.id && ['invited', 'new'].includes(m.membership_status));
+  const planText = m => !plan.has(m.id) ? '' : plan.get(m.id) ? `<span class="pending-plan">→ gán cho <strong class="invite-recipient">${escape(plan.get(m.id).email)}</strong></span>` : `<span class="pending-plan muted">→ để trong kho${waitingNew ? ' (khách Mua mới / Đã mời, chưa vào tự nhận khi tra cứu)' : ''}</span>`;
+  return `<div class="notice lookup-callout lookup-pending-mails"><div><strong>${mails.length} mail chờ lấy link</strong><span class="subtext">Mời các mail này từ tài khoản chủ ${escape(family.manager_email)}, rồi bấm ${ctx.state.gmail_import ? 'Lấy link mời' : '+ Thêm link mời để dán link'}.</span><div class="lookup-mail-list">${mails.map(m => `<div class="info-line"><span class="info-text">${escape(m.email)}</span>${ctx.copyButton(m.email, 'mail mời')}<button type="button" class="copy-info lookup-mail-delete" data-action="invite-mails-delete" data-id="${family.id}" data-mails="${m.id}" title="Xóa ${escape(m.email)}" aria-label="Xóa ${escape(m.email)}">×</button>${planText(m)}</div>`).join('')}</div></div><div class="row-actions lookup-pending-actions">${ctx.copyButton(mails.map(m => m.email).join(', '), 'tất cả mail chờ mời', 'Copy tất cả mail')}${ctx.btn('invite-mails-delete', mails.length > 1 ? 'Xóa tất cả' : 'Xóa mail', 'danger tiny', `data-id="${family.id}" data-mails="${mails.map(m => m.id).join(',')}"`)}</div></div>`;
 }
 export function familyStatusBadge(ctx, familyId) {
   const status = familyStatus(ctx.state, familyId).status;
