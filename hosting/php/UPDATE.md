@@ -1,3 +1,7 @@
+# 0.32.1 — Sửa kiểm tra khởi động khi cập nhật
+
+Nếu nút **Cập nhật một chạm** báo “Bản cập nhật không khởi động được”: xóa bộ nhớ đệm CDN / Cache Manager của website trên hPanel rồi thử lại; hoặc cập nhật tay bằng **family-hostinger-update.zip** (giải nén, upload hai thư mục **family-private** và **public_html** đè lên thư mục đang dùng, giữ **config.php**).
+
 # 0.32.0 — Gán link sẵn cho khách
 
 Dùng **Cập nhật một chạm**. Cột mới của mail mời được thêm tự động lần đầu mở web sau khi cập nhật.
