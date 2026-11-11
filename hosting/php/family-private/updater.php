@@ -11,6 +11,7 @@ final class FamilyUpdater {
     private string $work;
     private mixed $operation=null;
     private mixed $runtime=null;
+    private string $probeNote='';
     public function __construct(private string $private,private string $public,private array $config,private mixed $fetch=null,private mixed $probe=null){
         $this->private=realpath($private)?:$private;$this->public=realpath($public)?:$public;$this->work=$this->private.'/.updates';
         if($this->private===$this->public||str_starts_with($this->private,$this->public.'/'))$this->error('family-private cần nằm ngoài thư mục public_html.',503);
@@ -209,17 +210,21 @@ final class FamilyUpdater {
             if($this->read($this->work.'/transaction.json')){
                 try{$this->unlockRuntime();$this->lockRuntime();$recovered=$this->recover();}catch(Throwable $rollback){$this->error('Cập nhật bị gián đoạn và chưa khôi phục xong. Giữ bản sao trong family-private/.updates và mở lại mục Cập nhật để thử khôi phục.',503);}
                 if($recovered==='committed')return ['ok'=>true,'version'=>$candidate['version'],'message'=>'Đã hoàn tất cập nhật. Tải lại website để dùng bản mới.'];
-                $this->error('Bản cập nhật không khởi động được. Đã khôi phục mã trước; dữ liệu vẫn được giữ.',502);
+                $this->error('Bản cập nhật không khởi động được. Đã khôi phục mã trước; dữ liệu vẫn được giữ.'.($this->probeNote!==''?' Lý do kiểm tra: '.$this->probeNote.'.':''),502);
             }
             if($e instanceof FamilyUpdateError)throw $e;
             $this->error('Chưa thể hoàn tất cập nhật. Mã hiện tại và dữ liệu được giữ; kiểm tra quyền ghi và thử lại.',503);
         }finally{$this->unlockRuntime();$this->unlockOperation();}
     }
     private function health(array $candidate,string $nonce): bool {
-        $url=$this->config['public_origin'].'/update.php?action=health';$ch=curl_init($url);$body='';
-        curl_setopt_array($ch,[CURLOPT_FOLLOWLOCATION=>false,CURLOPT_CONNECTTIMEOUT=>5,CURLOPT_TIMEOUT=>30,CURLOPT_SSL_VERIFYPEER=>true,CURLOPT_SSL_VERIFYHOST=>2,CURLOPT_PROTOCOLS=>CURLPROTO_HTTPS|(getenv('FAMILY_ALLOW_HTTP')==='1'?CURLPROTO_HTTP:0),CURLOPT_HTTPHEADER=>['X-Family-Update-Probe: '.$nonce,'Cookie: fam_access='.($_COOKIE['fam_access']??'')],CURLOPT_WRITEFUNCTION=>function($ch,$chunk)use(&$body){if(strlen($body)+strlen($chunk)>65536)return 0;$body.=$chunk;return strlen($chunk);}]);
-        $ok=curl_exec($ch);$status=curl_getinfo($ch,CURLINFO_RESPONSE_CODE);curl_close($ch);$value=json_decode($body,true);
-        return $ok&&$status===200&&is_array($value)&&($value['ok']??false)===true&&($value['version']??'')===$candidate['version']&&($value['schema']??null)===$candidate['schema'];
+        // A unique address and no-cache headers keep a CDN or server cache from answering with an older probe.
+        $url=$this->config['public_origin'].'/update.php?action=health&probe='.substr(hash('sha256',$nonce),0,16).'-'.time();$ch=curl_init($url);$body='';
+        curl_setopt_array($ch,[CURLOPT_FOLLOWLOCATION=>false,CURLOPT_CONNECTTIMEOUT=>5,CURLOPT_TIMEOUT=>30,CURLOPT_SSL_VERIFYPEER=>true,CURLOPT_SSL_VERIFYHOST=>2,CURLOPT_PROTOCOLS=>CURLPROTO_HTTPS|(getenv('FAMILY_ALLOW_HTTP')==='1'?CURLPROTO_HTTP:0),CURLOPT_HTTPHEADER=>['X-Family-Update-Probe: '.$nonce,'Cookie: fam_access='.($_COOKIE['fam_access']??''),'Cache-Control: no-cache','Pragma: no-cache'],CURLOPT_WRITEFUNCTION=>function($ch,$chunk)use(&$body){if(strlen($body)+strlen($chunk)>65536)return 0;$body.=$chunk;return strlen($chunk);}]);
+        $ok=curl_exec($ch);$status=curl_getinfo($ch,CURLINFO_RESPONSE_CODE);$curlError=$ok===false?curl_error($ch):'';curl_close($ch);$value=json_decode($body,true);
+        $healthy=$ok&&$status===200&&is_array($value)&&($value['ok']??false)===true&&($value['version']??'')===$candidate['version']&&($value['schema']??null)===$candidate['schema'];
+        // Why the probe failed, shown with the rollback message (no secrets: status, versions, curl error).
+        if(!$healthy)$this->probeNote=$ok===false?'không gọi được '.parse_url($this->config['public_origin'],PHP_URL_HOST).' ('.substr($curlError,0,120).')':($status!==200?'máy chủ trả HTTP '.$status:(!is_array($value)?'phản hồi không phải JSON (có thể bị cache, CDN hoặc thông báo lỗi PHP chen vào)':'bản trả về '.(is_string($value['version']??null)?substr($value['version'],0,20):'?').' / dữ liệu '.(is_int($value['schema']??null)?$value['schema']:'?').', cần '.$candidate['version'].' / '.$candidate['schema'].(($value['version']??'')!==$candidate['version']?' (có thể bị cache hoặc CDN trả bản cũ)':'')));
+        return $healthy;
     }
     public function probeAllowed(string $nonce): bool {$journal=$this->read($this->work.'/transaction.json');return $nonce!==''&&is_string($journal['nonce']??null)&&hash_equals($journal['nonce'],$nonce);}
     public function backupFile(): ?string {$saved=$this->read($this->work.'/last-backup.json');$id=$saved['id']??'';return is_string($id)&&preg_match('/^[a-f0-9]{24}$/D',$id)&&is_file($this->work.'/'.$id.'/database.json.gz')?$this->work.'/'.$id.'/database.json.gz':null;}
