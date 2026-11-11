@@ -1,3 +1,7 @@
+# 0.32.0 — Gán link sẵn cho khách
+
+Dùng **Cập nhật một chạm**. Cột mới của mail mời được thêm tự động lần đầu mở web sau khi cập nhật.
+
 # 0.31.1 — Bỏ chờ link
 
 Dùng **Cập nhật một chạm**.

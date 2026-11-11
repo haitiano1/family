@@ -124,6 +124,16 @@ $mistake=lookupGenerateInviteMails($db,$f12,['count'=>2])['mails'];$mid=fn(strin
 fails(fn()=>lookupDeleteInviteMails($db,$f12,['ids'=>[]]),400,'ids required');fails(fn()=>lookupDeleteInviteMails($db,$new,['ids'=>[$mid($mistake[0])]]),409,'other Family');
 lookupSaveInvite($db,$f12,null,['label'=>$mistake[1],'url'=>'https://families.google.com/join/promo/del','sent_on'=>$day(0)]);fails(fn()=>lookupDeleteInviteMails($db,$f12,['ids'=>[$mid($mistake[1])]]),409,'address with a link stays');
 check(lookupDeleteInviteMails($db,$f12,['ids'=>[$mid($mistake[0])]])===['ok'=>true,'deleted'=>1]&&!one($db,'SELECT id FROM invite_mails WHERE email=?',[$mistake[0]]),'deleted');
+// Gán link sẵn (0.32.0)
+$f50=$family('Family 50','owner50@example.com');foreach(['a1','a2','a3'] as $n)$member($f50,"$n@example.com",$n,$day(90));q($db,"UPDATE members SET membership_status='invited' WHERE email=?",['a3@example.com']);
+$g50=lookupGenerateInviteMails($db,$f50,['count'=>3]);check($g50['auto_assign']===true&&array_column($g50['targets'],'email')===['a1@example.com','a2@example.com'],'gen targets');
+$got=[];foreach($g50['mails'] as $k=>$mail)$got[]=array_column(lookupSaveInvite($db,$f50,null,['label'=>$mail,'url'=>"https://myaccount.google.com/family/join/p50$k",'sent_on'=>$day(0)])['assigned'],'email');
+check($got===[['a1@example.com'],['a2@example.com'],[]],'links assigned on arrival');
+check((int)one($db,"SELECT COUNT(*) AS n FROM member_moves WHERE to_family_id=? AND invite_id IS NOT NULL AND from_family_id IS NULL",[$f50])['n']===2,'join moves hold the links');
+check(lookupGenerateInviteMails($db,$f50,['count'=>1])['auto_assign']===false,'running Family not auto');
+$f51=$family('Family 51','owner51@example.com');$g51=lookupGenerateInviteMails($db,$f51,['count'=>2]);check($g51['targets']===[],'no customers yet');
+foreach($g51['mails'] as $k=>$mail)check(lookupSaveInvite($db,$f51,null,['label'=>$mail,'url'=>"https://myaccount.google.com/family/join/p51$k",'sent_on'=>$day(0)])['assigned']===[],'kept in pool');
+$member($f51,'b1@example.com','b1',$day(90));$man=lookupAssignFamilyLinks($db,$f51);check(array_column($man['assigned'],'email')===['b1@example.com']&&lookupAssignFamilyLinks($db,$f51)['assigned']===[],'manual assign');
 // Gán mail (0.31.0)
 $g=lookupSaveInvite($db,$new,null,['label'=>'shop+g@gmail.com','url'=>'https://myaccount.google.com/family/join/gan1','sent_on'=>$day(0)])['id'];$gr=fn()=>(int)one($db,'SELECT revision FROM family_invites WHERE id=?',[$g])['revision'];
 fails(fn()=>lookupSaveRecipients($db,$g,['recipients'=>[['email'=>'bad']],'revision'=>$gr()]),400,'bad recipient');fails(fn()=>lookupSaveRecipients($db,$g,['recipients'=>array_fill(0,6,['email'=>'x@example.com']),'revision'=>$gr()]),400,'too many');

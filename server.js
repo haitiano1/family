@@ -100,6 +100,7 @@ async function handle(req, res) {
       res.setHeader('Set-Cookie','fam_access=; HttpOnly; Secure; SameSite=Strict; Path=/; Max-Age=0');return send(res,200,{ok:true});
     }
     if(req.method==='PATCH'&&/^\/api\/families\/\d+\/status$/.test(url.pathname))return send(res,200,lookup.saveStatus(Number(url.pathname.split('/')[3]),await body(req)));
+    if(req.method==='POST'&&/^\/api\/families\/\d+\/assign-links$/.test(url.pathname))return send(res,200,lookup.assignFamilyLinks(Number(url.pathname.split('/')[3])));
     if(req.method==='PATCH'&&/^\/api\/invites\/\d+\/recipients$/.test(url.pathname))return send(res,200,lookup.saveRecipients(Number(url.pathname.split('/')[3]),await body(req)));
     if(req.method==='PATCH'&&/^\/api\/invites\/\d+\/sent$/.test(url.pathname))return send(res,200,lookup.markInviteSent(Number(url.pathname.split('/')[3]),await body(req)));
     if(req.method==='POST'&&/^\/api\/families\/\d+\/hand-over$/.test(url.pathname))return send(res,200,lookup.handOver(Number(url.pathname.split('/')[3]),await body(req)));

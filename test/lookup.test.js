@@ -737,3 +737,68 @@ test('Gán mail: note up to 5 customer mails on a link, optionally ticking it Đ
     row = await rev(); assert.equal(row.recipients, ''); assert.equal(row.holder_state, 'sent', 'clearing the mails keeps Đã gửi');
   } finally { await f.close(); await target.close(); }
 });
+
+test('Gen mail for a new Family hands each arriving link to a customer; Gán link cho khách does it by hand', async () => {
+  const f = await server(); try {
+    const a = f.admin;
+    const fam = await a('families', 'POST', { name: 'Family 50', manager_email: 'owner50@example.com' }, 201);
+    const add = (family, email, membership_status = 'active') => a('members', 'POST', { family_id: family.id, email, customer_name: email.split('@')[0], expires_at: day(90), membership_status, ...(membership_status === 'new' ? { joined_at: day(0), plan_months: 1 } : {}) }, 201);
+    for (const m of ['a1@example.com', 'a2@example.com', 'a3@example.com']) await add(fam, m);
+    await add(fam, 'cho@example.com', 'invited');
+    const gen = await a(`families/${fam.id}/invite-mails`, 'POST', { count: 4 }, 201);
+    assert.equal(gen.auto_assign, true);
+    assert.deepEqual(gen.targets.map(t => t.email), ['a1@example.com', 'a2@example.com', 'a3@example.com'], '"Đã mời, chưa vào" is not pre-assigned');
+    const links = [];
+    for (const [k, mail] of gen.mails.entries()) links.push(await a(`families/${fam.id}/invites`, 'POST', { label: mail, url: inviteUrl(500 + k), sent_on: day(0) }, 201));
+    assert.deepEqual(links.map(l => l.assigned.map(x => x.email)), [['a1@example.com'], ['a2@example.com'], ['a3@example.com'], []]);
+    let state = await a('state');
+    assert.deepEqual(state.invites.filter(i => i.family_id === fam.id).map(i => i.holder_state), ['assigned', 'assigned', 'assigned', 'ready']);
+    const look = async address => (await f.customer()('verify', 'POST', { email: address, code: (await a('state')).lookup_codes[address] })).items[0];
+    const a2 = await look('a2@example.com');
+    assert.equal(a2.view, 'move'); assert.equal(a2.move.kind, 'join'); assert.equal(a2.move.invite_url, inviteUrl(501), 'the customer sees the link assigned to them');
+    assert.equal((await look('cho@example.com')).move.invite_url, inviteUrl(503), 'the customer not yet in takes the leftover link');
+
+    // A running Family (it has links) keeps new links in its pool.
+    const more = await a(`families/${fam.id}/invite-mails`, 'POST', { count: 1 }, 201);
+    assert.equal(more.auto_assign, false);
+    assert.deepEqual((await a(`families/${fam.id}/invites`, 'POST', { label: more.mails[0], url: inviteUrl(510), sent_on: day(0) }, 201)).assigned, []);
+
+    // A Family with no customers yet: links stay ready, then Gán link cho khách after customers are added.
+    const empty = await a('families', 'POST', { name: 'Family 51', manager_email: 'owner51@example.com' }, 201);
+    const gen2 = await a(`families/${empty.id}/invite-mails`, 'POST', { count: 3 }, 201);
+    assert.equal(gen2.auto_assign, true); assert.deepEqual(gen2.targets, []);
+    for (const [k, mail] of gen2.mails.entries()) assert.deepEqual((await a(`families/${empty.id}/invites`, 'POST', { label: mail, url: inviteUrl(520 + k), sent_on: day(0) }, 201)).assigned, []);
+    await add(empty, 'b1@example.com'); await add(empty, 'b2@example.com'); await add(empty, 'moi@example.com', 'new');
+    const manual = await a(`families/${empty.id}/assign-links`, 'POST', {});
+    assert.deepEqual(manual.assigned.map(x => [x.label, x.email]), [[gen2.mails[0], 'b1@example.com'], [gen2.mails[1], 'b2@example.com']]);
+    assert.deepEqual((await a(`families/${empty.id}/assign-links`, 'POST', {})).assigned, [], 'nothing left to assign');
+    assert.equal((await look('b2@example.com')).move.invite_url, inviteUrl(521));
+    assert.ok((await a('journal')).entries.some(e => e.action === 'Gán link cho khách'));
+    const backup = await a('backup');
+    assert.ok(backup.tables.invite_mails.every(r => r.auto_assign === 1 || r.auto_assign === 0));
+    const older = structuredClone(backup); for (const r of older.tables.invite_mails) delete r.auto_assign;
+    const target = await server(); try { await target.admin('restore', 'POST', older); assert.ok((await target.admin('state')).invite_mails.every(r => r.auto_assign === 0)); } finally { await target.close(); }
+  } finally { await f.close(); }
+});
+
+test('after Đổi Gmail chủ, links of the generated mails go to the waiting customers on their moves', async () => {
+  const f = await server(); try {
+    const a = f.admin;
+    const fam = await a('families', 'POST', { name: 'Family 52', manager_email: 'owner52@example.com' }, 201);
+    for (const m of ['c1@example.com', 'c2@example.com']) await a('members', 'POST', { family_id: fam.id, email: m, customer_name: m.split('@')[0], expires_at: day(90), membership_status: 'active' }, 201);
+    await a(`families/${fam.id}/invites`, 'POST', { label: 'old@example.com', url: inviteUrl(530), sent_on: day(-1) }, 201);
+    await new Promise(r => setTimeout(r, 20));
+    const issue = await a('issues', 'POST', { family_id: fam.id, target_type: 'manager', title: 'Bị quét' }, 201);
+    await new Promise(r => setTimeout(r, 20));
+    const fixed = await a(`issues/${issue.id}`, 'PATCH', { revision: 0, status: 'done', resolution: 'replace', replacement_email: 'owner52b@example.com', expected_email: 'owner52@example.com', invite_count: 2 });
+    const mails = fixed.invite_mails.mails;
+    let state = await a('state');
+    const waiting = state.moves.filter(m => m.to_family_id === fam.id && m.state === 'assigned' && m.invite_id == null).map(m => m.id).sort();
+    assert.equal(waiting.length, 2);
+    for (const [k, mail] of mails.entries()) await a(`families/${fam.id}/invites`, 'POST', { label: mail, url: inviteUrl(540 + k), sent_on: day(0) }, 201);
+    state = await a('state');
+    const moves = state.moves.filter(m => m.to_family_id === fam.id && m.state === 'assigned');
+    assert.deepEqual(moves.map(m => m.id).sort(), waiting, 'the same waiting moves now hold the links');
+    assert.ok(moves.every(m => m.invite_id != null));
+  } finally { await f.close(); }
+});

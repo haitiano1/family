@@ -44,6 +44,7 @@ export function gmailSummary(result) {
   if (result.added) parts.push(`thêm ${result.added} link`);
   if (result.updated) parts.push(`cập nhật ${result.updated} link`);
   let text = parts.length ? `Đã ${parts.join(', ')} từ Gmail${result.families?.length ? ' cho ' + result.families.join(', ') : ''}.` : result.found ? 'Link mời trong Gmail đã có đủ trên web.' : 'Không thấy thư mời Family nào trong 14 ngày qua.';
+  if (result.assigned) text += ` Đã gán ${result.assigned} link cho khách trong Family.`;
   if (result.unmatched_count) text += ` ${result.unmatched_count} thư chưa khớp mail chủ Family nào (${result.unmatched.slice(0, 3).join(', ')}${result.unmatched_count > 3 ? '…' : ''}).`;
   return text;
 }
@@ -70,7 +71,10 @@ export async function createInviteMails(ctx, familyId, count) {
 const genMenu = (ctx, family) => `<details class="gen-menu"><summary class="secondary">Gen mail mời</summary><div class="gen-menu-list" role="group" aria-label="Số mail mời cần tạo">${[1, 2, 3, 4, 5].map(n => ctx.btn('invite-mails-gen', n + ' mail', 'secondary tiny', `data-id="${family.id}" data-count="${n}"`)).join('')}</div></details>`;
 export function showInviteMails(ctx, result) {
   const { escape, state } = ctx, family = state.families.find(f => f.id === result.family_id), all = result.mails.join(', ');
-  ctx.modal('Mail mời · ' + result.family_name, `<p>Đã tạo ${result.mails.length} mail mời mới.</p><div class="lookup-mail-list">${result.mails.map(address => `<div class="info-line"><strong class="info-text">${escape(address)}</strong>${ctx.copyButton(address, 'mail mời')}</div>`).join('')}</div><div class="row-actions">${ctx.copyButton(all, 'tất cả mail mời', 'Copy tất cả mail')}</div>`
+  const autoNote = result.auto_assign ? (result.targets?.length
+    ? `<p class="notice">Family chưa có link nào: khi link về, web tự gán sẵn cho ${result.targets.length} khách theo thứ tự — ${result.targets.map(t => `<strong>${escape(t.name || t.email)}</strong>`).join(', ')}. Khách tra cứu sẽ thấy đúng link của mình.</p>`
+    : '<p class="notice">Family chưa có khách để gán link. Link về sẽ nằm trong kho; sau khi thêm khách, bấm <strong>Gán mail</strong> ở một link → <strong>Gán link cho khách trong Family</strong>.</p>') : '';
+  ctx.modal('Mail mời · ' + result.family_name, `<p>Đã tạo ${result.mails.length} mail mời mới.</p>${autoNote}<div class="lookup-mail-list">${result.mails.map(address => `<div class="info-line"><strong class="info-text">${escape(address)}</strong>${ctx.copyButton(address, 'mail mời')}</div>`).join('')}</div><div class="row-actions">${ctx.copyButton(all, 'tất cả mail mời', 'Copy tất cả mail')}</div>`
     + `<ol class="lookup-steps"><li>Đăng nhập tài khoản chủ Family${family ? ` <strong>${escape(family.manager_email)}</strong>` : ''}, mở trang quản lý nhóm gia đình và mời các mail trên.</li><li>${state.gmail_import ? 'Quay lại Family này, bấm <strong>Lấy link mời</strong>: web hiện link của từng mail và lưu vào kho link.' : 'Mở từng thư mời trong Gmail, chuột phải nút Accept invitation → sao chép link, rồi bấm <strong>+ Thêm link mời</strong>.'}</li></ol>`, async () => {}, 'Đóng');
 }
 function fetchedMailsTable(ctx, familyId) {
@@ -106,6 +110,15 @@ export function customerLookupAction(ctx, member) {
 }
 
 const readyInvites = (state, familyId) => (state.invites || []).filter(i => i.family_id === familyId && i.holder_state === 'ready');
+// Same rule as the server: customers not "Đã mời, chưa vào" / "Mua mới", holding or having used no link of this Family; waiting ones first.
+function linkTargets(state, familyId) {
+  const list = state.members.filter(m => m.family_id === familyId && !['invited', 'new'].includes(m.membership_status)).sort((a, b) => a.id - b.id).map(member => {
+    const move = (state.moves || []).filter(mv => mv.member_id === member.id && mv.to_family_id === familyId && mv.state !== 'cancelled').sort((a, b) => b.id - a.id)[0] || null;
+    return { member, move };
+  }).filter(({ move }) => !move || (['assigned', 'opened', 'failed'].includes(move.state) && move.invite_id == null));
+  return [...list.filter(t => t.move), ...list.filter(t => !t.move)];
+}
+const linkPairs = (state, familyId) => { const targets = linkTargets(state, familyId); return readyInvites(state, familyId).filter(i => !i.sent_at).sort((a, b) => a.id - b.id).slice(0, targets.length).map((invite, k) => ({ invite, member: targets[k].member })); };
 const inviteName = (ctx, invite) => invite.label || 'Link #' + invite.id;
 // Once a customer joined with a link, the row shows that customer's Gmail instead of the + address.
 // Gán mail: customers the shop noted on this link by hand, shown right after the invite mail.
@@ -362,7 +375,7 @@ export async function handleLookupAction(ctx, action, button) {
   }
   if (action === 'invite-add') {
     const family = state.families.find(f => f.id === id); if (!family) return ctx.toast('Family đã thay đổi. Tải lại trang.'), true;
-    ctx.modal('Thêm link mời · ' + family.name, inviteFields(ctx), async data => { await ctx.post(`families/${id}/invites`, data); ctx.toast('Đã thêm link mời.'); });
+    ctx.modal('Thêm link mời · ' + family.name, inviteFields(ctx), async data => { const saved = await ctx.post(`families/${id}/invites`, data); ctx.toast(saved.assigned?.length ? `Đã thêm link mời và gán cho ${saved.assigned.map(a => a.name || a.email).join(', ')}.` : 'Đã thêm link mời.'); });
     return true;
   }
   if (action === 'invite-edit') {
@@ -375,7 +388,9 @@ export async function handleLookupAction(ctx, action, button) {
     const { escape } = ctx, current = recipientsOf(invite), ready = invite.holder_state === 'ready';
     const members = [...state.members].sort((a, b) => (b.family_id === invite.family_id) - (a.family_id === invite.family_id) || a.email.localeCompare(b.email));
     const rows = [0, 1, 2, 3, 4].map(k => `<input name="r_email_${k}" type="email" list="recipient-members" maxlength="254" autocomplete="off" aria-label="Mail khách ${k + 1}" placeholder="${k ? '' : 'mailkhach@gmail.com'}" value="${escape(current[k]?.email || '')}"><input name="r_name_${k}" maxlength="100" autocomplete="off" aria-label="Tên khách ${k + 1}" placeholder="${k ? '' : 'Tên (không bắt buộc)'}" value="${escape(current[k]?.name || '')}">`).join('');
-    ctx.modal('Gán mail cho link · ' + inviteName(ctx, invite), `<p class="subtext">Ghi lại mail khách bạn đã gửi link này để dễ quản lý. Không bắt buộc, tối đa 5 mail; để trống hết là bỏ gán.</p><div class="recipient-grid"><span class="recipient-head" aria-hidden="true">Mail khách</span><span class="recipient-head" aria-hidden="true">Tên khách</span>${rows}</div><datalist id="recipient-members">${members.map(m => `<option value="${escape(m.email)}">${escape([m.customer_name, m.family_name].filter(Boolean).join(' · '))}</option>`).join('')}</datalist>${ready ? '<label class="check-line"><input type="checkbox" name="mark_sent" checked> <span>Đánh dấu <strong>Đã gửi</strong> — web không tự giao link này cho khách khác khi tra cứu</span></label>' : ''}`, async data => {
+    const pairs = linkPairs(state, invite.family_id);
+    const quick = pairs.length ? `<div class="assign-all"><p><strong>Gán nhanh cho khách trong Family:</strong> ${pairs.length} link Sẵn sàng → ${pairs.length} khách chưa có link. Khách tra cứu sẽ thấy đúng link của mình.</p><ul>${pairs.map(p => `<li>${escape(inviteName(ctx, p.invite))} → <strong class="invite-recipient">${escape(p.member.email)}</strong>${p.member.customer_name ? ` (${escape(p.member.customer_name)})` : ''}</li>`).join('')}</ul><button type="button" class="primary tiny" data-action="invite-assign-all" data-id="${invite.family_id}">Gán ${pairs.length} link cho khách</button><p class="subtext">Không gán khách “Đã mời, chưa vào” / “Mua mới”: họ tự nhận link còn lại khi tra cứu. Hoặc ghi mail tay bên dưới.</p></div>` : '';
+    ctx.modal('Gán mail cho link · ' + inviteName(ctx, invite), `${quick}<p class="subtext">Ghi lại mail khách bạn đã gửi link này để dễ quản lý. Không bắt buộc, tối đa 5 mail; để trống hết là bỏ gán.</p><div class="recipient-grid"><span class="recipient-head" aria-hidden="true">Mail khách</span><span class="recipient-head" aria-hidden="true">Tên khách</span>${rows}</div><datalist id="recipient-members">${members.map(m => `<option value="${escape(m.email)}">${escape([m.customer_name, m.family_name].filter(Boolean).join(' · '))}</option>`).join('')}</datalist>${ready ? '<label class="check-line"><input type="checkbox" name="mark_sent" checked> <span>Đánh dấu <strong>Đã gửi</strong> — web không tự giao link này cho khách khác khi tra cứu</span></label>' : ''}`, async data => {
       const recipients = [0, 1, 2, 3, 4].map(k => ({ email: String(data['r_email_' + k] || '').trim(), name: String(data['r_name_' + k] || '').trim() })).filter(r => r.email);
       const result = await ctx.patch(`invites/${id}/recipients`, { recipients, revision: invite.revision, mark_sent: data.mark_sent === 'on' });
       ctx.toast(recipients.length ? `Đã gán ${recipients.length} mail cho link${result.marked_sent ? ' · đánh dấu Đã gửi' : ''}.` : 'Đã bỏ mail gán khỏi link.');
@@ -383,6 +398,16 @@ export async function handleLookupAction(ctx, action, button) {
     // Picking a customer's Gmail from the list fills the name when it is empty.
     const box = document.getElementById('modal-fields');
     box.oninput = event => { const k = /^r_email_(\d)$/.exec(event.target.name || '')?.[1]; if (k === undefined) return; const member = state.members.find(m => m.email === event.target.value.trim().toLowerCase()), name = box.querySelector(`[name="r_name_${k}"]`); if (member && name && !name.value) name.value = member.customer_name || ''; };
+    return true;
+  }
+  if (action === 'invite-assign-all') {
+    button.disabled = true;
+    try {
+      const result = await ctx.post(`families/${id}/assign-links`, {});
+      document.getElementById('modal')?.close();
+      ctx.toast(result.assigned.length ? `Đã gán ${result.assigned.length} link: ${result.assigned.map(a => a.name || a.email).join(', ')}.` : 'Không còn link Sẵn sàng hoặc khách cần gán.', 8000);
+      await ctx.refresh();
+    } catch (error) { ctx.toast(error.message, 8000); } finally { if (button.isConnected) button.disabled = false; }
     return true;
   }
   if (action === 'invite-delete') {
