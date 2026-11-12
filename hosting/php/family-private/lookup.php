@@ -144,7 +144,11 @@ function lookupOwnerReplaced(PDO $db,int $familyId,string $since,?int $donorId,i
     $members=all($db,'SELECT * FROM members WHERE family_id=? ORDER BY id',[$f['id']]);
     foreach($members as $m)lookupAwaitLink($db,$m,$f,null,$f['name'],$problem?$status['status']:'scanned',$problem&&$status['note']!==''?$status['note']:lookupAutoScannedNote($f['name']));
     logEntry($db,"Tự động: {$f['name']} đổi chủ sang {$f['manager_email']}: ".count($members)." khách chờ link vào nhóm mới".($retired?", bỏ $retired link của chủ cũ":''));
-    return ['waiting'=>count($members),'retired'=>$retired,'invite_mails'=>$count?lookupGenerateInviteMails($db,(int)$f['id'],['count'=>$count]):null];
+    // Gen mail kept here was made after the report, for the new owner's group: its links go to the customers.
+    q($db,'UPDATE invite_mails SET auto_assign=1 WHERE family_id=?',[$f['id']]);
+    $mails=$count?lookupGenerateInviteMails($db,(int)$f['id'],['count'=>$count]):null;
+    lookupAutoAssign($db,(int)$f['id']);
+    return ['waiting'=>count($members),'retired'=>$retired,'invite_mails'=>$mails];
 }
 function lookupInviteMailBase(string $address): string {
     $at=strrpos($address,'@');if($at===false||$at===0)return '';$local=explode('+',substr($address,0,$at))[0];return $local===''?'':$local.substr($address,$at);
@@ -163,13 +167,16 @@ function lookupGenerateInviteMails(PDO $db,int $familyId,array $d): array {
             $tag='';for($i=0;$i<6;$i++)$tag.=LOOKUP_INVITE_MAIL_ALPHABET[random_int(0,strlen(LOOKUP_INVITE_MAIL_ALPHABET)-1)];
             $address=substr($base,0,$at).'+'.$tag.substr($base,$at);if(isset($taken[$address]))continue;$taken[$address]=true;$mails[]=$address;
         }
-        // A Family with no link in use (new, or the owner was just replaced) hands each arriving link
-        // to one of its customers; a running Family keeps new links in its pool for new customers.
+        // Mode 1: no link in use (new Family, or the owner was just replaced): links go to its customers.
+        // Mode 2: a running Family with customers waiting for a link (or Mua mới): links go to those only.
         $fresh=!one($db,"SELECT id FROM family_invites WHERE family_id=? AND retired_at='' LIMIT 1",[$f['id']]);
-        $time=lookupNow();foreach($mails as $address)q($db,'INSERT INTO invite_mails(family_id,email,created_at,auto_assign) VALUES (?,?,?,?)',[$f['id'],$address,$time,$fresh?1:0]);
+        $needing=lookupLinkTargets($db,(int)$f['id']);$mode=$fresh?1:(array_filter($needing,fn($t)=>$t['rank']<=1)?2:0);
+        $autoMails=array_fill_keys(array_column(all($db,'SELECT email FROM invite_mails WHERE family_id=? AND auto_assign>0',[$f['id']]),'email'),true);
+        $pooled=count(array_filter(lookupReadyLinks($db,(int)$f['id']),fn($i)=>isset($autoMails[strtolower($i['label'])])));
+        $time=lookupNow();foreach($mails as $address)q($db,'INSERT INTO invite_mails(family_id,email,created_at,auto_assign) VALUES (?,?,?,?)',[$f['id'],$address,$time,$mode]);
         logEntry($db,"Cá nhân: tạo $count mail mời cho {$f['name']}: ".implode(', ',$mails));
-        $targets=$fresh?array_map(fn($t)=>['email'=>$t['member']['email'],'name'=>$t['member']['customer_name']],array_slice(lookupLinkTargets($db,(int)$f['id']),0,$count)):[];
-        return ['ok'=>true,'family_id'=>(int)$f['id'],'family_name'=>$f['name'],'base_email'=>$base,'mails'=>$mails,'auto_assign'=>$fresh,'targets'=>$targets];
+        $targets=$mode?array_map(fn($t)=>['email'=>$t['member']['email'],'name'=>$t['member']['customer_name']],array_slice(array_values(array_filter($needing,fn($t)=>$mode===1||$t['rank']<=1)),$pooled,$count)):[];
+        return ['ok'=>true,'family_id'=>(int)$f['id'],'family_name'=>$f['name'],'base_email'=>$base,'mails'=>$mails,'auto_assign'=>$mode>0,'auto_mode'=>$mode,'targets'=>$targets];
     });
 }
 
@@ -288,26 +295,36 @@ function lookupInviteUrl(mixed $value): string {
     return $url;
 }
 // Gán link cho khách: customers of the Family who still need a link of it — no link held or used,
-// and not dropped from waiting (Bỏ chờ link / Thu hồi link). Order: customers already waiting for a
-// link (after Đổi Gmail chủ), then Đang vào / Chưa xác minh, then Mua mới, and "Đã mời, chưa vào" last,
-// so with more customers than links the ones not yet in the group are the ones left out.
+// not dropped from waiting (Bỏ chờ link / Thu hồi link), and not "Đã mời, chưa vào" (they take a
+// leftover link when they look up). Rank 0: waiting for a link (after Đổi Gmail chủ / Cho khách vào),
+// 1: Mua mới, 2: everyone else (a customer simply added to a new Family).
 function lookupLinkTargets(PDO $db,int $familyId): array {
     $list=[];
-    foreach(all($db,'SELECT * FROM members WHERE family_id=? ORDER BY id',[$familyId]) as $m){
+    foreach(all($db,"SELECT * FROM members WHERE family_id=? AND membership_status<>'invited' ORDER BY id",[$familyId]) as $m){
         $mv=one($db,"SELECT * FROM member_moves WHERE member_id=? AND to_family_id=? AND dismissed_at='' ORDER BY id DESC LIMIT 1",[$m['id'],$familyId]);
-        if(!$mv||(in_array($mv['state'],LOOKUP_OPEN_STATES,true)&&$mv['invite_id']===null))$list[]=['member'=>$m,'move'=>$mv?:null];
+        if(!$mv||(in_array($mv['state'],LOOKUP_OPEN_STATES,true)&&$mv['invite_id']===null))$list[]=['member'=>$m,'move'=>$mv?:null,'rank'=>$mv?0:($m['membership_status']==='new'?1:2)];
     }
-    $rank=fn($t)=>$t['move']!==null?0:(['invited'=>3,'new'=>2][$t['member']['membership_status']]??1);
-    usort($list,fn($a,$b)=>[$rank($a),(int)$a['member']['id']]<=>[$rank($b),(int)$b['member']['id']]);
+    usort($list,fn($a,$b)=>[$a['rank'],(int)$a['member']['id']]<=>[$b['rank'],(int)$b['member']['id']]);
     return $list;
 }
-function lookupAssignLinks(PDO $db,int $familyId,?array $inviteIds=null): array {
-    $f=lookupActiveFamily($db,$familyId);if(!$f)fail('Không tìm thấy Family đang hoạt động.',404);
+// Ready, unexpired links of the Family; mode says who a link may go to: 1 = any customer above,
+// 2 = only rank 0–1 (customers who are known to need a link), so a running Family never hands a new
+// link to a customer who is already in its group.
+function lookupReadyLinks(PDO $db,int $familyId): array {
     $today=today();
-    $invites=array_values(array_filter(all($db,"SELECT * FROM family_invites WHERE family_id=? AND retired_at='' AND sent_at='' ORDER BY id",[$familyId]),fn($i)=>lookupInviteState($db,$i)==='ready'&&($i['sent_on']===''||lookupInviteExpiry($i['sent_on'])>=$today)&&($inviteIds===null||in_array((int)$i['id'],$inviteIds,true))));
-    $targets=lookupLinkTargets($db,$familyId);$time=lookupNow();$out=[];
-    foreach(array_slice($invites,0,count($targets)) as $k=>$i){
-        $m=$targets[$k]['member'];$mv=$targets[$k]['move'];
+    return array_values(array_filter(all($db,"SELECT * FROM family_invites WHERE family_id=? AND retired_at='' AND sent_at='' ORDER BY id",[$familyId]),fn($i)=>lookupInviteState($db,$i)==='ready'&&($i['sent_on']===''||lookupInviteExpiry($i['sent_on'])>=$today)));
+}
+function lookupPairUp(array $links,array $targets): array {
+    $pairs=[];
+    foreach($links as [$invite,$mode]){
+        foreach($targets as $k=>$t)if($mode===1||$t['rank']<=1){$pairs[]=['invite'=>$invite,...$t];unset($targets[$k]);break;}
+    }
+    return $pairs;
+}
+function lookupApplyPairs(PDO $db,array $f,array $pairs): array {
+    $time=lookupNow();$out=[];
+    foreach($pairs as $p){
+        $i=$p['invite'];$m=$p['member'];$mv=$p['move'];
         // A waiting customer keeps their move (and its incident steps); others get a join to this Family.
         if($mv)q($db,'UPDATE member_moves SET invite_id=?,invite_label=?,updated_at=?,revision=revision+1 WHERE id=?',[$i['id'],$i['label'],$time,$mv['id']]);
         else q($db,"INSERT INTO member_moves(member_id,email,customer_name,from_family_id,from_family_name,from_status,from_note,to_family_id,to_family_name,invite_id,invite_label,state,created_at,updated_at) VALUES (?,?,?,NULL,'','active','',?,?,?,?,'assigned',?,?)",[$m['id'],$m['email'],$m['customer_name'],$f['id'],$f['name'],$i['id'],$i['label'],$time,$time]);
@@ -317,15 +334,20 @@ function lookupAssignLinks(PDO $db,int $familyId,?array $inviteIds=null): array 
     if($out)logEntry($db,'Tự động: gán '.count($out)." link mời của {$f['name']} cho ".implode(', ',array_column($out,'email')));
     return $out;
 }
+// Gán N link cho khách (button): every ready link, any customer above.
+function lookupAssignLinks(PDO $db,int $familyId): array {
+    $f=lookupActiveFamily($db,$familyId);if(!$f)fail('Không tìm thấy Family đang hoạt động.',404);
+    return lookupApplyPairs($db,$f,lookupPairUp(array_map(fn($i)=>[$i,1],lookupReadyLinks($db,$familyId)),lookupLinkTargets($db,$familyId)));
+}
 function lookupAssignFamilyLinks(PDO $db,int $familyId): array {return transaction($db,fn()=>['ok'=>true,'assigned'=>lookupAssignLinks($db,$familyId)]);}
-// Links of Gen mail made for a Family with no link yet go to its customers by themselves, whichever
-// comes first: the link (Lấy link mời / + Thêm link mời) or the customer (Thêm khách / Chuyển Family).
+// Links of Gen mail go to customers by themselves, whichever comes first: the link (Lấy link mời /
+// + Thêm link mời) or the customer (Thêm khách / Chuyển Family / Đổi Gmail chủ / Cho khách vào).
 function lookupAutoAssign(PDO $db,int $familyId): array {
-    if(!lookupActiveFamily($db,$familyId))return [];
-    $auto=array_fill_keys(array_column(all($db,'SELECT email FROM invite_mails WHERE family_id=? AND auto_assign=1',[$familyId]),'email'),true);
-    if(!$auto)return [];
-    $ids=[];foreach(all($db,"SELECT id,label FROM family_invites WHERE family_id=? AND retired_at='' AND sent_at=''",[$familyId]) as $i)if(isset($auto[strtolower($i['label'])]))$ids[]=(int)$i['id'];
-    return $ids?lookupAssignLinks($db,$familyId,$ids):[];
+    $f=lookupActiveFamily($db,$familyId);if(!$f)return [];
+    $modes=[];foreach(all($db,'SELECT email,auto_assign FROM invite_mails WHERE family_id=? AND auto_assign>0',[$familyId]) as $r)$modes[$r['email']]=(int)$r['auto_assign'];
+    if(!$modes)return [];
+    $links=[];foreach(lookupReadyLinks($db,$familyId) as $i)if(isset($modes[strtolower($i['label'])]))$links[]=[$i,$modes[strtolower($i['label'])]];
+    return $links?lookupApplyPairs($db,$f,lookupPairUp($links,lookupLinkTargets($db,$familyId))):[];
 }
 // A link the shop took back from a customer is not handed out by itself again.
 function lookupStopAutoAssign(PDO $db,?int $inviteId): void {
@@ -433,6 +455,8 @@ function lookupHandOver(PDO $db,int $fromId,array $d): array {
             q($db,"DELETE FROM issues WHERE family_id=? AND target_type='member' AND target_id=?",[$from['id'],$m['id']]);
             lookupAwaitLink($db,$m,$to,(int)$from['id'],$from['name'],$source['status'],$source['note']);
         }
+        // Ready links of Gen mail in the new Family go to the customers just moved in.
+        lookupAutoAssign($db,(int)$to['id']);
         logEntry($db,'Cá nhân: cho '.count($members)." khách của {$from['name']} ({$from['manager_email']}) vào {$to['name']} ({$to['manager_email']})".($replaced?", ghi đè $replaced hồ sơ trùng Gmail":'').': '.implode(', ',array_column($members,'email')));
         return ['ok'=>true,'moved'=>count($members),'replaced'=>$replaced,'family_id'=>(int)$to['id'],'family_name'=>$to['name']];
     });

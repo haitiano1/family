@@ -146,11 +146,16 @@ export function initLookup(db, { fail, email, text, calendarDate, log }) {
       const time = now();
       // A Family with no link in use (new, or the owner was just replaced) hands each arriving link
       // to one of its customers; a running Family keeps new links in its pool for new customers.
+      // Mode 1: no link in use (new Family, or the owner was just replaced): links go to its customers.
+      // Mode 2: a running Family with customers waiting for a link (or Mua mới): links go to those only.
       const fresh = !one("SELECT id FROM family_invites WHERE family_id=? AND retired_at='' LIMIT 1", family.id);
-      for (const address of mails) run('INSERT INTO invite_mails(family_id,email,created_at,auto_assign) VALUES (?,?,?,?)', family.id, address, time, fresh ? 1 : 0);
+      const needing = linkTargets(family.id), mode = fresh ? 1 : needing.some(t => t.rank <= 1) ? 2 : 0;
+      for (const address of mails) run('INSERT INTO invite_mails(family_id,email,created_at,auto_assign) VALUES (?,?,?,?)', family.id, address, time, mode);
       log(`Cá nhân: tạo ${count} mail mời cho ${family.name}: ${mails.join(', ')}`);
-      const targets = fresh ? linkTargets(family.id).slice(0, count).map(t => ({ email: t.member.email, name: t.member.customer_name })) : [];
-      return { ok: true, family_id: family.id, family_name: family.name, base_email: base, mails, auto_assign: fresh, targets };
+      const autoMails = new Set(all('SELECT email FROM invite_mails WHERE family_id=? AND auto_assign>0', family.id).map(r => r.email));
+      const pooled = readyLinks(family.id).filter(i => autoMails.has(String(i.label).toLowerCase())).length;
+      const targets = mode ? needing.filter(t => mode === 1 || t.rank <= 1).slice(pooled, pooled + count).map(t => ({ email: t.member.email, name: t.member.customer_name })) : [];
+      return { ok: true, family_id: family.id, family_name: family.name, base_email: base, mails, auto_assign: mode > 0, auto_mode: mode, targets };
     });
   }
 
@@ -170,25 +175,34 @@ export function initLookup(db, { fail, email, text, calendarDate, log }) {
     });
   }
   // Gán link cho khách: customers of the Family who still need a link of it — no link held or used,
-  // and not dropped from waiting (Bỏ chờ link / Thu hồi link). Order: customers already waiting for a
-  // link (after Đổi Gmail chủ), then Đang vào / Chưa xác minh, then Mua mới, and "Đã mời, chưa vào" last,
-  // so with more customers than links the ones not yet in the group are the ones left out.
-  const targetRank = t => t.move ? 0 : ({ invited: 3, new: 2 })[t.member.membership_status] ?? 1;
+  // not dropped from waiting (Bỏ chờ link / Thu hồi link), and not "Đã mời, chưa vào" (they take a
+  // leftover link when they look up). Rank 0: waiting for a link (after Đổi Gmail chủ / Cho khách vào),
+  // 1: Mua mới, 2: everyone else (a customer simply added to a new Family).
+  const targetRank = t => t.move ? 0 : t.member.membership_status === 'new' ? 1 : 2;
   function linkTargets(familyId) {
-    return all('SELECT * FROM members WHERE family_id=? ORDER BY id', familyId)
+    return all("SELECT * FROM members WHERE family_id=? AND membership_status!='invited' ORDER BY id", familyId)
       .map(member => ({ member, move: one("SELECT * FROM member_moves WHERE member_id=? AND to_family_id=? AND dismissed_at='' ORDER BY id DESC LIMIT 1", member.id, familyId) }))
       .filter(({ move }) => !move || (openMoveStates.includes(move.state) && move.invite_id == null))
-      .sort((a, b) => targetRank(a) - targetRank(b) || a.member.id - b.member.id);
+      .map(t => ({ ...t, rank: targetRank(t) }))
+      .sort((a, b) => a.rank - b.rank || a.member.id - b.member.id);
   }
-  function linkPairs(familyId, inviteIds = null) {
+  // Ready, unexpired links of the Family; mode says who a link may go to: 1 = any customer above,
+  // 2 = only rank 0–1 (customers who are known to need a link), so a running Family never hands a new
+  // link to a customer who is already in its group.
+  function readyLinks(familyId) {
     const current = today();
-    const invites = all("SELECT * FROM family_invites WHERE family_id=? AND retired_at='' AND sent_at='' ORDER BY id", familyId).filter(i => inviteState(i) === 'ready' && (!i.sent_on || inviteExpiry(i.sent_on) >= current) && (!inviteIds || inviteIds.includes(i.id)));
-    const targets = linkTargets(familyId);
-    return invites.slice(0, targets.length).map((invite, k) => ({ invite, ...targets[k] }));
+    return all("SELECT * FROM family_invites WHERE family_id=? AND retired_at='' AND sent_at='' ORDER BY id", familyId).filter(i => inviteState(i) === 'ready' && (!i.sent_on || inviteExpiry(i.sent_on) >= current));
   }
-  function assignLinks(familyId, inviteIds = null) {
-    const family = activeFamily(familyId); if (!family) fail('Không tìm thấy Family đang hoạt động.', 404);
-    const pairs = linkPairs(family.id, inviteIds), time = now();
+  function pairUp(links, targets) {
+    const free = [...targets], pairs = [];
+    for (const { invite, mode } of links) {
+      const k = free.findIndex(t => mode === 1 || t.rank <= 1); if (k < 0) continue;
+      pairs.push({ invite, ...free.splice(k, 1)[0] });
+    }
+    return pairs;
+  }
+  function applyPairs(family, pairs) {
+    const time = now();
     for (const { invite, member, move } of pairs) {
       // A waiting customer keeps their move (and its incident steps); others get a join to this Family.
       if (move) run('UPDATE member_moves SET invite_id=?,invite_label=?,updated_at=?,revision=revision+1 WHERE id=?', invite.id, invite.label, time, move.id);
@@ -198,14 +212,19 @@ export function initLookup(db, { fail, email, text, calendarDate, log }) {
     if (pairs.length) log(`Tự động: gán ${pairs.length} link mời của ${family.name} cho ${pairs.map(p => p.member.email).join(', ')}`);
     return pairs.map(p => ({ invite_id: p.invite.id, label: p.invite.label, email: p.member.email, name: p.member.customer_name }));
   }
-  // Links of Gen mail made for a Family with no link yet go to its customers by themselves, whichever
-  // comes first: the link (Lấy link mời / + Thêm link mời) or the customer (Thêm khách / Chuyển Family).
+  // Gán N link cho khách (button): every ready link, any customer above.
+  function assignLinks(familyId) {
+    const family = activeFamily(familyId); if (!family) fail('Không tìm thấy Family đang hoạt động.', 404);
+    return applyPairs(family, pairUp(readyLinks(family.id).map(invite => ({ invite, mode: 1 })), linkTargets(family.id)));
+  }
+  // Links of Gen mail go to customers by themselves, whichever comes first: the link (Lấy link mời /
+  // + Thêm link mời) or the customer (Thêm khách / Chuyển Family / Đổi Gmail chủ / Cho khách vào).
   function autoAssign(familyId) {
-    if (!activeFamily(familyId)) return [];
-    const auto = new Set(all('SELECT email FROM invite_mails WHERE family_id=? AND auto_assign=1', familyId).map(r => r.email));
-    if (!auto.size) return [];
-    const ids = all("SELECT id,label FROM family_invites WHERE family_id=? AND retired_at='' AND sent_at=''", familyId).filter(i => auto.has(String(i.label).toLowerCase())).map(i => i.id);
-    return ids.length ? assignLinks(familyId, ids) : [];
+    const family = activeFamily(familyId); if (!family) return [];
+    const modes = new Map(all('SELECT email,auto_assign FROM invite_mails WHERE family_id=? AND auto_assign>0', familyId).map(r => [r.email, r.auto_assign]));
+    if (!modes.size) return [];
+    const links = readyLinks(family.id).filter(i => modes.has(String(i.label).toLowerCase())).map(invite => ({ invite, mode: modes.get(String(invite.label).toLowerCase()) }));
+    return links.length ? applyPairs(family, pairUp(links, linkTargets(family.id))) : [];
   }
   // A link the shop took back from a customer is not handed out by itself again.
   function stopAutoAssign(inviteId) {
@@ -242,6 +261,8 @@ export function initLookup(db, { fail, email, text, calendarDate, log }) {
         run("DELETE FROM issues WHERE family_id=? AND target_type='member' AND target_id=?", from.id, member.id);
         awaitLink(member, to, { id: from.id, name: from.name, status: source.status, note: source.note });
       }
+      // Ready links of Gen mail in the new Family go to the customers just moved in.
+      autoAssign(to.id);
       log(`Cá nhân: cho ${members.length} khách của ${from.name} (${from.manager_email}) vào ${to.name} (${to.manager_email})${replaced ? `, ghi đè ${replaced} hồ sơ trùng Gmail` : ''}: ${members.map(m => m.email).join(', ')}`);
       return { ok: true, moved: members.length, replaced, family_id: to.id, family_name: to.name };
     });
@@ -317,7 +338,11 @@ export function initLookup(db, { fail, email, text, calendarDate, log }) {
     const members = all('SELECT * FROM members WHERE family_id=? ORDER BY id', family.id);
     for (const member of members) awaitLink(member, family, old);
     log(`Tự động: ${family.name} đổi chủ sang ${family.manager_email}: ${members.length} khách chờ link vào nhóm mới${retired ? `, bỏ ${retired} link của chủ cũ` : ''}`);
-    return { waiting: members.length, retired, invite_mails: count ? generateInviteMails(family.id, { count }) : null };
+    // Gen mail kept here was made after the report, for the new owner's group: its links go to the customers.
+    run('UPDATE invite_mails SET auto_assign=1 WHERE family_id=?', family.id);
+    const mails = count ? generateInviteMails(family.id, { count }) : null;
+    autoAssign(family.id);
+    return { waiting: members.length, retired, invite_mails: mails };
   }
 
   function saveStatus(familyId, data) {
