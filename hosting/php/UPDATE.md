@@ -1,3 +1,7 @@
+# 0.32.5 — Gán link cho khách sau Đã fix
+
+Dùng **Cập nhật một chạm**.
+
 # 0.32.4 — Gán link cho khách thêm sau
 
 Dùng **Cập nhật một chạm** (cần **family-private/updater.php** mới từ 0.32.3 trở lên; nếu chưa có, upload riêng file đó một lần).

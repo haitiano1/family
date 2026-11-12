@@ -126,10 +126,10 @@ lookupSaveInvite($db,$f12,null,['label'=>$mistake[1],'url'=>'https://families.go
 check(lookupDeleteInviteMails($db,$f12,['ids'=>[$mid($mistake[0])]])===['ok'=>true,'deleted'=>1]&&!one($db,'SELECT id FROM invite_mails WHERE email=?',[$mistake[0]]),'deleted');
 // Gán link sẵn (0.32.0)
 $f50=$family('Family 50','owner50@example.com');foreach(['a1','a2','a3'] as $n)$member($f50,"$n@example.com",$n,$day(90));q($db,"UPDATE members SET membership_status='invited' WHERE email=?",['a3@example.com']);
-$g50=lookupGenerateInviteMails($db,$f50,['count'=>3]);check($g50['auto_assign']===true&&array_column($g50['targets'],'email')===['a1@example.com','a2@example.com','a3@example.com'],'gen targets, Đã mời chưa vào last');
+$g50=lookupGenerateInviteMails($db,$f50,['count'=>3]);check($g50['auto_assign']===true&&$g50['auto_mode']===1&&array_column($g50['targets'],'email')===['a1@example.com','a2@example.com'],'gen targets without Đã mời chưa vào');
 $got=[];foreach($g50['mails'] as $k=>$mail)$got[]=array_column(lookupSaveInvite($db,$f50,null,['label'=>$mail,'url'=>"https://myaccount.google.com/family/join/p50$k",'sent_on'=>$day(0)])['assigned'],'email');
-check($got===[['a1@example.com'],['a2@example.com'],['a3@example.com']],'links assigned on arrival');
-check((int)one($db,"SELECT COUNT(*) AS n FROM member_moves WHERE to_family_id=? AND invite_id IS NOT NULL AND from_family_id IS NULL",[$f50])['n']===3,'join moves hold the links');
+check($got===[['a1@example.com'],['a2@example.com'],[]],'links assigned on arrival, Đã mời chưa vào left out');
+check((int)one($db,"SELECT COUNT(*) AS n FROM member_moves WHERE to_family_id=? AND invite_id IS NOT NULL AND from_family_id IS NULL",[$f50])['n']===2,'join moves hold the links');
 check(lookupGenerateInviteMails($db,$f50,['count'=>1])['auto_assign']===false,'running Family not auto');
 $f51=$family('Family 51','owner51@example.com');$g51=lookupGenerateInviteMails($db,$f51,['count'=>2]);check($g51['targets']===[],'no customers yet');
 foreach($g51['mails'] as $k=>$mail)check(lookupSaveInvite($db,$f51,null,['label'=>$mail,'url'=>"https://myaccount.google.com/family/join/p51$k",'sent_on'=>$day(0)])['assigned']===[],'kept in pool');

@@ -72,8 +72,8 @@ const genMenu = (ctx, family) => `<details class="gen-menu"><summary class="seco
 export function showInviteMails(ctx, result) {
   const { escape, state } = ctx, family = state.families.find(f => f.id === result.family_id), all = result.mails.join(', ');
   const autoNote = result.auto_assign ? (result.targets?.length
-    ? `<p class="notice">Family chưa có link nào: khi link về, web tự gán sẵn cho ${result.targets.length} khách theo thứ tự — ${result.targets.map(t => `<strong>${escape(t.name || t.email)}</strong>`).join(', ')}. Khách tra cứu sẽ thấy đúng link của mình.</p>`
-    : '<p class="notice">Family mới chưa có khách cần link. Cứ thêm khách (trước hay sau khi Lấy link mời đều được): mỗi link về sẽ tự gán cho một khách, khách tra cứu thấy đúng link của mình.</p>') : '';
+    ? `<p class="notice">Khi link về, web tự gán sẵn cho ${result.targets.length} khách theo thứ tự — ${result.targets.map(t => `<strong>${escape(t.name || t.email)}</strong>`).join(', ')}. Khách tra cứu sẽ thấy đúng link của mình. Khách “Đã mời, chưa vào” không được gán sẵn.</p>`
+    : result.auto_mode === 2 ? '' : '<p class="notice">Family mới chưa có khách cần link. Cứ thêm khách (trước hay sau khi Lấy link mời đều được): mỗi link về sẽ tự gán cho một khách, khách tra cứu thấy đúng link của mình.</p>') : '';
   ctx.modal('Mail mời · ' + result.family_name, `<p>Đã tạo ${result.mails.length} mail mời mới.</p>${autoNote}<div class="lookup-mail-list">${result.mails.map(address => `<div class="info-line"><strong class="info-text">${escape(address)}</strong>${ctx.copyButton(address, 'mail mời')}</div>`).join('')}</div><div class="row-actions">${ctx.copyButton(all, 'tất cả mail mời', 'Copy tất cả mail')}</div>`
     + `<ol class="lookup-steps"><li>Đăng nhập tài khoản chủ Family${family ? ` <strong>${escape(family.manager_email)}</strong>` : ''}, mở trang quản lý nhóm gia đình và mời các mail trên.</li><li>${state.gmail_import ? 'Quay lại Family này, bấm <strong>Lấy link mời</strong>: web hiện link của từng mail và lưu vào kho link.' : 'Mở từng thư mời trong Gmail, chuột phải nút Accept invitation → sao chép link, rồi bấm <strong>+ Thêm link mời</strong>.'}</li></ol>`, async () => {}, 'Đóng');
 }
@@ -99,11 +99,13 @@ function pendingNotice(ctx, family) {
   const mails = pendingMails(ctx.state, family.id); if (!mails.length) return '';
   const { escape, state } = ctx;
   // Mails made for a Family with no link yet: show who each arriving link will go to.
-  const autoMails = new Set((state.invite_mails || []).filter(m => m.family_id === family.id && m.auto_assign).map(m => m.email));
-  const pooled = readyInvites(state, family.id).filter(i => !i.sent_at && autoMails.has(String(i.label).toLowerCase())).length;
-  const targets = linkTargets(state, family.id).slice(pooled), plan = new Map(), auto = mails.filter(m => m.auto_assign).sort((a, b) => a.id - b.id);
-  auto.forEach((m, k) => plan.set(m.id, targets[k]?.member || null));
-  const planText = m => !plan.has(m.id) ? '' : plan.get(m.id) ? `<span class="pending-plan">→ gán cho <strong class="invite-recipient">${escape(plan.get(m.id).email)}</strong></span>` : '<span class="pending-plan muted">→ gán cho khách bạn thêm vào Family sau</span>';
+  // Links already in the pool are handed out first, then the mails still waiting, in the order made.
+  const modes = new Map((state.invite_mails || []).filter(m => m.family_id === family.id && m.auto_assign > 0).map(m => [m.email, m.auto_assign]));
+  const pooled = readyInvites(state, family.id).filter(i => !i.sent_at && modes.has(String(i.label).toLowerCase())).sort((a, b) => a.id - b.id).map(i => ({ key: 'link' + i.id, mode: modes.get(String(i.label).toLowerCase()) }));
+  const waiting = mails.filter(m => m.auto_assign > 0).sort((a, b) => a.id - b.id).map(m => ({ key: m.id, mode: m.auto_assign }));
+  const plan = new Map(pairUp([...pooled, ...waiting], linkTargets(state, family.id)).map(p => [p.key, p.member]));
+  const notYetIn = state.members.some(m => m.family_id === family.id && m.membership_status === 'invited') ? ' (khách Đã mời, chưa vào tự nhận khi tra cứu)' : '';
+  const planText = m => !plan.has(m.id) ? '' : plan.get(m.id) ? `<span class="pending-plan">→ gán cho <strong class="invite-recipient">${escape(plan.get(m.id).email)}</strong></span>` : `<span class="pending-plan muted">${m.auto_assign === 1 ? '→ gán cho khách bạn thêm vào Family sau' : '→ để trong kho'}${notYetIn}</span>`;
   return `<div class="notice lookup-callout lookup-pending-mails"><div><strong>${mails.length} mail chờ lấy link</strong><span class="subtext">Mời các mail này từ tài khoản chủ ${escape(family.manager_email)}, rồi bấm ${ctx.state.gmail_import ? 'Lấy link mời' : '+ Thêm link mời để dán link'}.</span><div class="lookup-mail-list">${mails.map(m => `<div class="info-line"><span class="info-text">${escape(m.email)}</span>${ctx.copyButton(m.email, 'mail mời')}<button type="button" class="copy-info lookup-mail-delete" data-action="invite-mails-delete" data-id="${family.id}" data-mails="${m.id}" title="Xóa ${escape(m.email)}" aria-label="Xóa ${escape(m.email)}">×</button>${planText(m)}</div>`).join('')}</div></div><div class="row-actions lookup-pending-actions">${ctx.copyButton(mails.map(m => m.email).join(', '), 'tất cả mail chờ mời', 'Copy tất cả mail')}${ctx.btn('invite-mails-delete', mails.length > 1 ? 'Xóa tất cả' : 'Xóa mail', 'danger tiny', `data-id="${family.id}" data-mails="${mails.map(m => m.id).join(',')}"`)}</div></div>`;
 }
 export function familyStatusBadge(ctx, familyId) {
@@ -119,14 +121,18 @@ const readyInvites = (state, familyId) => (state.invites || []).filter(i => i.fa
 // Same rule as the server: customers holding or having used no link of this Family and not dropped from
 // waiting; waiting ones first, then Đã vào / Chưa xác minh, then Mua mới, "Đã mời, chưa vào" last.
 function linkTargets(state, familyId) {
-  const rank = t => t.move ? 0 : ({ invited: 3, new: 2 })[t.member.membership_status] ?? 1;
-  return state.members.filter(m => m.family_id === familyId).map(member => {
+  return state.members.filter(m => m.family_id === familyId && m.membership_status !== 'invited').map(member => {
     const move = (state.moves || []).filter(mv => mv.member_id === member.id && mv.to_family_id === familyId).sort((a, b) => b.id - a.id)[0] || null;
-    return { member, move };
+    return { member, move, rank: move ? 0 : member.membership_status === 'new' ? 1 : 2 };
   }).filter(({ move }) => !move || (['assigned', 'opened', 'failed'].includes(move.state) && move.invite_id == null))
-    .sort((a, b) => rank(a) - rank(b) || a.member.id - b.member.id);
+    .sort((a, b) => a.rank - b.rank || a.member.id - b.member.id);
 }
-const linkPairs = (state, familyId) => { const targets = linkTargets(state, familyId); return readyInvites(state, familyId).filter(i => !i.sent_at).sort((a, b) => a.id - b.id).slice(0, targets.length).map((invite, k) => ({ invite, member: targets[k].member })); };
+// Greedy as on the server: each link (mode 1 = any customer above, 2 = only rank 0–1) takes the first free customer it may.
+function pairUp(links, targets) {
+  const free = [...targets];
+  return links.map(({ key, mode }) => { const k = free.findIndex(t => mode === 1 || t.rank <= 1); return { key, member: k < 0 ? null : free.splice(k, 1)[0].member }; });
+}
+const linkPairs = (state, familyId) => pairUp(readyInvites(state, familyId).filter(i => !i.sent_at).sort((a, b) => a.id - b.id).map(invite => ({ key: invite, mode: 1 })), linkTargets(state, familyId)).filter(p => p.member).map(p => ({ invite: p.key, member: p.member }));
 const inviteName = (ctx, invite) => invite.label || 'Link #' + invite.id;
 // Once a customer joined with a link, the row shows that customer's Gmail instead of the + address.
 // Gán mail: customers the shop noted on this link by hand, shown right after the invite mail.
@@ -397,7 +403,7 @@ export async function handleLookupAction(ctx, action, button) {
     const members = [...state.members].sort((a, b) => (b.family_id === invite.family_id) - (a.family_id === invite.family_id) || a.email.localeCompare(b.email));
     const rows = [0, 1, 2, 3, 4].map(k => `<input name="r_email_${k}" type="email" list="recipient-members" maxlength="254" autocomplete="off" aria-label="Mail khách ${k + 1}" placeholder="${k ? '' : 'mailkhach@gmail.com'}" value="${escape(current[k]?.email || '')}"><input name="r_name_${k}" maxlength="100" autocomplete="off" aria-label="Tên khách ${k + 1}" placeholder="${k ? '' : 'Tên (không bắt buộc)'}" value="${escape(current[k]?.name || '')}">`).join('');
     const pairs = linkPairs(state, invite.family_id);
-    const quick = pairs.length ? `<div class="assign-all"><p><strong>Gán nhanh cho khách trong Family:</strong> ${pairs.length} link Sẵn sàng → ${pairs.length} khách chưa có link. Khách tra cứu sẽ thấy đúng link của mình.</p><ul>${pairs.map(p => `<li>${escape(inviteName(ctx, p.invite))} → <strong class="invite-recipient">${escape(p.member.email)}</strong>${p.member.customer_name ? ` (${escape(p.member.customer_name)})` : ''}</li>`).join('')}</ul><button type="button" class="primary tiny" data-action="invite-assign-all" data-id="${invite.family_id}">Gán ${pairs.length} link cho khách</button><p class="subtext">Thứ tự: khách đang chờ link, khách đã vào / chưa xác minh, Mua mới, rồi Đã mời, chưa vào. Hoặc ghi mail tay bên dưới.</p></div>` : '';
+    const quick = pairs.length ? `<div class="assign-all"><p><strong>Gán nhanh cho khách trong Family:</strong> ${pairs.length} link Sẵn sàng → ${pairs.length} khách chưa có link. Khách tra cứu sẽ thấy đúng link của mình.</p><ul>${pairs.map(p => `<li>${escape(inviteName(ctx, p.invite))} → <strong class="invite-recipient">${escape(p.member.email)}</strong>${p.member.customer_name ? ` (${escape(p.member.customer_name)})` : ''}</li>`).join('')}</ul><button type="button" class="primary tiny" data-action="invite-assign-all" data-id="${invite.family_id}">Gán ${pairs.length} link cho khách</button><p class="subtext">Thứ tự: khách đang chờ link, Mua mới, rồi khách còn lại; khách “Đã mời, chưa vào” không gán sẵn (tự nhận link còn dư khi tra cứu). Hoặc ghi mail tay bên dưới.</p></div>` : '';
     ctx.modal('Gán mail cho link · ' + inviteName(ctx, invite), `${quick}<p class="subtext">Ghi lại mail khách bạn đã gửi link này để dễ quản lý. Không bắt buộc, tối đa 5 mail; để trống hết là bỏ gán.</p><div class="recipient-grid"><span class="recipient-head" aria-hidden="true">Mail khách</span><span class="recipient-head" aria-hidden="true">Tên khách</span>${rows}</div><datalist id="recipient-members">${members.map(m => `<option value="${escape(m.email)}">${escape([m.customer_name, m.family_name].filter(Boolean).join(' · '))}</option>`).join('')}</datalist>${ready ? '<label class="check-line"><input type="checkbox" name="mark_sent" checked> <span>Đánh dấu <strong>Đã gửi</strong> — web không tự giao link này cho khách khác khi tra cứu</span></label>' : ''}`, async data => {
       const recipients = [0, 1, 2, 3, 4].map(k => ({ email: String(data['r_email_' + k] || '').trim(), name: String(data['r_name_' + k] || '').trim() })).filter(r => r.email);
       const result = await ctx.patch(`invites/${id}/recipients`, { recipients, revision: invite.revision, mark_sent: data.mark_sent === 'on' });
