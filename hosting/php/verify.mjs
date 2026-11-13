@@ -712,7 +712,7 @@ test('PHP updater installs official-shaped releases, keeps real MySQL data, reje
 test('PHP lookup page: Family status, invite pool, bulk move, Gmail + code sign-in and customer progress',async()=>{
  const f=await fixture();await f.login();const a=f.req;
  const page=await fetch(f.base+'/tra-cuu.html');assert.equal(page.status,200);assert.match(await page.text(),/tra-cuu\.js/);
- for(const asset of ['/tra-cuu.js','/tra-cuu.css','/moves.js','/todos.js'])assert.equal((await fetch(f.base+asset)).status,200,asset);
+ for(const asset of ['/tra-cuu.js','/tra-cuu.css','/moves.js','/todos.js','/huong-dan-roi-nhom.png','/huong-dan-khong-co-nhom.png'])assert.equal((await fetch(f.base+asset)).status,200,asset);
  const old=await a('families','POST',{name:'Family 04',manager_email:'owner04@example.com'},201),next=await a('families','POST',{name:'Family 09',manager_email:'owner09@example.com'},201);
  const minh=await a('members','POST',{family_id:old.id,email:'minhanh@example.com',customer_name:'Minh Anh',expires_at:'2099-01-01'},201);
  await a('families/'+old.id+'/status','PATCH',{status:'disabled',note:'Chủ nhóm bị khoá',revision:0});

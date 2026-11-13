@@ -132,6 +132,21 @@ main { padding-top: 22px; padding-bottom: 32px; display: flex; flex-direction: c
 .todo li::before { content: counter(todo); width: 24px; height: 24px; border-radius: 8px; display: grid; place-items: center; background: var(--blue-tint); color: var(--blue-ink); font-size: 13px; font-weight: 750; }
 .todo li > div { display: grid; gap: 6px; min-width: 0; }
 .todo p { color: var(--muted); font-size: 14px; }
+/* Rời nhóm cũ: the two pages Google can show. Each folds to one line; tap to see the screenshot. */
+.cases { display: grid; gap: 8px; }
+.case { border: 1px solid var(--line); border-radius: 14px; background: #fafbfd; }
+.case > summary { list-style: none; cursor: pointer; padding: 10px 12px; display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 4px 10px; align-items: center; color: var(--text); font-size: 14px; border-radius: 14px; }
+.case > summary::-webkit-details-marker { display: none; }
+.case > summary:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
+.case-tag { grid-column: 1; justify-self: start; padding: 1px 8px; border-radius: 999px; background: var(--stop-tint); color: var(--stop-ink); font-size: 12px; font-weight: 750; }
+.case-skip .case-tag { background: var(--go-tint); color: var(--go-deep); }
+.case-text { grid-column: 1 / -1; }
+.case-more { grid-column: 2; grid-row: 1; white-space: nowrap; color: var(--blue-dark); font-size: 13px; font-weight: 650; }
+.case-more::before { content: "Xem ảnh ▾"; }
+.case[open] .case-more::before { content: "Ẩn ảnh ▴"; }
+.case img { display: block; width: auto; max-width: calc(100% - 24px); height: auto; margin: 0 12px 12px; border: 1px solid var(--line); border-radius: 10px; }
+/* Đăng nhập đúng Gmail: the address to join with, hard to miss. */
+.todo .must-mail { padding: 10px 12px; border: 1px solid var(--stop-line); border-radius: 12px; background: var(--stop-tint); color: #d1242b; font-size: 17px; font-weight: 800; text-align: center; overflow-wrap: anywhere; }
 
 /* Plan facts */
 .plan { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }

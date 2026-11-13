@@ -97,18 +97,28 @@ const chibi = () => `<svg viewBox="0 0 56 62" aria-hidden="true">
 </svg>`;
 
 function joinTodo(move, includeLeave) {
+  const go = includeLeave ? 'Vào nhóm mới' : 'Vào nhóm';
   const link = move.invite_url
-    ? `<a class="btn go big" href="${escape(move.invite_url)}" rel="noreferrer" data-open="${move.id}">${includeLeave ? 'Vào nhóm mới' : 'Vào nhóm'}</a><span class="sub">Link riêng của bạn, chỉ dùng được 1 lần. Đừng gửi cho người khác.</span>${move.invite_expires_on ? `<span class="sub">Link còn hiệu lực đến ${day(move.invite_expires_on)}.</span>` : ''}`
+    ? `<a class="btn go big" href="${escape(move.invite_url)}" rel="noreferrer" data-open="${move.id}">${go}</a>${move.invite_expires_on ? `<span class="sub">Link còn hiệu lực đến ${day(move.invite_expires_on)}.</span>` : ''}`
     : '';
   // Google allows one family group at a time: leaving the old one comes first, also for a new customer
-  // whose Gmail is still in some other group (skipped when it is in none).
-  const leave = includeLeave
-    ? 'Vào trang Gia đình của Google, chọn <strong>Rời khỏi nhóm gia đình</strong> rồi xác nhận. Google báo bạn không còn ở nhóm nào thì bỏ qua bước này.'
-    : 'Gmail của bạn đang ở một nhóm gia đình khác thì vào trang Gia đình của Google, chọn <strong>Rời khỏi nhóm gia đình</strong> rồi xác nhận. Chưa ở nhóm nào thì bỏ qua bước này.';
+  // whose Gmail is still in some other group (skipped when it is in none). Two screenshots show the
+  // two pages Google can open: an inactive group to leave, or no group at all.
+  // Each case folds to one line; the screenshot opens on tap so the page stays short.
+  const leaveSeen = includeLeave
+    ? 'Thấy dòng <strong>Nhóm gia đình của bạn không hoạt động</strong> (có dòng này mới rời được)'
+    : 'Đang ở một nhóm gia đình, thấy nút <strong>Rời khỏi nhóm gia đình</strong>';
+  const caseOf = (cls, tag, seen, todo, img) => `<details class="case${cls}"><summary><span class="case-tag">${tag}</span><span class="case-more" aria-hidden="true"></span><span class="case-text">${seen} → ${todo}</span></summary>${img}</details>`;
+  const leave = `<p>Bấm nút bên dưới để mở trang <strong>Gia đình Google</strong>, trang sẽ hiện <strong>1 trong 2</strong> trường hợp (bấm vào để xem ảnh):</p>
+        <a class="btn small" href="https://g.co/YourFamily" target="_blank" rel="noopener noreferrer">Rời nhóm gia đình cũ</a>
+        <div class="cases">
+          ${caseOf('', 'Trường hợp 1', leaveSeen, 'bấm <strong>Rời khỏi nhóm gia đình</strong> rồi xác nhận.', '<img src="/huong-dan-roi-nhom.png" width="482" height="295" loading="lazy" alt="Trang Gia đình Google: Nhóm gia đình của bạn không hoạt động, bên dưới có nút Rời khỏi nhóm gia đình">')}
+          ${caseOf(' case-skip', 'Trường hợp 2', 'Thấy <strong>Gia đình của bạn trên Google</strong> và nút Bắt đầu', 'bạn <strong>không còn ở nhóm nào</strong>, <strong>bỏ qua bước này</strong> (không bấm Bắt đầu).', '<img src="/huong-dan-khong-co-nhom.png" width="344" height="223" loading="lazy" alt="Trang Gia đình Google: Gia đình của bạn trên Google, nút Bắt đầu">')}
+        </div>`;
   return `<ol class="todo">
-      <li><div><h3>${includeLeave ? 'Rời nhóm cũ' : 'Rời nhóm cũ (nếu có)'}</h3><p>${leave}</p><a class="btn small" href="https://g.co/YourFamily" target="_blank" rel="noopener noreferrer">Mở trang Gia đình Google</a></div></li>
-      <li><div><h3>Đăng nhập đúng Gmail</h3><p>Mở link bằng trình duyệt đang đăng nhập <strong>${escape(data.email)}</strong>. Trình duyệt đang đăng nhập Gmail khác thì Gmail đó sẽ vào nhóm thay bạn.</p></div></li>
-      <li><div><h3>${includeLeave ? 'Bấm vào nhóm mới' : 'Bấm vào nhóm'}</h3><p>Google mở trang mời, bạn bấm đồng ý tham gia là xong.</p>${link}</div></li>
+      <li><div><h3>${includeLeave ? 'Rời nhóm cũ' : 'Rời nhóm cũ (nếu có)'}</h3>${leave}</div></li>
+      <li><div><h3>Đăng nhập đúng Gmail</h3><p>Chỉ Gmail <strong>đang đăng nhập</strong> trên trình duyệt mới được vào nhóm. Trước khi bấm <strong>${go}</strong>, kiểm tra trình duyệt đang đăng nhập đúng Gmail này:</p><p class="must-mail">${escape(data.email)}</p><p><strong>Lưu ý:</strong> Google hỏi chọn tài khoản thì chọn <strong>đúng Gmail trên</strong>. Đăng nhập Gmail khác thì <strong>Gmail đó sẽ vào nhóm thay bạn</strong>.</p></div></li>
+      <li><div><h3>${includeLeave ? 'Bấm vào nhóm mới' : 'Bấm vào nhóm'}</h3><p>Google mở trang mời, bạn bấm <strong>đồng ý tham gia</strong> là xong.</p>${link}</div></li>
     </ol>${inAppHint()}`;
 }
 
