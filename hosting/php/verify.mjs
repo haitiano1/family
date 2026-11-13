@@ -713,6 +713,8 @@ test('PHP lookup page: Family status, invite pool, bulk move, Gmail + code sign-
  const f=await fixture();await f.login();const a=f.req;
  const page=await fetch(f.base+'/tra-cuu.html');assert.equal(page.status,200);assert.match(await page.text(),/tra-cuu\.js/);
  for(const asset of ['/tra-cuu.js','/tra-cuu.css','/moves.js','/todos.js','/huong-dan-roi-nhom.png','/huong-dan-khong-co-nhom.png','/huong-dan-xac-nhan.png'])assert.equal((await fetch(f.base+asset)).status,200,asset);
+ if(process.env.FAMILY_PHP_SOURCE_ONLY!=='1'){const video=await fetch(f.base+'/api/lookup/guide-video');assert.equal(video.status,200);assert.equal(video.headers.get('content-type'),'video/mp4');assert.equal((await video.arrayBuffer()).byteLength,readFileSync(root+'/public/huong-dan-roi-nhom.mp4').length);
+  const part=await fetch(f.base+'/api/lookup/guide-video',{headers:{Range:'bytes=10-19'}});assert.equal(part.status,206);assert.match(part.headers.get('content-range'),/^bytes 10-19\/\d+$/);assert.equal((await part.arrayBuffer()).byteLength,10);}
  const old=await a('families','POST',{name:'Family 04',manager_email:'owner04@example.com'},201),next=await a('families','POST',{name:'Family 09',manager_email:'owner09@example.com'},201);
  const minh=await a('members','POST',{family_id:old.id,email:'minhanh@example.com',customer_name:'Minh Anh',expires_at:'2099-01-01'},201);
  await a('families/'+old.id+'/status','PATCH',{status:'disabled',note:'Chủ nhóm bị khoá',revision:0});

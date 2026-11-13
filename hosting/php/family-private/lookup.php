@@ -780,6 +780,22 @@ function lookupWithFreshLinks(PDO &$db,array $c,array $result): array {
 function lookupCookie(array $c,string $token,int $age): void {
     setcookie('fam_lookup',$token,['expires'=>$age>0?time()+$age:1,'path'=>'/api/lookup','secure'=>$c['secure'],'httponly'=>true,'samesite'=>'Strict']);
 }
+// Video Hướng dẫn rời nhóm on the lookup page. One-click update ships only code files, so the
+// MP4 travels as base64 inside family-private/guide-video.php (made by scripts/package-php.py).
+// Byte ranges let phones start and seek the video.
+function lookupGuideVideo(): never {
+    $file=__DIR__.'/guide-video.php';$data=is_file($file)?base64_decode((string)(require $file),true):false;
+    if(!is_string($data)||$data==='')fail('Không tìm thấy.',404);
+    $size=strlen($data);$start=0;$end=$size-1;
+    if(preg_match('/^bytes=(\d*)-(\d*)$/D',(string)($_SERVER['HTTP_RANGE']??''),$m)&&($m[1]!==''||$m[2]!=='')){
+        if($m[1]==='')$start=max(0,$size-(int)$m[2]);else{$start=(int)$m[1];if($m[2]!=='')$end=min($end,(int)$m[2]);}
+        if($start>$end){http_response_code(416);header("Content-Range: bytes */$size");exit;}
+        http_response_code(206);header("Content-Range: bytes $start-$end/$size");
+    }
+    header('Content-Type: video/mp4');header('Accept-Ranges: bytes');header('Content-Length: '.($end-$start+1));
+    if(($_SERVER['REQUEST_METHOD']??'GET')!=='HEAD')echo substr($data,$start,$end-$start+1);
+    exit;
+}
 // Public routes run before the access-password check. Sign-in is outside the audit
 // transaction so its attempt counter survives an error answer.
 function lookupRequest(PDO $db,array $c,string $route,string $method): never {

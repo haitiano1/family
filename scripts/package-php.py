@@ -2,6 +2,7 @@
 """Build a Hostinger upload ZIP from shared frontend + PHP source. No customer data."""
 from pathlib import Path
 import zipfile
+import base64
 import json
 import re
 ROOT=Path(__file__).resolve().parents[1]
@@ -19,6 +20,9 @@ with zipfile.ZipFile(DEST,'w',zipfile.ZIP_DEFLATED) as z:
         if name=='app.js':
             content=content.replace('ứng dụng cục bộ'.encode(),'website Family'.encode())
         z.writestr('public_html/'+name,content)
+    # Video Hướng dẫn rời nhóm: the updater accepts only code files, so the MP4 goes in as base64 PHP.
+    video=base64.b64encode((ROOT/'public'/'huong-dan-roi-nhom.mp4').read_bytes()).decode()
+    z.writestr('family-private/guide-video.php',"<?php // Video Hướng dẫn rời nhóm (public/huong-dan-roi-nhom.mp4), base64.\nreturn '"+video+"';\n")
     z.write(ROOT/'domain.js','public_html/domain.js')
     z.write(ROOT/'vault-families.js','public_html/vault-families.js')
     for folder in ['public_html','family-private']:
@@ -40,7 +44,7 @@ with zipfile.ZipFile(DEST,'w',zipfile.ZIP_DEFLATED) as z:
         info=zipfile.ZipInfo(name);info.external_attr=0o100644<<16;info.compress_type=zipfile.ZIP_DEFLATED;z.writestr(info,content)
 print('Created downloads/family-hostinger.zip (PHP source + shared assets only).')
 # Existing installations need only changed code/assets; configuration is never bundled.
-update_names=['public_html/product-import.js','public_html/sync-status.css','family-private/product-import.php','public_html/updater.js','public_html/update.php','public_html/index.php','family-private/runtime.php','family-private/updater.php','family-private/version.php','family-private/version.json','family-private/schema.sql','family-private/records.php','family-private/sheets.php','public_html/sheets.js','public_html/statistics.js','family-private/statistics.php','public_html/app.js','public_html/vault.js','public_html/vault-sheet.js','public_html/vault-families.js','public_html/csv.js','public_html/domain.js','public_html/contacts.js','public_html/index.html','public_html/access.html','public_html/manifest.webmanifest','public_html/style.css','public_html/api.php','family-private/core.php','family-private/vault.php','family-private/vault.sql','family-private/business.php','family-private/audit.php','family-private/issues.php','family-private/features.sql','family-private/cron.php','family-private/import.php','family-private/lookup.php','family-private/lookup.sql','public_html/moves.js','public_html/todos.js','public_html/tra-cuu.html','public_html/tra-cuu.js','public_html/tra-cuu.css','public_html/huong-dan-roi-nhom.png','public_html/huong-dan-khong-co-nhom.png','public_html/huong-dan-xac-nhan.png']
+update_names=['public_html/product-import.js','public_html/sync-status.css','family-private/product-import.php','public_html/updater.js','public_html/update.php','public_html/index.php','family-private/runtime.php','family-private/updater.php','family-private/version.php','family-private/version.json','family-private/schema.sql','family-private/records.php','family-private/sheets.php','public_html/sheets.js','public_html/statistics.js','family-private/statistics.php','public_html/app.js','public_html/vault.js','public_html/vault-sheet.js','public_html/vault-families.js','public_html/csv.js','public_html/domain.js','public_html/contacts.js','public_html/index.html','public_html/access.html','public_html/manifest.webmanifest','public_html/style.css','public_html/api.php','family-private/core.php','family-private/vault.php','family-private/vault.sql','family-private/business.php','family-private/audit.php','family-private/issues.php','family-private/features.sql','family-private/cron.php','family-private/import.php','family-private/lookup.php','family-private/lookup.sql','public_html/moves.js','public_html/todos.js','public_html/tra-cuu.html','public_html/tra-cuu.js','public_html/tra-cuu.css','family-private/guide-video.php','public_html/huong-dan-roi-nhom.png','public_html/huong-dan-khong-co-nhom.png','public_html/huong-dan-xac-nhan.png']
 with zipfile.ZipFile(DEST) as z:
     update_contents=[(name,z.read(name)) for name in update_names]
 with zipfile.ZipFile(ROOT/'downloads'/'family-hostinger-update.zip','w',zipfile.ZIP_DEFLATED) as z:

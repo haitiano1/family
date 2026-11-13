@@ -22,6 +22,7 @@ try {
         if(!is_string($d['password']??null)||!hash_equals(hash('sha256',$c['access_password']),hash('sha256',$d['password']))){$attempts['count']++;q($db,"INSERT INTO app_meta(name,value) VALUES ('login_attempts',?) ON DUPLICATE KEY UPDATE value=VALUES(value)",[json_encode($attempts)]);fail('Mật khẩu truy cập không đúng.',401);}
         accessCookie($c);reply(['ok'=>true]);
     }
+    if($route==='/api/lookup/guide-video'&&in_array($method,['GET','HEAD'],true))lookupGuideVideo();
     if(str_starts_with($route,'/api/lookup/'))lookupRequest(db($c),$c,$route,$method);
     if(!authorized($c))fail('Nhập mật khẩu truy cập để mở dữ liệu.',401);
     if($route==='/api/access/close'&&$method==='POST'){accessCookie($c,true);reply(['ok'=>true]);}

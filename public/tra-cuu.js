@@ -119,6 +119,7 @@ function joinTodo(move, includeLeave) {
     + '</ol>';
   const leave = `<p>Bấm nút dưới để mở trang <strong>Gia đình Google</strong>, sẽ gặp <strong>1 trong 2</strong> trường hợp:</p>
         <a class="btn small" href="https://g.co/YourFamily" target="_blank" rel="noopener noreferrer">Rời nhóm gia đình cũ</a>
+        <button type="button" class="video-link" data-act="guide-video"><span class="play" aria-hidden="true"></span><span>Chưa biết cách rời? <strong>Xem video hướng dẫn</strong> (22 giây)</span></button>
         <div class="cases">
           ${caseOf(' case-guide', 'Trường hợp 1', leaveSeen, 'bấm <strong>Rời khỏi nhóm gia đình</strong> rồi xác nhận.', leaveSteps)}
           ${caseOf(' case-skip', 'Trường hợp 2', 'Thấy <strong>Gia đình của bạn trên Google</strong> và nút Bắt đầu', 'bạn <strong>không còn ở nhóm nào</strong>, <strong>bỏ qua bước này</strong> (không bấm Bắt đầu).', `<div class="case-shot">${shot('huong-dan-khong-co-nhom.png', 720, 269, 'Trang Gia đình Google: Gia đình của bạn trên Google, nút Bắt đầu')}</div>`)}
@@ -284,6 +285,22 @@ document.addEventListener('submit', async event => {
     }
   } finally { if (button.isConnected) button.disabled = false; }
 });
+// Video Hướng dẫn rời nhóm in a popup; it plays with sound since the customer tapped to open it.
+function guideVideo() {
+  let box = $('#guide-video');
+  if (!box) {
+    box = document.createElement('dialog'); box.id = 'guide-video'; box.className = 'video-box'; box.setAttribute('aria-labelledby', 'guide-video-title');
+    box.innerHTML = '<div class="video-head"><h2 id="guide-video-title">Cách rời nhóm gia đình cũ</h2><button type="button" class="video-close" data-act="guide-video-close" aria-label="Đóng video">✕</button></div>'
+      + '<video src="/api/lookup/guide-video" controls playsinline preload="metadata"></video>'
+      + '<p class="sub">Xem xong bấm ✕ để quay lại làm tiếp.</p>';
+    box.addEventListener('close', () => box.querySelector('video').pause());
+    box.addEventListener('click', event => { if (event.target === box) box.close(); }); // tap outside closes
+    document.body.append(box);
+  }
+  box.showModal();
+  const video = box.querySelector('video'); video.currentTime = 0; video.play().catch(() => {});
+}
+
 document.addEventListener('click', async event => {
   const open = event.target.closest('[data-open]');
   if (open) { // Record the click, then let the browser follow the Google link.
@@ -296,6 +313,8 @@ document.addEventListener('click', async event => {
     if (act === 'problem-open') { problemOpen = Number(button.dataset.member); resultView(false); $('#problem-card')?.scrollIntoView({ block: 'start', behavior: 'smooth' }); }
     else if (act === 'problem-cancel') { problemOpen = null; resultView(false); }
     else if (act === 'copy-page') await copyPage();
+    else if (act === 'guide-video') guideVideo();
+    else if (act === 'guide-video-close') $('#guide-video')?.close();
     else if (act === 'logout') { await call('logout', {}).catch(() => {}); problemOpen = null; clearInterval(pollTimer); loginView('', data?.email || ''); }
   } catch (error) {
     button.disabled = false;
