@@ -99,7 +99,7 @@ const chibi = () => `<svg viewBox="0 0 56 62" aria-hidden="true">
 function joinTodo(move, includeLeave) {
   const go = includeLeave ? 'Vào nhóm mới' : 'Vào nhóm';
   const link = move.invite_url
-    ? `<button type="button" class="video-link" data-act="guide-video" data-video="join"><span class="play" aria-hidden="true"></span><span>Chưa biết cách vào nhóm? <strong>Xem video hướng dẫn</strong> (50 giây)</span></button><a class="btn go big" href="${escape(move.invite_url)}" rel="noreferrer" data-open="${move.id}">${go}</a>${move.invite_expires_on ? `<span class="sub">Link còn hiệu lực đến ${day(move.invite_expires_on)}.</span>` : ''}`
+    ? `<button type="button" class="video-link" data-act="guide-video" data-video="join"><span class="play" aria-hidden="true"></span><span>Chưa biết cách vào nhóm? <strong>Xem video hướng dẫn</strong></span></button><a class="btn go big" href="${escape(move.invite_url)}" rel="noreferrer" data-open="${move.id}">${go}</a>${move.invite_expires_on ? `<span class="sub">Link còn hiệu lực đến ${day(move.invite_expires_on)}.</span>` : ''}`
     : '';
   // Google allows one family group at a time: leaving the old one comes first, also for a new customer
   // whose Gmail is still in some other group (skipped when it is in none). Two screenshots show the
@@ -114,7 +114,7 @@ function joinTodo(move, includeLeave) {
   const shot = (src, w, h, alt) => `<img src="/${src}" width="${w}" height="${h}" loading="lazy" alt="${alt}">`;
   const leave = `<p>Bấm nút dưới để mở trang <strong>Gia đình Google</strong>, sẽ gặp <strong>1 trong 2</strong> trường hợp:</p>
         <a class="btn small danger" href="https://g.co/YourFamily" target="_blank" rel="noopener noreferrer">Rời nhóm gia đình cũ</a>
-        <button type="button" class="video-link" data-act="guide-video" data-video="leave"><span class="play" aria-hidden="true"></span><span>Chưa biết cách rời? <strong>Xem video hướng dẫn</strong> (26 giây)</span></button>
+        <button type="button" class="video-link" data-act="guide-video" data-video="leave"><span class="play" aria-hidden="true"></span><span>Chưa biết cách rời? <strong>Xem video hướng dẫn</strong></span></button>
         <div class="cases">
           ${caseOf('', 'Trường hợp 1', leaveSeen, 'bấm <strong>Rời khỏi nhóm gia đình</strong> rồi xác nhận.', `<div class="case-shot">${shot('huong-dan-roi-nhom.png', 720, 376, 'Trang Gia đình Google: Nhóm gia đình của bạn không hoạt động, nút Rời khỏi nhóm gia đình được khoanh đỏ')}</div>`, leaveWarn)}
           ${caseOf(' case-skip', 'Trường hợp 2', 'Thấy <strong>Gia đình của bạn trên Google</strong> và nút Bắt đầu', 'bạn <strong>không còn ở nhóm nào</strong>, <strong>bỏ qua bước này</strong> (không bấm Bắt đầu).', `<div class="case-shot">${shot('huong-dan-khong-co-nhom.png', 720, 269, 'Trang Gia đình Google: Gia đình của bạn trên Google, nút Bắt đầu')}</div>`)}
