@@ -110,10 +110,10 @@ function joinTodo(move, includeLeave) {
     : 'Đang ở một nhóm gia đình, thấy nút <strong>Rời khỏi nhóm gia đình</strong>';
   const caseOf = (cls, tag, seen, todo, body) => `<details class="case${cls}"><summary><span class="case-tag">${tag}</span><span class="case-more" aria-hidden="true"></span><span class="case-text">${seen} → ${todo}</span></summary>${body}</details>`;
   const shot = (src, w, h, alt) => `<img src="/${src}" width="${w}" height="${h}" loading="lazy" alt="${alt}">`;
-  // Trường hợp 1 opens on the whole way out, from the shop's screen recording (account address blurred).
+  // Trường hợp 1 opens on the whole way out, from the shop's screen recording (no password screen shown).
   const leaveSteps = '<ol class="case-steps">'
     + `<li><p>Bấm <strong>Rời khỏi nhóm gia đình</strong>.</p>${shot('huong-dan-roi-nhom.png', 720, 376, 'Trang Gia đình Google: Nhóm gia đình của bạn không hoạt động, nút Rời khỏi nhóm gia đình được khoanh đỏ')}</li>`
-    + `<li><p>Google hỏi mật khẩu thì nhập <strong>mật khẩu Gmail</strong> rồi bấm <strong>Tiếp theo</strong>.</p>${shot('huong-dan-mat-khau.png', 720, 801, 'Google hỏi mật khẩu: ô Nhập mật khẩu của bạn và nút Tiếp theo được khoanh đỏ')}</li>`
+    + '<li><p>Google hỏi mật khẩu thì nhập <strong>mật khẩu Gmail</strong> rồi bấm <strong>Tiếp theo</strong>.</p></li>'
     + `<li><p>Bấm <strong>Rời khỏi</strong> để xác nhận.</p>${shot('huong-dan-xac-nhan.png', 720, 851, 'Trang Rời khỏi Nhóm gia đình, nút Rời khỏi được khoanh đỏ')}</li>`
     + `<li><p>Thấy trang này là <strong>đã rời xong</strong>. Quay lại đây làm tiếp bước 2.</p>${shot('huong-dan-khong-co-nhom.png', 720, 269, 'Trang Gia đình của bạn trên Google với nút Bắt đầu: đã rời nhóm')}</li>`
     + '</ol>';
