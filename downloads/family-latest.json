@@ -1,10 +1,10 @@
 {
   "format": "family-php-release",
   "protocol": 1,
-  "version": "0.32.13",
+  "version": "0.32.14",
   "schema": 8,
   "min_php": "8.2.0",
-  "size": 1566375,
-  "sha256": "934976958b8daa85e187bdf43dbdea38c2ad74ba60d35153d832c4b9c38c6de9",
-  "url": "https://github.com/haitiano1/family/releases/download/v0.32.13/family-php-release.zip"
+  "size": 3495287,
+  "sha256": "21ddaad23b171adf075252708989505d82d8e6b0cc18a5eb7916f157bd95feaf",
+  "url": "https://github.com/haitiano1/family/releases/download/v0.32.14/family-php-release.zip"
 }
