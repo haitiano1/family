@@ -97,18 +97,39 @@ const chibi = () => `<svg viewBox="0 0 56 62" aria-hidden="true">
 </svg>`;
 
 function joinTodo(move, includeLeave) {
+  const go = includeLeave ? 'Vào nhóm mới' : 'Vào nhóm';
   const link = move.invite_url
-    ? `<a class="btn go big" href="${escape(move.invite_url)}" rel="noreferrer" data-open="${move.id}">${includeLeave ? 'Vào nhóm mới' : 'Vào nhóm'}</a><span class="sub">Link riêng của bạn, chỉ dùng được 1 lần. Đừng gửi cho người khác.</span>${move.invite_expires_on ? `<span class="sub">Link còn hiệu lực đến ${day(move.invite_expires_on)}.</span>` : ''}`
+    ? `<a class="btn go big" href="${escape(move.invite_url)}" rel="noreferrer" data-open="${move.id}">${go}</a>${move.invite_expires_on ? `<span class="sub">Link còn hiệu lực đến ${day(move.invite_expires_on)}.</span>` : ''}`
     : '';
   // Google allows one family group at a time: leaving the old one comes first, also for a new customer
-  // whose Gmail is still in some other group (skipped when it is in none).
-  const leave = includeLeave
-    ? 'Vào trang Gia đình của Google, chọn <strong>Rời khỏi nhóm gia đình</strong> rồi xác nhận. Google báo bạn không còn ở nhóm nào thì bỏ qua bước này.'
-    : 'Gmail của bạn đang ở một nhóm gia đình khác thì vào trang Gia đình của Google, chọn <strong>Rời khỏi nhóm gia đình</strong> rồi xác nhận. Chưa ở nhóm nào thì bỏ qua bước này.';
+  // whose Gmail is still in some other group (skipped when it is in none). Two screenshots show the
+  // two pages Google can open: an inactive group to leave, or no group at all.
+  // Each case folds to one line; the screenshot opens on tap so the page stays short.
+  const leaveSeen = includeLeave
+    ? 'Thấy dòng <strong>Nhóm gia đình của bạn không hoạt động</strong> mới được rời'
+    : 'Đang ở một nhóm gia đình, thấy nút <strong>Rời khỏi nhóm gia đình</strong>';
+  // A customer whose old group was scanned leaves only when Google shows it inactive (leaving an active group can lock them for 12 months).
+  const leaveWarn = includeLeave ? '<span class="case-warn"><span class="warn-mark" aria-hidden="true">!</span><span>Không có dòng này thì <strong>KHÔNG được rời nhóm</strong>. Tự ý rời → bị <strong>hệ thống khoá</strong> → <strong>shop không xử lý lại được</strong>.</span></span>' : '';
+  const caseOf = (cls, tag, seen, todo, body, warn = '') => `<details class="case${cls}"><summary><span class="case-tag">${tag}</span><span class="case-more" aria-hidden="true"></span><span class="case-text">${seen} → ${todo}</span>${warn}</summary>${body}</details>`;
+  const shot = (src, w, h, alt) => `<img src="/${src}" width="${w}" height="${h}" loading="lazy" alt="${alt}">`;
+  // Trường hợp 1 opens on the whole way out, from the shop's screen recording (no password screen shown).
+  const leaveSteps = '<ol class="case-steps">'
+    + `<li><p>Bấm <strong>Rời khỏi nhóm gia đình</strong>.</p>${shot('huong-dan-roi-nhom.png', 720, 376, 'Trang Gia đình Google: Nhóm gia đình của bạn không hoạt động, nút Rời khỏi nhóm gia đình được khoanh đỏ')}</li>`
+    + '<li><p>Google hỏi mật khẩu thì nhập <strong>mật khẩu Gmail</strong> rồi bấm <strong>Tiếp theo</strong>.</p></li>'
+    + `<li><p>Bấm <strong>Rời khỏi</strong> để xác nhận.</p>${shot('huong-dan-xac-nhan.png', 720, 851, 'Trang Rời khỏi Nhóm gia đình, nút Rời khỏi được khoanh đỏ')}</li>`
+    + `<li><p>Thấy trang này là <strong>đã rời xong</strong>. Quay lại đây làm tiếp bước 2.</p>${shot('huong-dan-khong-co-nhom.png', 720, 269, 'Trang Gia đình của bạn trên Google với nút Bắt đầu: đã rời nhóm')}</li>`
+    + '</ol>';
+  const leave = `<p>Bấm nút dưới để mở trang <strong>Gia đình Google</strong>, sẽ gặp <strong>1 trong 2</strong> trường hợp:</p>
+        <a class="btn small" href="https://g.co/YourFamily" target="_blank" rel="noopener noreferrer">Rời nhóm gia đình cũ</a>
+        <button type="button" class="video-link" data-act="guide-video"><span class="play" aria-hidden="true"></span><span>Chưa biết cách rời? <strong>Xem video hướng dẫn</strong> (26 giây)</span></button>
+        <div class="cases">
+          ${caseOf(' case-guide', 'Trường hợp 1', leaveSeen, 'bấm <strong>Rời khỏi nhóm gia đình</strong> rồi xác nhận.', leaveSteps, leaveWarn)}
+          ${caseOf(' case-skip', 'Trường hợp 2', 'Thấy <strong>Gia đình của bạn trên Google</strong> và nút Bắt đầu', 'bạn <strong>không còn ở nhóm nào</strong>, <strong>bỏ qua bước này</strong> (không bấm Bắt đầu).', `<div class="case-shot">${shot('huong-dan-khong-co-nhom.png', 720, 269, 'Trang Gia đình Google: Gia đình của bạn trên Google, nút Bắt đầu')}</div>`)}
+        </div>`;
   return `<ol class="todo">
-      <li><div><h3>${includeLeave ? 'Rời nhóm cũ' : 'Rời nhóm cũ (nếu có)'}</h3><p>${leave}</p><a class="btn small" href="https://g.co/YourFamily" target="_blank" rel="noopener noreferrer">Mở trang Gia đình Google</a></div></li>
-      <li><div><h3>Đăng nhập đúng Gmail</h3><p>Mở link bằng trình duyệt đang đăng nhập <strong>${escape(data.email)}</strong>. Trình duyệt đang đăng nhập Gmail khác thì Gmail đó sẽ vào nhóm thay bạn.</p></div></li>
-      <li><div><h3>${includeLeave ? 'Bấm vào nhóm mới' : 'Bấm vào nhóm'}</h3><p>Google mở trang mời, bạn bấm đồng ý tham gia là xong.</p>${link}</div></li>
+      <li><div><h3>${includeLeave ? 'Rời nhóm cũ' : 'Rời nhóm cũ (nếu có)'}</h3>${leave}</div></li>
+      <li><div><h3>Đăng nhập đúng Gmail</h3><p>Trình duyệt phải đăng nhập <strong>đúng Gmail này</strong>:</p><p class="must-mail">${escape(data.email).replace('@', '<wbr>@')}</p><p>Google hỏi chọn tài khoản thì chọn đúng Gmail trên. Chọn nhầm thì <strong>Gmail đó vào nhóm thay bạn</strong>.</p></div></li>
+      <li><div><h3>${includeLeave ? 'Bấm vào nhóm mới' : 'Bấm vào nhóm'}</h3><p>Google mở trang mời, bạn bấm <strong>đồng ý tham gia</strong> là xong.</p>${link}</div></li>
     </ol>${inAppHint()}`;
 }
 
@@ -266,6 +287,22 @@ document.addEventListener('submit', async event => {
     }
   } finally { if (button.isConnected) button.disabled = false; }
 });
+// Video Hướng dẫn rời nhóm in a popup; it plays with sound since the customer tapped to open it.
+function guideVideo() {
+  let box = $('#guide-video');
+  if (!box) {
+    box = document.createElement('dialog'); box.id = 'guide-video'; box.className = 'video-box'; box.setAttribute('aria-labelledby', 'guide-video-title');
+    box.innerHTML = '<div class="video-head"><h2 id="guide-video-title">Cách rời nhóm gia đình cũ</h2><button type="button" class="video-close" data-act="guide-video-close" aria-label="Đóng video">✕</button></div>'
+      + '<video src="/api/lookup/guide-video" controls playsinline preload="metadata"></video>'
+      + '<p class="sub">Xem xong bấm ✕ để quay lại làm tiếp.</p>';
+    box.addEventListener('close', () => box.querySelector('video').pause());
+    box.addEventListener('click', event => { if (event.target === box) box.close(); }); // tap outside closes
+    document.body.append(box);
+  }
+  box.showModal();
+  const video = box.querySelector('video'); video.currentTime = 0; video.play().catch(() => {});
+}
+
 document.addEventListener('click', async event => {
   const open = event.target.closest('[data-open]');
   if (open) { // Record the click, then let the browser follow the Google link.
@@ -278,6 +315,8 @@ document.addEventListener('click', async event => {
     if (act === 'problem-open') { problemOpen = Number(button.dataset.member); resultView(false); $('#problem-card')?.scrollIntoView({ block: 'start', behavior: 'smooth' }); }
     else if (act === 'problem-cancel') { problemOpen = null; resultView(false); }
     else if (act === 'copy-page') await copyPage();
+    else if (act === 'guide-video') guideVideo();
+    else if (act === 'guide-video-close') $('#guide-video')?.close();
     else if (act === 'logout') { await call('logout', {}).catch(() => {}); problemOpen = null; clearInterval(pollTimer); loginView('', data?.email || ''); }
   } catch (error) {
     button.disabled = false;

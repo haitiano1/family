@@ -1,3 +1,7 @@
+# 0.32.12 — Ảnh hướng dẫn Rời nhóm cũ trên trang tra cứu
+
+Dùng **Cập nhật một chạm**.
+
 # 0.32.11 — Lấy link theo mail không điều kiện
 
 Dùng **Cập nhật một chạm**.
