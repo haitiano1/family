@@ -793,11 +793,12 @@ test('PHP lookup page: Family status, invite pool, bulk move, Gmail + code sign-
  assert.ok((await a('journal')).entries.some(e=>e.action==='Gán mail cho link mời'));
  // Gán link sẵn (0.32.0) on MySQL: a new Family hands arriving links to its customers.
  const f60=await a('families','POST',{name:'Family 60',manager_email:'owner60@example.com'},201);await a('members','POST',{family_id:f60.id,email:'m60@example.com',expires_at:'2099-01-01',membership_status:'active'},201);
- const g60=await a('families/'+f60.id+'/invite-mails','POST',{count:2},201);assert.equal(g60.auto_assign,true);assert.deepEqual(g60.targets.map(t=>t.email),['m60@example.com']);
- const l60=await a('families/'+f60.id+'/invites','POST',{label:g60.mails[0],url:'https://families.google.com/join/promo/php-60a',sent_on:''},201);assert.deepEqual(l60.assigned.map(x=>x.email),['m60@example.com']);
+ const g60=await a('families/'+f60.id+'/invite-mails','POST',{count:2},201);assert.equal(g60.auto_assign,true);assert.deepEqual(g60.targets,[],'a customer already in the group is not pre-assigned');
+ const l60=await a('families/'+f60.id+'/invites','POST',{label:g60.mails[0],url:'https://families.google.com/join/promo/php-60a',sent_on:''},201);assert.deepEqual(l60.assigned,[]);
  await a('families/'+f60.id+'/invites','POST',{label:g60.mails[1],url:'https://families.google.com/join/promo/php-60b',sent_on:''},201);
- const m61=await a('members','POST',{family_id:f60.id,email:'m61@example.com',joined_at:'2026-11-11',plan_months:1,membership_status:'new'},201);assert.deepEqual(m61.assigned.map(x=>x.label),[g60.mails[1]],'a Mua mới customer added later gets the waiting link');
- assert.deepEqual((await a('families/'+f60.id+'/assign-links','POST',{})).assigned,[]);
+ const m61=await a('members','POST',{family_id:f60.id,email:'m61@example.com',joined_at:'2026-11-11',plan_months:1,membership_status:'new'},201);assert.deepEqual(m61.assigned.map(x=>x.label),[g60.mails[0]],'a Mua mới customer added later gets the waiting link');
+ assert.deepEqual((await a('families/'+f60.id+'/assign-links','POST',{})).assigned.map(x=>x.email),['m60@example.com'],'by hand it may go to anyone');
+ state=await a('state');const h60=state.invites.find(i=>i.label===g60.mails[1]);await a('invites/'+h60.id+'/holder','PATCH',{member_id:null,revision:h60.revision});state=await a('state');assert.equal(state.invites.find(i=>i.id===h60.id).holder_state,'ready');
  state=await a('state');assert.ok(state.invite_mails.filter(m=>m.family_id===f60.id).every(m=>m.auto_assign===1));
  // Việc cần làm (0.30.0) on MySQL, and deleting an open owner case puts the Family back to Hoạt động.
  await a('todos','POST',{text:'  '},400);const t1=await a('todos','POST',{text:'  Gọi   khách ',due_on:'2099-01-02'},201);assert.equal(t1.text,'Gọi khách');

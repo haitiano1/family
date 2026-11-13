@@ -125,12 +125,16 @@ fails(fn()=>lookupDeleteInviteMails($db,$f12,['ids'=>[]]),400,'ids required');fa
 lookupSaveInvite($db,$f12,null,['label'=>$mistake[1],'url'=>'https://families.google.com/join/promo/del','sent_on'=>$day(0)]);fails(fn()=>lookupDeleteInviteMails($db,$f12,['ids'=>[$mid($mistake[1])]]),409,'address with a link stays');
 check(lookupDeleteInviteMails($db,$f12,['ids'=>[$mid($mistake[0])]])===['ok'=>true,'deleted'=>1]&&!one($db,'SELECT id FROM invite_mails WHERE email=?',[$mistake[0]]),'deleted');
 // Gán link sẵn (0.32.0)
-$f50=$family('Family 50','owner50@example.com');foreach(['a1','a2','a3'] as $n)$member($f50,"$n@example.com",$n,$day(90));q($db,"UPDATE members SET membership_status='invited' WHERE email=?",['a3@example.com']);
-$g50=lookupGenerateInviteMails($db,$f50,['count'=>3]);check($g50['auto_assign']===true&&$g50['auto_mode']===1&&array_column($g50['targets'],'email')===['a1@example.com','a2@example.com'],'gen targets without Đã mời chưa vào');
+$f50=$family('Family 50','owner50@example.com');foreach(['a1','a2','a3'] as $n)$member($f50,"$n@example.com",$n,$day(90));q($db,"UPDATE members SET membership_status='invited' WHERE email=?",['a3@example.com']);q($db,"UPDATE members SET membership_status='new' WHERE email=?",['a2@example.com']);
+$g50=lookupGenerateInviteMails($db,$f50,['count'=>3]);check($g50['auto_assign']===true&&$g50['auto_mode']===2&&array_column($g50['targets'],'email')===['a2@example.com'],'gen targets: only Mua mới, not customers in the group nor Đã mời chưa vào');
 $got=[];foreach($g50['mails'] as $k=>$mail)$got[]=array_column(lookupSaveInvite($db,$f50,null,['label'=>$mail,'url'=>"https://myaccount.google.com/family/join/p50$k",'sent_on'=>$day(0)])['assigned'],'email');
-check($got===[['a1@example.com'],['a2@example.com'],[]],'links assigned on arrival, Đã mời chưa vào left out');
-check((int)one($db,"SELECT COUNT(*) AS n FROM member_moves WHERE to_family_id=? AND invite_id IS NOT NULL AND from_family_id IS NULL",[$f50])['n']===2,'join moves hold the links');
-check(lookupGenerateInviteMails($db,$f50,['count'=>1])['auto_assign']===false,'running Family not auto');
+check($got===[['a2@example.com'],[],[]],'links assigned on arrival to Mua mới only');
+check((int)one($db,"SELECT COUNT(*) AS n FROM member_moves WHERE to_family_id=? AND invite_id IS NOT NULL AND from_family_id IS NULL",[$f50])['n']===1,'join move holds the link');
+$hl=one($db,"SELECT * FROM family_invites WHERE family_id=? AND label=?",[$f50,$g50['mails'][0]]);fails(fn()=>lookupSetHolder($db,(int)$hl['id'],['member_id'=>null,'revision'=>99]),409,'stale holder revision');
+check(lookupSetHolder($db,(int)$hl['id'],['member_id'=>null,'revision'=>(int)$hl['revision']])['changed']===true&&lookupInviteState($db,one($db,'SELECT * FROM family_invites WHERE id=?',[$hl['id']]))==='ready','holder removed');
+$a1=(int)one($db,'SELECT id FROM members WHERE email=?',['a1@example.com'])['id'];$hl=one($db,'SELECT * FROM family_invites WHERE id=?',[$hl['id']]);
+lookupSetHolder($db,(int)$hl['id'],['member_id'=>$a1,'revision'=>(int)$hl['revision']]);check(lookupInviteHolder(lookupInviteRefs($db,(int)$hl['id']))['move']['email']==='a1@example.com','holder set by hand');
+check(lookupGenerateInviteMails($db,$f50,['count'=>1])['targets']===[],'nobody left who needs a link');
 $f51=$family('Family 51','owner51@example.com');$g51=lookupGenerateInviteMails($db,$f51,['count'=>2]);check($g51['targets']===[],'no customers yet');
 foreach($g51['mails'] as $k=>$mail)check(lookupSaveInvite($db,$f51,null,['label'=>$mail,'url'=>"https://myaccount.google.com/family/join/p51$k",'sent_on'=>$day(0)])['assigned']===[],'kept in pool');
 $member($f51,'b1@example.com','b1',$day(90));$man=lookupAssignFamilyLinks($db,$f51);check(array_column($man['assigned'],'email')===['b1@example.com']&&lookupAssignFamilyLinks($db,$f51)['assigned']===[],'manual assign');
