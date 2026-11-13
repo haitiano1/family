@@ -105,10 +105,10 @@ check(str_contains(fails(fn()=>lookupBulkMove($db,[...$base,'assignments'=>[$a($
 lookupMarkInviteSent($db,$inv[3],['sent'=>false,'revision'=>$rev($inv[3])]);check(array_column(lookupAdminState($db)['invites'],'holder_state')===['used','ready','ready'],'unticked');
 $backup=backup($db);check($backup['version']===10&&count($backup['tables']['member_moves'])===2&&count($backup['tables']['family_invites'])===3&&count($backup['tables']['invite_mails'])===53,'backup v10 tables');
 check(lookupAuditAction('POST','/api/moves')==='Chuyển Family'&&auditActionLabel('PATCH','/api/families/3/status')==='Sửa trạng thái Family','audit labels');
-// New customers ("Đã mời, chưa vào" / "Mua mới") get one link of their own Family on lookup.
+// New customers (Mua mới) get one link of their own Family on lookup; "Đã mời, chưa vào" is handled like a customer in the group.
 $f12=$family('Family 12','vicakarl2@example.com');
 $join=function(string $mail,string $status,int $days)use($db,$f12,$day){q($db,'INSERT INTO members(family_id,email,customer_name,expires_at,plan_months,membership_status,joined_at) VALUES (?,?,?,?,1,?,?)',[$f12,$mail,$mail,$day($days),$status,$day(0)]);return (int)$db->lastInsertId();};
-$an=$join('an@example.com','invited',90);$join('binh@example.com','new',90);$join('chi@example.com','active',90);$join('em@example.com','invited',90);
+$an=$join('an@example.com','new',90);$join('binh@example.com','new',90);$join('chi@example.com','active',90);$join('em@example.com','new',90);$join('gio@example.com','invited',90);
 lookupSaveInvite($db,$f12,null,['label'=>'cu','url'=>'https://families.google.com/join/promo/p0','sent_on'=>$day(-20)]);
 $p1=lookupSaveInvite($db,$f12,null,['label'=>'a','url'=>'https://families.google.com/join/promo/p1','sent_on'=>$day(-2)])['id'];
 lookupSaveInvite($db,$f12,null,['label'=>'b','url'=>'https://families.google.com/join/promo/p2','sent_on'=>$day(-1)]);

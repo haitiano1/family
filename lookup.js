@@ -289,7 +289,7 @@ export function initLookup(db, { fail, email, text, calendarDate, log }) {
         run("UPDATE member_moves SET state='cancelled',updated_at=?,revision=revision+1 WHERE member_id=? AND state IN ('assigned','opened','failed')", time, member.id);
         run('UPDATE members SET family_id=?,renewal_revision=renewal_revision+1 WHERE id=?', to.id, member.id);
         run("DELETE FROM issues WHERE family_id=? AND target_type='member' AND target_id=?", from.id, member.id);
-        awaitLink(member, to, { id: from.id, name: from.name, status: source.status, note: source.note });
+        if (member.membership_status !== 'invited') awaitLink(member, to, { id: from.id, name: from.name, status: source.status, note: source.note });
       }
       // Ready links of Gen mail in the new Family go to the customers just moved in.
       autoAssign(to.id);
@@ -366,13 +366,15 @@ export function initLookup(db, { fail, email, text, calendarDate, log }) {
     const status = statusRow(family.id), problem = problemStatuses.includes(status.status);
     const old = { id: null, name: family.name, status: problem ? status.status : 'scanned', note: problem && status.note ? status.note : autoScannedNote(family.name) };
     const members = all('SELECT * FROM members WHERE family_id=? ORDER BY id', family.id);
-    for (const member of members) awaitLink(member, family, old);
-    log(`Tự động: ${family.name} đổi chủ sang ${family.manager_email}: ${members.length} khách chờ link vào nhóm mới${retired ? `, bỏ ${retired} link của chủ cũ` : ''}`);
+    // "Đã mời, chưa vào" customers are handled like a normal Family: they do not wait for a link.
+    const waiting = members.filter(member => member.membership_status !== 'invited');
+    for (const member of waiting) awaitLink(member, family, old);
+    log(`Tự động: ${family.name} đổi chủ sang ${family.manager_email}: ${waiting.length} khách chờ link vào nhóm mới${retired ? `, bỏ ${retired} link của chủ cũ` : ''}`);
     // Gen mail kept here was made after the report, for the new owner's group: its links go to the customers.
     run('UPDATE invite_mails SET auto_assign=2 WHERE family_id=?', family.id);
     const mails = count ? generateInviteMails(family.id, { count }) : null;
     autoAssign(family.id);
-    return { waiting: members.length, retired, invite_mails: mails };
+    return { waiting: waiting.length, retired, invite_mails: mails };
   }
 
   function saveStatus(familyId, data) {
@@ -619,10 +621,12 @@ export function initLookup(db, { fail, email, text, calendarDate, log }) {
   // A customer of this Family who has not joined yet ("Đã mời, chưa vào" or "Mua mới") gets one
   // ready link of the Family's own pool the first time they look up their Gmail. The link is
   // held for them (never handed to anyone else) and ticked Đã gửi.
-  const joinable = member => ['invited', 'new'].includes(member.membership_status);
+  // Only Mua mới takes a link by itself on lookup. "Đã mời, chưa vào" is handled like a customer already
+  // in the group (the shop invited them directly): no waiting page and no leftover link.
+  const joinable = member => member.membership_status === 'new';
   function allocateJoin(member, status, period, current) {
     // Customers past their expiry date still get a link: they renew, they just have not paid yet.
-    if (status.status !== 'active') return false;
+    if (status.status !== 'active' || member.membership_status === 'invited') return false;
     const pending = one("SELECT * FROM member_moves WHERE member_id=? AND to_family_id=? AND state!='cancelled' AND dismissed_at='' ORDER BY id DESC LIMIT 1", member.id, member.family_id);
     if (pending ? !(openMoveStates.includes(pending.state) && pending.invite_id == null) : !joinable(member)) return false;
     const family = activeFamily(member.family_id); if (!family) return false;
@@ -641,7 +645,9 @@ export function initLookup(db, { fail, email, text, calendarDate, log }) {
     const items = all("SELECT m.*,f.name AS family_name FROM members m JOIN families f ON f.id=m.family_id WHERE m.email=? AND f.archived_at='' ORDER BY m.id", address).map(member => {
       const status = statusRow(member.family_id), period = expiry(member.expires_at, current);
       const allocated = allocateJoin(member, status, period, current);
-      const latest = one("SELECT * FROM member_moves WHERE member_id=? AND state!='cancelled' AND dismissed_at='' ORDER BY id DESC LIMIT 1", member.id);
+      const found = one("SELECT * FROM member_moves WHERE member_id=? AND state!='cancelled' AND dismissed_at='' ORDER BY id DESC LIMIT 1", member.id);
+      // A "Đã mời, chưa vào" customer sees the Family as usual unless the shop gave them a link.
+      const latest = found && member.membership_status === 'invited' && openMoveStates.includes(found.state) && found.invite_id == null ? null : found;
       let move = null;
       if (latest && latest.to_family_id === member.family_id) {
         const open = openMoveStates.includes(latest.state);

@@ -755,11 +755,15 @@ test('PHP lookup page: Family status, invite pool, bulk move, Gmail + code sign-
  const opened=state.issues.find(x=>x.id===issue.id);await a('issues/'+issue.id,'PATCH',{revision:opened.revision,status:'done',resolution:'keep'});state=await a('state');assert.equal(state.family_statuses.find(x=>x.family_id===next.id).status,'active');
  assert.ok((await a('journal')).entries.some(e=>e.message.includes('Tự động: đặt trạng thái Family 09 là Đang hoạt động')));
  // A new customer of Family 09 gets one ready link of its pool on lookup, ticked Đã gửi.
- await a('members','POST',{family_id:next.id,email:'moi@example.com',customer_name:'Khách mới',expires_at:'2099-01-01',membership_status:'invited'},201);
+ await a('members','POST',{family_id:next.id,email:'moi@example.com',customer_name:'Khách mới',joined_at:'2026-11-01',expires_at:'2099-01-01',membership_status:'new'},201);
+ const dm=await a('members','POST',{family_id:next.id,email:'damoi@example.com',expires_at:'2099-01-01',membership_status:'invited'},201);
  await a('families/'+next.id+'/invites','POST',{label:'moi',url:'https://families.google.com/join/promo/php-3',sent_on:''},201);
  state=await a('state');const newcomer=await lookup('verify','POST',{email:'moi@example.com',code:state.lookup_codes['moi@example.com']});const handed=newcomer.body.items[0].move;
  assert.equal(newcomer.body.items[0].view,'move');assert.equal(handed.kind,'join');assert.match(handed.invite_url,/php-[23]$/);
  state=await a('state');const held=state.invites.find(i=>i.url===handed.invite_url);assert.equal(held.holder_state,'assigned');assert.ok(held.sent_at);
+ // "Đã mời, chưa vào" is handled like a customer in the group: no waiting page, no link.
+ const dmLook=await lookup('verify','POST',{email:'damoi@example.com',code:state.lookup_codes['damoi@example.com']});assert.equal(dmLook.body.items[0].view,'normal');assert.equal(dmLook.body.items[0].move,null);
+ await a('members/'+dm.id,'DELETE');
  // A customer tells the shop Premium stopped; reporting the owner mail closes it.
  const s30=await a('families','POST',{name:'Family 30',manager_email:'owner30@example.com'},201);await a('members','POST',{family_id:s30.id,email:'p30@example.com',expires_at:'2099-01-01',membership_status:'active'},201);
  state=await a('state');const p30=await lookup('verify','POST',{email:'p30@example.com',code:state.lookup_codes['p30@example.com']});const ref30=p30.body.items[0].member_ref;
@@ -781,7 +785,7 @@ test('PHP lookup page: Family status, invite pool, bulk move, Gmail + code sign-
  const ten=await a('families','POST',{name:'Family 10',manager_email:'owner10@example.com'},201);await a('members','POST',{family_id:ten.id,email:'moi@example.com',customer_name:'Bản trùng',expires_at:'2026-01-01'},201);
  await a('families/'+next.id+'/hand-over','POST',{to_family_id:ten.id,expected_manager_email:'changed@example.com'},409);
  const over=await a('families/'+next.id+'/hand-over','POST',{to_family_id:ten.id,expected_manager_email:'owner10@example.com'});assert.equal(over.moved,2);assert.equal(over.replaced,1);
- state=await a('state');const landed=state.members.filter(m=>m.family_id===ten.id);assert.equal(landed.length,2);assert.equal(landed.find(m=>m.email==='minhanh@example.com').membership_status,'active');assert.equal(landed.find(m=>m.email==='moi@example.com').membership_status,'invited');assert.equal(landed.find(m=>m.email==='moi@example.com').customer_name,'Khách mới');assert.equal(state.members.some(m=>m.family_id===next.id),false);
+ state=await a('state');const landed=state.members.filter(m=>m.family_id===ten.id);assert.equal(landed.length,2);assert.equal(landed.find(m=>m.email==='minhanh@example.com').membership_status,'active');assert.equal(landed.find(m=>m.email==='moi@example.com').membership_status,'new');assert.equal(landed.find(m=>m.email==='moi@example.com').customer_name,'Khách mới');assert.equal(state.members.some(m=>m.family_id===next.id),false);
  assert.ok((await a('journal')).entries.some(e=>e.action==='Cho khách vào Family mới'));
  await lookup('logout','POST',{},200,signed.cookie);assert.deepEqual((await lookup('me','GET',undefined,200,signed.cookie)).body,{signed_in:false});
  // Gán mail (0.31.0) on MySQL.

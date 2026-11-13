@@ -182,12 +182,9 @@ test('incident flow: status, invite pool, bulk move with one link per customer, 
     assert.equal((await a('state')).moves.some(m => m.id === huyMove.id), false);
     const huyCustomer = f.customer();
     result = await huyCustomer('verify', 'POST', { email: 'giahuy@example.com', code: state.lookup_codes['giahuy@example.com'] });
-    // Still "Đã mời, chưa vào" in Family 09, so the lookup hands Huy another ready link of that pool and ticks it.
-    assert.deepEqual([result.items[0].view, result.items[0].family_name, result.items[0].move.kind, result.items[0].move.state], ['move', 'Family 09', 'join', 'assigned']);
-    state = await a('state');
-    const handed = state.invites.find(i => i.url === result.items[0].move.invite_url);
-    assert.equal(handed.holder_state, 'assigned'); assert.ok(handed.sent_at, 'shown link is ticked Đã gửi');
-    assert.equal((await huyCustomer('me')).items[0].move.invite_url, handed.url, 'the same link on every lookup');
+    // Still "Đã mời, chưa vào" in Family 09: handled like a customer in the group, no link handed by itself.
+    assert.deepEqual([result.items[0].view, result.items[0].family_name, result.items[0].move], ['normal', 'Family 09', null]);
+    assert.deepEqual((await a('state')).invites.map(i => i.holder_state), ['used', 'ready', 'ready']);
 
     // Editing an invite with a newer Google link keeps the same slot.
     state = await a('state');
@@ -377,11 +374,12 @@ test('new customers get one link of their own Family on lookup, never shared, an
     const a = f.admin;
     const fam = await a('families', 'POST', { name: 'Family 12', manager_email: 'vicakarl2@example.com' }, 201);
     const add = (email, extra) => a('members', 'POST', { family_id: fam.id, email, customer_name: email.split('@')[0], expires_at: day(90), ...extra }, 201);
-    const an = await add('an@example.com', { membership_status: 'invited' });
+    const an = await add('an@example.com', { membership_status: 'new', joined_at: day(0) });
     await add('binh@example.com', { membership_status: 'new', joined_at: day(0) });
     await add('chi@example.com', { membership_status: 'active' });
-    await add('dung@example.com', { membership_status: 'invited', expires_at: day(-3) });
-    await add('em@example.com', { membership_status: 'invited' });
+    await add('dung@example.com', { membership_status: 'new', joined_at: day(-40), expires_at: day(-3) });
+    await add('em@example.com', { membership_status: 'new', joined_at: day(0) });
+    await add('gio@example.com', { membership_status: 'invited' });
     const old = await a(`families/${fam.id}/invites`, 'POST', { label: 'cu', url: inviteUrl(80), sent_on: day(-20) }, 201);
     const first = await a(`families/${fam.id}/invites`, 'POST', { label: 'haihoangrr+aaaaaa@gmail.com', url: inviteUrl(81), sent_on: day(-2) }, 201);
     const second = await a(`families/${fam.id}/invites`, 'POST', { label: 'haihoangrr+bbbbbb@gmail.com', url: inviteUrl(82), sent_on: day(-1) }, 201);
@@ -394,6 +392,7 @@ test('new customers get one link of their own Family on lookup, never shared, an
     assert.equal((await look('an@example.com')).move.invite_url, inviteUrl(81), 'same link again');
     assert.equal((await look('binh@example.com')).move.invite_url, inviteUrl(82), 'Mua mới gets the next link');
     assert.equal((await look('chi@example.com')).view, 'normal', 'a customer already in the group gets nothing');
+    assert.deepEqual([(await look('gio@example.com')).view, (await look('gio@example.com')).move], ['normal', null], 'Đã mời, chưa vào is handled like a customer in the group');
     assert.equal((await look('dung@example.com')).view, 'waiting', 'past expiry still waits for a link');
     assert.equal((await look('em@example.com')).view, 'waiting', 'pool used up: wait for a link');
     let state = await a('state');
@@ -482,7 +481,7 @@ test('Đã fix · Đổi sang mail mới keeps customers in the Family: statuses
     const a = f.admin;
     const fam = await a('families', 'POST', { name: 'Family 30', manager_email: 'owner30@example.com' }, 201);
     const add = (email, extra) => a('members', 'POST', { family_id: fam.id, email, customer_name: email.split('@')[0], expires_at: day(60), ...extra }, 201);
-    const ann = await add('ann@example.com', { membership_status: 'invited' });
+    const ann = await add('ann@example.com', { membership_status: 'new', joined_at: day(0) });
     const lan = await add('lan@example.com', { membership_status: 'new', joined_at: day(0) });
     const tuan = await add('tuan@example.com', { membership_status: 'active', expires_at: day(-5) });
     // Before the scan: one link used by ann, one still ready, one Gen mail without a link yet.
@@ -650,8 +649,8 @@ test('a checked link a customer never used goes back to the pool and the custome
   const f = await server(); try {
     const a = f.admin;
     const fam = await a('families', 'POST', { name: 'Family 70', manager_email: 'owner70@example.com' }, 201);
-    await a('members', 'POST', { family_id: fam.id, email: 'an70@example.com', expires_at: day(30), membership_status: 'invited' }, 201);
-    await a('members', 'POST', { family_id: fam.id, email: 'binh70@example.com', expires_at: day(30), membership_status: 'invited' }, 201);
+    await a('members', 'POST', { family_id: fam.id, email: 'an70@example.com', joined_at: day(0), expires_at: day(30), membership_status: 'new' }, 201);
+    await a('members', 'POST', { family_id: fam.id, email: 'binh70@example.com', joined_at: day(0), expires_at: day(30), membership_status: 'new' }, 201);
     const link = await a(`families/${fam.id}/invites`, 'POST', { label: 'slot70', url: inviteUrl(700), sent_on: day(0) }, 201);
     const codes = (await a('state')).lookup_codes, look = async m => (await f.customer()('verify', 'POST', { email: m, code: codes[m] })).items[0];
     assert.equal((await look('an70@example.com')).move.invite_url, inviteUrl(700));
@@ -844,9 +843,10 @@ test('Đã fix · Đổi Gmail chủ: Gen mail then Lấy link hands a link to e
     for (const [address, url] of [['m1@example.com', inviteUrl(600)], ['m3@example.com', inviteUrl(601)], ['m4@example.com', inviteUrl(610)]]) {
       const item = await look(address); assert.equal(item.view, 'move'); assert.equal(item.move.invite_url, url, address + ' sees the link assigned to them');
     }
-    assert.equal((await look('m2@example.com')).move.invite_url, inviteUrl(611), 'Đã mời, chưa vào takes the leftover link on lookup');
+    assert.deepEqual([(await look('m2@example.com')).view, (await look('m2@example.com')).move], ['normal', null], 'Đã mời, chưa vào does not wait for a link and takes none');
     const state = await a('state');
-    assert.deepEqual(state.invites.filter(i => i.family_id === fam.id && i.holder_state !== 'retired').map(i => [i.url, i.holder_email]), [[inviteUrl(600), 'm1@example.com'], [inviteUrl(601), 'm3@example.com'], [inviteUrl(610), 'm4@example.com'], [inviteUrl(611), 'm2@example.com']]);
+    assert.deepEqual(state.invites.filter(i => i.family_id === fam.id && i.holder_state !== 'retired').map(i => [i.url, i.holder_state, i.holder_email || '']), [[inviteUrl(600), 'assigned', 'm1@example.com'], [inviteUrl(601), 'assigned', 'm3@example.com'], [inviteUrl(610), 'assigned', 'm4@example.com'], [inviteUrl(611), 'ready', '']]);
+    assert.equal(state.moves.some(m => m.email === 'm2@example.com'), false, 'no waiting move for Đã mời, chưa vào');
   } finally { await f.close(); }
 });
 

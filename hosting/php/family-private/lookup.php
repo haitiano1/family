@@ -142,13 +142,15 @@ function lookupOwnerReplaced(PDO $db,int $familyId,string $since,?int $donorId,i
     // Customers keep their member status; each one waits for a link of the new owner's group.
     $status=lookupStatusRow($db,(int)$f['id']);$problem=in_array($status['status'],LOOKUP_PROBLEM_STATUSES,true);
     $members=all($db,'SELECT * FROM members WHERE family_id=? ORDER BY id',[$f['id']]);
-    foreach($members as $m)lookupAwaitLink($db,$m,$f,null,$f['name'],$problem?$status['status']:'scanned',$problem&&$status['note']!==''?$status['note']:lookupAutoScannedNote($f['name']));
-    logEntry($db,"Tự động: {$f['name']} đổi chủ sang {$f['manager_email']}: ".count($members)." khách chờ link vào nhóm mới".($retired?", bỏ $retired link của chủ cũ":''));
+    // "Đã mời, chưa vào" customers are handled like a normal Family: they do not wait for a link.
+    $waiting=array_values(array_filter($members,fn($m)=>$m['membership_status']!=='invited'));
+    foreach($waiting as $m)lookupAwaitLink($db,$m,$f,null,$f['name'],$problem?$status['status']:'scanned',$problem&&$status['note']!==''?$status['note']:lookupAutoScannedNote($f['name']));
+    logEntry($db,"Tự động: {$f['name']} đổi chủ sang {$f['manager_email']}: ".count($waiting)." khách chờ link vào nhóm mới".($retired?", bỏ $retired link của chủ cũ":''));
     // Gen mail kept here was made after the report, for the new owner's group: its links go to the customers.
     q($db,'UPDATE invite_mails SET auto_assign=2 WHERE family_id=?',[$f['id']]);
     $mails=$count?lookupGenerateInviteMails($db,(int)$f['id'],['count'=>$count]):null;
     lookupAutoAssign($db,(int)$f['id']);
-    return ['waiting'=>count($members),'retired'=>$retired,'invite_mails'=>$mails];
+    return ['waiting'=>count($waiting),'retired'=>$retired,'invite_mails'=>$mails];
 }
 function lookupInviteMailBase(string $address): string {
     $at=strrpos($address,'@');if($at===false||$at===0)return '';$local=explode('+',substr($address,0,$at))[0];return $local===''?'':$local.substr($address,$at);
@@ -485,7 +487,7 @@ function lookupHandOver(PDO $db,int $fromId,array $d): array {
             q($db,"UPDATE member_moves SET state='cancelled',updated_at=?,revision=revision+1 WHERE member_id=? AND state IN ('assigned','opened','failed')",[$time,$m['id']]);
             q($db,'UPDATE members SET family_id=?,renewal_revision=renewal_revision+1 WHERE id=?',[$to['id'],$m['id']]);
             q($db,"DELETE FROM issues WHERE family_id=? AND target_type='member' AND target_id=?",[$from['id'],$m['id']]);
-            lookupAwaitLink($db,$m,$to,(int)$from['id'],$from['name'],$source['status'],$source['note']);
+            if($m['membership_status']!=='invited')lookupAwaitLink($db,$m,$to,(int)$from['id'],$from['name'],$source['status'],$source['note']);
         }
         // Ready links of Gen mail in the new Family go to the customers just moved in.
         lookupAutoAssign($db,(int)$to['id']);
@@ -637,10 +639,12 @@ function lookupAdminState(PDO $db): array {
 // A customer of this Family who has not joined yet ("Đã mời, chưa vào" or "Mua mới") gets one
 // ready link of the Family's own pool the first time they look up their Gmail. The link is
 // held for them (never handed to anyone else) and ticked Đã gửi.
-function lookupJoinable(array $m): bool {return in_array($m['membership_status'],['invited','new'],true);}
+// Only Mua mới takes a link by itself on lookup. "Đã mời, chưa vào" is handled like a customer already
+// in the group (the shop invited them directly): no waiting page and no leftover link.
+function lookupJoinable(array $m): bool {return $m['membership_status']==='new';}
 function lookupAllocateJoin(PDO $db,array $m,array $status,array $period): bool {
     // Customers past their expiry date still get a link: they renew, they just have not paid yet.
-    if($status['status']!=='active')return false;
+    if($status['status']!=='active'||$m['membership_status']==='invited')return false;
     $pending=one($db,"SELECT * FROM member_moves WHERE member_id=? AND to_family_id=? AND state<>'cancelled' AND dismissed_at='' ORDER BY id DESC LIMIT 1",[$m['id'],$m['family_id']]);
     if($pending?!(in_array($pending['state'],LOOKUP_OPEN_STATES,true)&&$pending['invite_id']===null):!lookupJoinable($m))return false;
     $f=lookupActiveFamily($db,(int)$m['family_id']);if(!$f)return false;$today=today();$invite=null;
@@ -658,6 +662,8 @@ function lookupResult(PDO $db,string $address): array {
     foreach(all($db,"SELECT m.*,f.name AS family_name FROM members m JOIN families f ON f.id=m.family_id WHERE m.email=? AND f.archived_at='' ORDER BY m.id",[$address]) as $m){
         $status=lookupStatusRow($db,(int)$m['family_id']);$period=expiry($m['expires_at']);$allocated=lookupAllocateJoin($db,$m,$status,$period);
         $latest=one($db,"SELECT * FROM member_moves WHERE member_id=? AND state<>'cancelled' AND dismissed_at='' ORDER BY id DESC LIMIT 1",[$m['id']]);$move=null;
+        // A "Đã mời, chưa vào" customer sees the Family as usual unless the shop gave them a link.
+        if($latest&&$m['membership_status']==='invited'&&in_array($latest['state'],LOOKUP_OPEN_STATES,true)&&$latest['invite_id']===null)$latest=null;
         if($latest&&$latest['to_family_id']!==null&&(int)$latest['to_family_id']===(int)$m['family_id']){
             $open=in_array($latest['state'],LOOKUP_OPEN_STATES,true);$invite=$open&&$latest['invite_id']!==null?one($db,'SELECT * FROM family_invites WHERE id=?',[$latest['invite_id']]):false;
             // A link shown to its customer is ticked Đã gửi, so it is never handed to someone else.
