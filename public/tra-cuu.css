@@ -128,9 +128,9 @@ main { padding-top: 22px; padding-bottom: 32px; display: flex; flex-direction: c
 
 /* What to do: numbered actions inside the current step */
 .todo { list-style: none; margin: 0; padding: 0; display: grid; gap: 14px; counter-reset: todo; }
-.todo li { display: grid; grid-template-columns: 24px minmax(0, 1fr); gap: 10px; counter-increment: todo; }
-.todo li::before { content: counter(todo); width: 24px; height: 24px; border-radius: 8px; display: grid; place-items: center; background: var(--blue-tint); color: var(--blue-ink); font-size: 13px; font-weight: 750; }
-.todo li > div { display: grid; gap: 6px; min-width: 0; }
+.todo > li { display: grid; grid-template-columns: 24px minmax(0, 1fr); gap: 10px; counter-increment: todo; }
+.todo > li::before { content: counter(todo); width: 24px; height: 24px; border-radius: 8px; display: grid; place-items: center; background: var(--blue-tint); color: var(--blue-ink); font-size: 13px; font-weight: 750; }
+.todo > li > div { display: grid; gap: 6px; min-width: 0; }
 .todo p { color: var(--muted); font-size: 14px; }
 /* Rời nhóm cũ: the two pages Google can show. Each folds to one line; tap to see the screenshot. */
 .cases { display: grid; gap: 8px; }
@@ -144,7 +144,15 @@ main { padding-top: 22px; padding-bottom: 32px; display: flex; flex-direction: c
 .case-more { grid-column: 2; grid-row: 1; white-space: nowrap; color: var(--blue-dark); font-size: 13px; font-weight: 650; }
 .case-more::before { content: "Xem ảnh ▾"; }
 .case[open] .case-more::before { content: "Ẩn ảnh ▴"; }
-.case img { display: block; width: auto; max-width: calc(100% - 24px); height: auto; margin: 0 12px 12px; border: 1px solid var(--line); border-radius: 10px; }
+.case-guide .case-more::before { content: "Xem cách rời ▾"; }
+.case-guide[open] .case-more::before { content: "Ẩn ▴"; }
+.case img { display: block; width: 100%; height: auto; border: 1px solid var(--line); border-radius: 10px; background: #fff; }
+.case-shot { padding: 0 12px 12px; }
+.case-steps { list-style: none; margin: 0; padding: 0 12px 12px; display: grid; gap: 14px; counter-reset: leave; }
+.case-steps li { display: grid; gap: 6px; counter-increment: leave; }
+.todo .case-steps p { color: var(--ink); font-size: 14px; }
+.case-steps p::before { content: counter(leave); display: inline-grid; place-items: center; width: 20px; height: 20px; margin-right: 6px; border-radius: 999px; background: var(--stop); color: #fff; font-size: 12px; font-weight: 750; vertical-align: 1px; }
+.case-steps img { max-width: 420px; }
 /* Đăng nhập đúng Gmail: the address to join with, hard to miss. */
 .todo .must-mail { padding: 10px 12px; border: 1px solid var(--stop-line); border-radius: 12px; background: var(--stop-tint); color: #d1242b; font-size: 17px; font-weight: 800; text-align: center; overflow-wrap: anywhere; }
 

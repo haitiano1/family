@@ -278,7 +278,7 @@ test('hosted mode keeps admin APIs behind the access password while the lookup p
     assert.match(await page.text(), /tra-cuu\.js/);
     assert.equal((await fetch(f.base + '/tra-cuu.js')).status, 200);
     assert.equal((await fetch(f.base + '/tra-cuu.css')).status, 200);
-    for (const image of ['/huong-dan-roi-nhom.png', '/huong-dan-khong-co-nhom.png']) { const r = await fetch(f.base + image); assert.equal(r.status, 200); assert.match(r.headers.get('content-type'), /^image\/png/); }
+    for (const image of ['/huong-dan-roi-nhom.png', '/huong-dan-khong-co-nhom.png', '/huong-dan-mat-khau.png', '/huong-dan-xac-nhan.png']) { const r = await fetch(f.base + image); assert.equal(r.status, 200); assert.match(r.headers.get('content-type'), /^image\/png/); }
     const c = f.customer();
     assert.ok((await c('info')).shop);
     const response = await f.call('lookup/verify', 'POST', { email: 'nobody@example.com', code: 'AAAAAA' }, 401);

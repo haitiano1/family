@@ -108,12 +108,20 @@ function joinTodo(move, includeLeave) {
   const leaveSeen = includeLeave
     ? 'Thấy dòng <strong>Nhóm gia đình của bạn không hoạt động</strong> (có dòng này mới rời được)'
     : 'Đang ở một nhóm gia đình, thấy nút <strong>Rời khỏi nhóm gia đình</strong>';
-  const caseOf = (cls, tag, seen, todo, img) => `<details class="case${cls}"><summary><span class="case-tag">${tag}</span><span class="case-more" aria-hidden="true"></span><span class="case-text">${seen} → ${todo}</span></summary>${img}</details>`;
+  const caseOf = (cls, tag, seen, todo, body) => `<details class="case${cls}"><summary><span class="case-tag">${tag}</span><span class="case-more" aria-hidden="true"></span><span class="case-text">${seen} → ${todo}</span></summary>${body}</details>`;
+  const shot = (src, w, h, alt) => `<img src="/${src}" width="${w}" height="${h}" loading="lazy" alt="${alt}">`;
+  // Trường hợp 1 opens on the whole way out, from the shop's screen recording (account address blurred).
+  const leaveSteps = '<ol class="case-steps">'
+    + `<li><p>Bấm <strong>Rời khỏi nhóm gia đình</strong>.</p>${shot('huong-dan-roi-nhom.png', 720, 376, 'Trang Gia đình Google: Nhóm gia đình của bạn không hoạt động, nút Rời khỏi nhóm gia đình được khoanh đỏ')}</li>`
+    + `<li><p>Google hỏi mật khẩu thì nhập <strong>mật khẩu Gmail</strong> rồi bấm <strong>Tiếp theo</strong>.</p>${shot('huong-dan-mat-khau.png', 720, 801, 'Google hỏi mật khẩu: ô Nhập mật khẩu của bạn và nút Tiếp theo được khoanh đỏ')}</li>`
+    + `<li><p>Bấm <strong>Rời khỏi</strong> để xác nhận.</p>${shot('huong-dan-xac-nhan.png', 720, 851, 'Trang Rời khỏi Nhóm gia đình, nút Rời khỏi được khoanh đỏ')}</li>`
+    + `<li><p>Thấy trang này là <strong>đã rời xong</strong>. Quay lại đây làm tiếp bước 2.</p>${shot('huong-dan-khong-co-nhom.png', 720, 269, 'Trang Gia đình của bạn trên Google với nút Bắt đầu: đã rời nhóm')}</li>`
+    + '</ol>';
   const leave = `<p>Bấm nút dưới để mở trang <strong>Gia đình Google</strong>, sẽ gặp <strong>1 trong 2</strong> trường hợp:</p>
         <a class="btn small" href="https://g.co/YourFamily" target="_blank" rel="noopener noreferrer">Rời nhóm gia đình cũ</a>
         <div class="cases">
-          ${caseOf('', 'Trường hợp 1', leaveSeen, 'bấm <strong>Rời khỏi nhóm gia đình</strong> rồi xác nhận.', '<img src="/huong-dan-roi-nhom.png" width="482" height="295" loading="lazy" alt="Trang Gia đình Google: Nhóm gia đình của bạn không hoạt động, bên dưới có nút Rời khỏi nhóm gia đình">')}
-          ${caseOf(' case-skip', 'Trường hợp 2', 'Thấy <strong>Gia đình của bạn trên Google</strong> và nút Bắt đầu', 'bạn <strong>không còn ở nhóm nào</strong>, <strong>bỏ qua bước này</strong> (không bấm Bắt đầu).', '<img src="/huong-dan-khong-co-nhom.png" width="344" height="223" loading="lazy" alt="Trang Gia đình Google: Gia đình của bạn trên Google, nút Bắt đầu">')}
+          ${caseOf(' case-guide', 'Trường hợp 1', leaveSeen, 'bấm <strong>Rời khỏi nhóm gia đình</strong> rồi xác nhận.', leaveSteps)}
+          ${caseOf(' case-skip', 'Trường hợp 2', 'Thấy <strong>Gia đình của bạn trên Google</strong> và nút Bắt đầu', 'bạn <strong>không còn ở nhóm nào</strong>, <strong>bỏ qua bước này</strong> (không bấm Bắt đầu).', `<div class="case-shot">${shot('huong-dan-khong-co-nhom.png', 720, 269, 'Trang Gia đình Google: Gia đình của bạn trên Google, nút Bắt đầu')}</div>`)}
         </div>`;
   return `<ol class="todo">
       <li><div><h3>${includeLeave ? 'Rời nhóm cũ' : 'Rời nhóm cũ (nếu có)'}</h3>${leave}</div></li>
