@@ -504,7 +504,7 @@ function sheetsSaveSettingsRun(PDO &$db,array $c,array $d,?callable $probe=null)
 }
 // Lấy link mời từ Gmail through the same Apps Script (v5.8+, read-only Gmail scope). The app
 // lock is released while Google reads the mailbox; the import itself is one audited transaction.
-function sheetsGmailInvites(PDO &$db,array $c,?callable $transport=null): array {
+function sheetsGmailInvites(PDO &$db,array $c,?callable $transport=null,array $want=[]): array {
     $settings=sheetsSettings($db,$c);if(!$settings)fail('Kết nối Google Sheet trước (nút Đồng bộ Sheet), rồi mới lấy link từ Gmail.',409);
     $send=$transport??fn($payload)=>sheetsRemote($settings,$payload);
     try{$reply=sheetsWaitForGoogle($db,$c,fn()=>$send(['action'=>'read','scope'=>'invites']));sheetsCheckRemoteReply($reply);}
@@ -514,7 +514,7 @@ function sheetsGmailInvites(PDO &$db,array $c,?callable $transport=null): array 
     // The Gmail the script reads; Gen mail mời offers it as the base address.
     $mailbox=is_string($reply['mailbox']??null)?strtolower(trim($reply['mailbox'])):'';if(strlen($mailbox)<=254&&preg_match('/^[^\s@+]+@[^\s@]+\.[^\s@]+$/D',$mailbox))sheetsPut($db,'gmail_mailbox',$mailbox);else $mailbox='';
     beginAudit($db,'Lấy link mời từ Gmail');
-    try{$result=lookupImportInvites($db,$items);finishAudit();}catch(Throwable $e){finishAudit(false);throw $e;}
+    try{$result=lookupImportInvites($db,$items,$want);finishAudit();}catch(Throwable $e){finishAudit(false);throw $e;}
     return ['ok'=>true,'mailbox'=>$mailbox,...$result];
 }
 function sheetsEndpointUrl(PDO $db,array $c): string {try{return sheetsSettings($db,$c)['url']??'';}catch(Throwable $e){return '';}}
@@ -526,7 +526,7 @@ function sheetsRequest(PDO $db,array $c,string $route,string $method): never {
     }
     if($route==='/api/sheets/config'&&$method==='DELETE'){if(!sheetsTryLock($db,$c))fail('Một lượt đồng bộ Sheet đang chạy. Chờ hoàn tất rồi ngắt kết nối.',409);try{sheetsStore($db);q($db,"DELETE FROM family_sheet_state WHERE name NOT IN ('history')");}finally{sheetsReleaseLock($db,$c);}reply(['ok'=>true]);}
     if($route==='/api/sheets/sync'&&$method==='POST')reply(sheetsSync($db,$c,'core',body()));
-    if($route==='/api/sheets/gmail-invites'&&$method==='POST')reply(sheetsGmailInvites($db,$c));
+    if($route==='/api/sheets/gmail-invites'&&$method==='POST'){$d=body();reply(sheetsGmailInvites($db,$c,null,isset($d['to'])||isset($d['family_id'])?$d:[]));}
     fail('Không tìm thấy.',404);
 }
 function sheetsVaultRequest(PDO $db,array $c): never {

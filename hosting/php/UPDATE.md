@@ -1,3 +1,7 @@
+# 0.32.10 — Lấy link theo mail không kiểm người gửi
+
+Dùng **Cập nhật một chạm**.
+
 # 0.32.9 — Thêm link mời bằng mail đã mời
 
 Dùng **Cập nhật một chạm**.

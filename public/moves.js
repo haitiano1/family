@@ -287,31 +287,29 @@ function statusFields(ctx, family, status) {
   const { escape } = ctx;
   return `<div class="form-field"><label for="field-status">Trạng thái nhóm</label><select id="field-status" name="status">${Object.entries(familyStatusLabels).map(([key, text]) => `<option value="${key}" ${key === status.status ? 'selected' : ''}>${escape(text)}</option>`).join('')}</select></div><div class="form-field"><label for="field-note">Lời nhắn cho khách</label><textarea id="field-note" name="note" maxlength="1000" rows="5">${escape(status.note)}</textarea></div><p class="subtext">Khách chỉ thấy tên Family, trạng thái và lời nhắn này. Không hiện mail chủ hoặc khách khác.</p>`;
 }
-// Gõ mail đã mời, để trống link: read the shop Gmail (same as Lấy link mời) and report the link of that mail.
+// Gõ mail đã mời, để trống link: read the shop Gmail (same as Lấy link mời); the newest invitation to that
+// mail is filed under this Family whoever sent it.
 async function linkFromGmail(ctx, family, label) {
   const address = String(label || '').trim().toLowerCase();
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(address)) throw Error('Nhập mail đã mời (ví dụ haihoangrr+abc@gmail.com) để web tìm link trong Gmail, hoặc dán link.');
   // Gmail ignores dots and anything after + in the name part, so shop+abc@ and s.hop+abc@ reach the same mailbox.
   const plain = mail => { const [name, domain] = String(mail).toLowerCase().split('@'); return (/^(gmail|googlemail)\.com$/.test(domain) ? name.replace(/\./g, '') : name) + '@' + domain; };
-  const inbox = mail => plain(mail.replace(/\+[^@]*@/, '@'));
   const mailbox = String(ctx.state.gmail_mailbox || '').toLowerCase();
-  if (mailbox && inbox(address) !== inbox(mailbox)) throw Error(`Thư mời gửi tới ${address} không về hộp thư ${mailbox} mà web đọc được. Dán link nút Chấp nhận lời mời vào ô Link.`);
-  const find = list => (list || []).find(i => plain(i.label) === plain(address) && i.holder_state !== 'retired');
   const button = document.querySelector('#modal-form button[type=submit]'), label0 = button?.textContent;
   if (button) button.textContent = 'Đang tìm trong Gmail…';
-  const before = find(ctx.state.invites);
-  const result = await ctx.post('sheets/gmail-invites', {}).finally(() => { if (button) button.textContent = label0; });
-  const state = await ctx.api('state'), invite = find(state.invites), same = before && before.id === invite?.id && before.url === invite.url;
-  if (!invite && (result.unmatched || []).some(to => plain(to) === plain(address))) throw Error(`Đã thấy thư mời gửi tới ${address} nhưng người gửi không phải mail chủ Family nào trên web. Kiểm tra mail chủ của ${family.name} (${family.manager_email}) đúng với tài khoản đã gửi lời mời.`);
-  if (!invite) throw Error(`Chưa thấy thư mời gửi tới ${address} trong Gmail 14 ngày qua. Kiểm tra đã mời đúng mail từ tài khoản chủ ${family.manager_email}, chờ khoảng 1 phút rồi bấm Lưu lại.`);
+  const before = (ctx.state.invites || []).find(i => plain(i.label) === plain(address) && i.holder_state !== 'retired');
+  const result = await ctx.post('sheets/gmail-invites', { to: address, family_id: family.id }).finally(() => { if (button) button.textContent = label0; });
+  const state = await ctx.api('state'), invite = result.wanted ? (state.invites || []).find(i => i.id === result.wanted) : null;
+  if (!invite) throw Error(`Chưa thấy thư mời gửi tới ${address} trong Gmail 14 ngày qua.${mailbox && plain(address.replace(/\+[^@]*@/, '@')) !== plain(mailbox) ? ` Web chỉ đọc được hộp thư ${mailbox}; mời mail khác thì dán link vào ô Link.` : ' Chờ khoảng 1 phút cho thư về rồi bấm Lưu lại.'}`);
+  const same = before && before.id === invite.id && before.url === invite.url;
   const where = state.families.find(f => f.id === invite.family_id);
-  if (invite.family_id !== family.id) ctx.toast(`Đã lấy link của ${invite.label}, lưu ở ${where ? where.name : 'Family khác'} vì thư mời được gửi từ chủ Family đó.`, 9000);
+  if (invite.family_id !== family.id) ctx.toast(`Link của ${invite.label} đã có sẵn ở ${where ? where.name : 'Family khác'}.`, 9000);
   else ctx.toast(`${same ? 'Link của ' + invite.label + ' đã có sẵn trên web' : 'Đã lấy link của ' + invite.label + ' từ Gmail'}${invite.holder_email ? ` và giao cho ${invite.holder_name || invite.holder_email}` : ''}.${result.added + result.updated > 1 ? ' ' + gmailSummary(result) : ''}`, 8000);
 }
 function inviteFields(ctx, invite = {}) {
   // Adding a link with Gmail reading on: the link may be left empty, the web then reads it from the invitation mail.
   const fromGmail = !invite.id && ctx.state.gmail_import;
-  return ctx.input('label', fromGmail ? 'Mail nhận lời mời (đã mời từ tài khoản chủ)' : 'Tên link / mail nhận lời mời', 'text', invite.label || '', false, `maxlength="200" placeholder="ví dụ ${ctx.escape(ctx.state.gmail_mailbox ? ctx.state.gmail_mailbox.replace('@', '+1@') : 'shopmail+1@gmail.com')}"`)
+  return ctx.input('label', fromGmail ? 'Mail nhận lời mời' : 'Tên link / mail nhận lời mời', 'text', invite.label || '', false, `maxlength="200" placeholder="ví dụ ${ctx.escape(ctx.state.gmail_mailbox ? ctx.state.gmail_mailbox.replace('@', '+1@') : 'shopmail+1@gmail.com')}"`)
     + ctx.input('url', fromGmail ? 'Link nút “Chấp nhận lời mời” (để trống: web tự tìm trong Gmail)' : 'Link nút “Chấp nhận lời mời”', 'url', invite.url || '', !fromGmail, `maxlength="2000" placeholder="${fromGmail ? 'Để trống để web tự lấy link' : 'https://…'}" autocomplete="off"`)
     + ctx.input('sent_on', 'Ngày gửi lời mời', 'date', invite.sent_on ?? ctx.state.today)
     + (fromGmail ? `<p class="subtext"><strong>Đã mời mail dạng ${ctx.escape((ctx.state.gmail_mailbox || 'shop@gmail.com').replace('@', '+…@'))}?</strong> Chỉ cần gõ mail đó, để trống ô Link và bấm Lưu: web đọc thư mời trong Gmail rồi tự lấy link và ngày gửi.</p>` : '')
