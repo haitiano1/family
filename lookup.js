@@ -144,17 +144,14 @@ export function initLookup(db, { fail, email, text, calendarDate, log }) {
         if (!taken.has(address)) { taken.add(address); mails.push(address); }
       }
       const time = now();
-      // A Family with no link in use (new, or the owner was just replaced) hands each arriving link
-      // to one of its customers; a running Family keeps new links in its pool for new customers.
-      // Mode 1: no link in use (new Family, or the owner was just replaced): links go to its customers.
-      // Mode 2: a running Family with customers waiting for a link (or Mua mới): links go to those only.
-      const fresh = !one("SELECT id FROM family_invites WHERE family_id=? AND retired_at='' LIMIT 1", family.id);
-      const needing = linkTargets(family.id), mode = fresh ? 1 : needing.some(t => t.rank <= 1) ? 2 : 0;
+      // Links of Gen mail go by themselves only to customers known to need one: waiting for a link
+      // (after Đổi Gmail chủ / Cho khách vào) or Mua mới. Customers already in the group are never touched.
+      const needing = linkTargets(family.id).filter(t => t.rank <= 1), mode = 2;
       for (const address of mails) run('INSERT INTO invite_mails(family_id,email,created_at,auto_assign) VALUES (?,?,?,?)', family.id, address, time, mode);
       log(`Cá nhân: tạo ${count} mail mời cho ${family.name}: ${mails.join(', ')}`);
       const autoMails = new Set(all('SELECT email FROM invite_mails WHERE family_id=? AND auto_assign>0', family.id).map(r => r.email));
       const pooled = readyLinks(family.id).filter(i => autoMails.has(String(i.label).toLowerCase())).length;
-      const targets = mode ? needing.filter(t => mode === 1 || t.rank <= 1).slice(pooled, pooled + count).map(t => ({ email: t.member.email, name: t.member.customer_name })) : [];
+      const targets = needing.slice(pooled, pooled + count).map(t => ({ email: t.member.email, name: t.member.customer_name }));
       return { ok: true, family_id: family.id, family_name: family.name, base_email: base, mails, auto_assign: mode > 0, auto_mode: mode, targets };
     });
   }
@@ -223,8 +220,41 @@ export function initLookup(db, { fail, email, text, calendarDate, log }) {
     const family = activeFamily(familyId); if (!family) return [];
     const modes = new Map(all('SELECT email,auto_assign FROM invite_mails WHERE family_id=? AND auto_assign>0', familyId).map(r => [r.email, r.auto_assign]));
     if (!modes.size) return [];
-    const links = readyLinks(family.id).filter(i => modes.has(String(i.label).toLowerCase())).map(invite => ({ invite, mode: modes.get(String(invite.label).toLowerCase()) }));
+    // Every Gen mail link is mode 2 now (older ones stored 1 are treated the same way).
+    const links = readyLinks(family.id).filter(i => modes.has(String(i.label).toLowerCase())).map(invite => ({ invite, mode: 2 }));
     return links.length ? applyPairs(family, pairUp(links, linkTargets(family.id))) : [];
+  }
+  // Khách nhận link: the shop picks (or removes) the customer who sees this link on the lookup page.
+  // A join made by the web is cancelled; a customer waiting after Đổi Gmail chủ keeps waiting.
+  function setHolder(id, data) {
+    const invite = one('SELECT * FROM family_invites WHERE id=?', id); if (!invite) fail('Không tìm thấy link mời.', 404);
+    const family = activeFamily(invite.family_id); if (!family) fail('Không tìm thấy Family đang hoạt động.', 404);
+    if (revision(data.revision) !== invite.revision) fail('Link mời vừa được sửa ở nơi khác. Tải lại rồi thử lại.', 409);
+    if (invite.retired_at) fail('Link của chủ cũ không dùng được nữa.', 409);
+    const memberId = data.member_id == null || data.member_id === '' ? null : Number(data.member_id);
+    if (memberId !== null && (!Number.isSafeInteger(memberId) || memberId <= 0)) fail('Khách không hợp lệ.');
+    const holder = inviteHolder(inviteRefs(invite.id));
+    if (holder.state === 'used') fail('Link này đã có khách dùng để vào nhóm.', 409);
+    const current = holder.state === 'assigned' ? one('SELECT * FROM member_moves WHERE id=?', holder.move.id) : null;
+    if ((current?.member_id ?? null) === memberId) return { ok: true, revision: invite.revision, changed: false };
+    const member = memberId === null ? null : one('SELECT * FROM members WHERE id=? AND family_id=?', memberId, family.id);
+    if (memberId !== null && !member) fail('Khách không còn trong Family này. Tải lại trang.', 409);
+    if (member && one("SELECT id FROM member_moves WHERE member_id=? AND to_family_id=? AND invite_id IS NOT NULL AND state IN ('assigned','opened','failed') AND dismissed_at=''", member.id, family.id)) fail('Khách này đang giữ một link khác của Family. Bỏ link đó trước.', 409);
+    return atomic('lookup_set_holder', () => {
+      const time = now();
+      if (current) {
+        if (current.from_family_id == null && current.from_family_name === '') run("UPDATE member_moves SET state='cancelled',updated_at=?,revision=revision+1 WHERE id=?", time, current.id);
+        else run("UPDATE member_moves SET invite_id=NULL,invite_label='',state='assigned',opened_at='',updated_at=?,revision=revision+1 WHERE id=?", time, current.id);
+      }
+      if (member) {
+        const waiting = one("SELECT * FROM member_moves WHERE member_id=? AND to_family_id=? AND dismissed_at='' ORDER BY id DESC LIMIT 1", member.id, family.id);
+        if (waiting && openMoveStates.includes(waiting.state) && waiting.invite_id == null) run('UPDATE member_moves SET invite_id=?,invite_label=?,updated_at=?,revision=revision+1 WHERE id=?', invite.id, invite.label, time, waiting.id);
+        else run("INSERT INTO member_moves(member_id,email,customer_name,from_family_id,from_family_name,from_status,from_note,to_family_id,to_family_name,invite_id,invite_label,state,created_at,updated_at) VALUES (?,?,?,NULL,'','active','',?,?,?,?,'assigned',?,?)", member.id, member.email, member.customer_name, family.id, family.name, invite.id, invite.label, time, time);
+      }
+      run("UPDATE family_invites SET sent_at='',revision=revision+1,updated_at=? WHERE id=?", time, invite.id);
+      log(`Cá nhân: ${member ? 'giao' : 'bỏ giao'} link mời ${invite.label || '#' + invite.id} của ${family.name}${current ? ' (trước: ' + current.email + ')' : ''}${member ? ' cho ' + member.email : ''}`);
+      return { ok: true, revision: invite.revision + 1, changed: true };
+    });
   }
   // A link the shop took back from a customer is not handed out by itself again.
   function stopAutoAssign(inviteId) {
@@ -339,7 +369,7 @@ export function initLookup(db, { fail, email, text, calendarDate, log }) {
     for (const member of members) awaitLink(member, family, old);
     log(`Tự động: ${family.name} đổi chủ sang ${family.manager_email}: ${members.length} khách chờ link vào nhóm mới${retired ? `, bỏ ${retired} link của chủ cũ` : ''}`);
     // Gen mail kept here was made after the report, for the new owner's group: its links go to the customers.
-    run('UPDATE invite_mails SET auto_assign=1 WHERE family_id=?', family.id);
+    run('UPDATE invite_mails SET auto_assign=2 WHERE family_id=?', family.id);
     const mails = count ? generateInviteMails(family.id, { count }) : null;
     autoAssign(family.id);
     return { waiting: members.length, retired, invite_mails: mails };
@@ -723,5 +753,5 @@ export function initLookup(db, { fail, email, text, calendarDate, log }) {
     return { ok: true };
   }
 
-  return { autoAssign, assignFamilyLinks, saveRecipients, todoList, saveTodo, deleteTodo, adminState, settings, saveSettings, rotateCode, generateInviteMails, deleteInviteMails, markInviteSent, handOver, issueStatus, ownerReplaced, saveStatus, customerProblem, handleReport, connectTelegram, testTelegram, disconnectTelegram, saveInvite, deleteInvite, bulkMove, updateMove, result, verify, sessionEmail, logout, customerOpen, customerJoined, customerReport };
+  return { setHolder, autoAssign, assignFamilyLinks, saveRecipients, todoList, saveTodo, deleteTodo, adminState, settings, saveSettings, rotateCode, generateInviteMails, deleteInviteMails, markInviteSent, handOver, issueStatus, ownerReplaced, saveStatus, customerProblem, handleReport, connectTelegram, testTelegram, disconnectTelegram, saveInvite, deleteInvite, bulkMove, updateMove, result, verify, sessionEmail, logout, customerOpen, customerJoined, customerReport };
 }

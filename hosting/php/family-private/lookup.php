@@ -145,7 +145,7 @@ function lookupOwnerReplaced(PDO $db,int $familyId,string $since,?int $donorId,i
     foreach($members as $m)lookupAwaitLink($db,$m,$f,null,$f['name'],$problem?$status['status']:'scanned',$problem&&$status['note']!==''?$status['note']:lookupAutoScannedNote($f['name']));
     logEntry($db,"Tự động: {$f['name']} đổi chủ sang {$f['manager_email']}: ".count($members)." khách chờ link vào nhóm mới".($retired?", bỏ $retired link của chủ cũ":''));
     // Gen mail kept here was made after the report, for the new owner's group: its links go to the customers.
-    q($db,'UPDATE invite_mails SET auto_assign=1 WHERE family_id=?',[$f['id']]);
+    q($db,'UPDATE invite_mails SET auto_assign=2 WHERE family_id=?',[$f['id']]);
     $mails=$count?lookupGenerateInviteMails($db,(int)$f['id'],['count'=>$count]):null;
     lookupAutoAssign($db,(int)$f['id']);
     return ['waiting'=>count($members),'retired'=>$retired,'invite_mails'=>$mails];
@@ -167,15 +167,14 @@ function lookupGenerateInviteMails(PDO $db,int $familyId,array $d): array {
             $tag='';for($i=0;$i<6;$i++)$tag.=LOOKUP_INVITE_MAIL_ALPHABET[random_int(0,strlen(LOOKUP_INVITE_MAIL_ALPHABET)-1)];
             $address=substr($base,0,$at).'+'.$tag.substr($base,$at);if(isset($taken[$address]))continue;$taken[$address]=true;$mails[]=$address;
         }
-        // Mode 1: no link in use (new Family, or the owner was just replaced): links go to its customers.
-        // Mode 2: a running Family with customers waiting for a link (or Mua mới): links go to those only.
-        $fresh=!one($db,"SELECT id FROM family_invites WHERE family_id=? AND retired_at='' LIMIT 1",[$f['id']]);
-        $needing=lookupLinkTargets($db,(int)$f['id']);$mode=$fresh?1:(array_filter($needing,fn($t)=>$t['rank']<=1)?2:0);
+        // Links of Gen mail go by themselves only to customers known to need one: waiting for a link
+        // (after Đổi Gmail chủ / Cho khách vào) or Mua mới. Customers already in the group are never touched.
+        $needing=array_values(array_filter(lookupLinkTargets($db,(int)$f['id']),fn($t)=>$t['rank']<=1));$mode=2;
         $autoMails=array_fill_keys(array_column(all($db,'SELECT email FROM invite_mails WHERE family_id=? AND auto_assign>0',[$f['id']]),'email'),true);
         $pooled=count(array_filter(lookupReadyLinks($db,(int)$f['id']),fn($i)=>isset($autoMails[strtolower($i['label'])])));
         $time=lookupNow();foreach($mails as $address)q($db,'INSERT INTO invite_mails(family_id,email,created_at,auto_assign) VALUES (?,?,?,?)',[$f['id'],$address,$time,$mode]);
         logEntry($db,"Cá nhân: tạo $count mail mời cho {$f['name']}: ".implode(', ',$mails));
-        $targets=$mode?array_map(fn($t)=>['email'=>$t['member']['email'],'name'=>$t['member']['customer_name']],array_slice(array_values(array_filter($needing,fn($t)=>$mode===1||$t['rank']<=1)),$pooled,$count)):[];
+        $targets=array_map(fn($t)=>['email'=>$t['member']['email'],'name'=>$t['member']['customer_name']],array_slice($needing,$pooled,$count));
         return ['ok'=>true,'family_id'=>(int)$f['id'],'family_name'=>$f['name'],'base_email'=>$base,'mails'=>$mails,'auto_assign'=>$mode>0,'auto_mode'=>$mode,'targets'=>$targets];
     });
 }
@@ -346,8 +345,41 @@ function lookupAutoAssign(PDO $db,int $familyId): array {
     $f=lookupActiveFamily($db,$familyId);if(!$f)return [];
     $modes=[];foreach(all($db,'SELECT email,auto_assign FROM invite_mails WHERE family_id=? AND auto_assign>0',[$familyId]) as $r)$modes[$r['email']]=(int)$r['auto_assign'];
     if(!$modes)return [];
-    $links=[];foreach(lookupReadyLinks($db,$familyId) as $i)if(isset($modes[strtolower($i['label'])]))$links[]=[$i,$modes[strtolower($i['label'])]];
+    // Every Gen mail link is mode 2 now (older ones stored 1 are treated the same way).
+    $links=[];foreach(lookupReadyLinks($db,$familyId) as $i)if(isset($modes[strtolower($i['label'])]))$links[]=[$i,2];
     return $links?lookupApplyPairs($db,$f,lookupPairUp($links,lookupLinkTargets($db,$familyId))):[];
+}
+// Khách nhận link: the shop picks (or removes) the customer who sees this link on the lookup page.
+// A join made by the web is cancelled; a customer waiting after Đổi Gmail chủ keeps waiting.
+function lookupSetHolder(PDO $db,int $id,array $d): array {
+    $i=one($db,'SELECT * FROM family_invites WHERE id=?',[$id]);if(!$i)fail('Không tìm thấy link mời.',404);
+    $f=lookupActiveFamily($db,(int)$i['family_id']);if(!$f)fail('Không tìm thấy Family đang hoạt động.',404);
+    if(lookupRevision($d['revision']??null)!==(int)$i['revision'])fail('Link mời vừa được sửa ở nơi khác. Tải lại rồi thử lại.',409);
+    if(($i['retired_at']??'')!=='')fail('Link của chủ cũ không dùng được nữa.',409);
+    $raw=$d['member_id']??null;$memberId=$raw===null||$raw===''?null:(is_int($raw)&&$raw>0?$raw:(is_string($raw)&&ctype_digit($raw)&&(int)$raw>0?(int)$raw:-1));
+    if($memberId===-1)fail('Khách không hợp lệ.');
+    $holder=lookupInviteHolder(lookupInviteRefs($db,$id));
+    if($holder['state']==='used')fail('Link này đã có khách dùng để vào nhóm.',409);
+    $current=$holder['state']==='assigned'?one($db,'SELECT * FROM member_moves WHERE id=?',[$holder['move']['id']]):null;
+    if(($current?(int)$current['member_id']:null)===$memberId)return ['ok'=>true,'revision'=>(int)$i['revision'],'changed'=>false];
+    $m=$memberId===null?null:one($db,'SELECT * FROM members WHERE id=? AND family_id=?',[$memberId,$f['id']]);
+    if($memberId!==null&&!$m)fail('Khách không còn trong Family này. Tải lại trang.',409);
+    if($m&&one($db,"SELECT id FROM member_moves WHERE member_id=? AND to_family_id=? AND invite_id IS NOT NULL AND state IN ('assigned','opened','failed') AND dismissed_at=''",[$m['id'],$f['id']]))fail('Khách này đang giữ một link khác của Family. Bỏ link đó trước.',409);
+    return transaction($db,function()use($db,$i,$f,$m,$current){
+        $time=lookupNow();
+        if($current){
+            if($current['from_family_id']===null&&$current['from_family_name']==='')q($db,"UPDATE member_moves SET state='cancelled',updated_at=?,revision=revision+1 WHERE id=?",[$time,$current['id']]);
+            else q($db,"UPDATE member_moves SET invite_id=NULL,invite_label='',state='assigned',opened_at='',updated_at=?,revision=revision+1 WHERE id=?",[$time,$current['id']]);
+        }
+        if($m){
+            $w=one($db,"SELECT * FROM member_moves WHERE member_id=? AND to_family_id=? AND dismissed_at='' ORDER BY id DESC LIMIT 1",[$m['id'],$f['id']]);
+            if($w&&in_array($w['state'],LOOKUP_OPEN_STATES,true)&&$w['invite_id']===null)q($db,'UPDATE member_moves SET invite_id=?,invite_label=?,updated_at=?,revision=revision+1 WHERE id=?',[$i['id'],$i['label'],$time,$w['id']]);
+            else q($db,"INSERT INTO member_moves(member_id,email,customer_name,from_family_id,from_family_name,from_status,from_note,to_family_id,to_family_name,invite_id,invite_label,state,created_at,updated_at) VALUES (?,?,?,NULL,'','active','',?,?,?,?,'assigned',?,?)",[$m['id'],$m['email'],$m['customer_name'],$f['id'],$f['name'],$i['id'],$i['label'],$time,$time]);
+        }
+        q($db,"UPDATE family_invites SET sent_at='',revision=revision+1,updated_at=? WHERE id=?",[$time,$i['id']]);
+        logEntry($db,'Cá nhân: '.($m?'giao':'bỏ giao').' link mời '.($i['label']?:'#'.$i['id'])." của {$f['name']}".($current?" (trước: {$current['email']})":'').($m?" cho {$m['email']}":''));
+        return ['ok'=>true,'revision'=>(int)$i['revision']+1,'changed'=>true];
+    });
 }
 // A link the shop took back from a customer is not handed out by itself again.
 function lookupStopAutoAssign(PDO $db,?int $inviteId): void {
@@ -411,7 +443,7 @@ function lookupImportInvites(PDO $db,array $items): array {
     }
     foreach($seen as $key=>$_)unset($unmatched[explode("\0",$key,2)[1]]);
     // Links that arrived before their customers were added are handed out now too.
-    foreach(array_column(all($db,"SELECT DISTINCT family_id FROM invite_mails WHERE auto_assign=1"),'family_id') as $fid)$out['assigned']+=count(lookupAutoAssign($db,(int)$fid));
+    foreach(array_column(all($db,"SELECT DISTINCT family_id FROM invite_mails WHERE auto_assign>0"),'family_id') as $fid)$out['assigned']+=count(lookupAutoAssign($db,(int)$fid));
     return [...$out,'families'=>array_keys($families),'unmatched'=>array_slice(array_keys($unmatched),0,20),'unmatched_count'=>count($unmatched),'mismatched'=>array_values($mismatched)];
 }
 // Remove addresses made by mistake. Only addresses still waiting for their link can go;
@@ -765,6 +797,7 @@ function lookupAdminRequest(PDO $db,string $route,string $method): void {
     if(preg_match('~^/api/todos/(\d+)$~D',$route,$p)&&$method==='PATCH')reply(lookupSaveTodo($db,(int)$p[1],body()));
     if(preg_match('~^/api/todos/(\d+)$~D',$route,$p)&&$method==='DELETE')reply(lookupDeleteTodo($db,(int)$p[1]));
     if(preg_match('~^/api/families/(\d+)/status$~D',$route,$p)&&$method==='PATCH')reply(lookupSaveStatus($db,(int)$p[1],body()));
+    if(preg_match('~^/api/invites/(\d+)/holder$~D',$route,$p)&&$method==='PATCH')reply(lookupSetHolder($db,(int)$p[1],body()));
     if(preg_match('~^/api/families/(\d+)/assign-links$~D',$route,$p)&&$method==='POST')reply(lookupAssignFamilyLinks($db,(int)$p[1]));
     if(preg_match('~^/api/invites/(\d+)/recipients$~D',$route,$p)&&$method==='PATCH')reply(lookupSaveRecipients($db,(int)$p[1],body()));
     if(preg_match('~^/api/invites/(\d+)/sent$~D',$route,$p)&&$method==='PATCH')reply(lookupMarkInviteSent($db,(int)$p[1],body()));
@@ -789,6 +822,7 @@ function lookupAuditAction(string $method,string $route): string {
     if(preg_match('~^/api/families/\d+/invite-mails$~D',$route))return $method==='DELETE'?'Xóa mail mời':'Tạo mail mời';
     if(preg_match('~^/api/invites/\d+/recipients$~D',$route))return 'Gán mail cho link mời';
     if(preg_match('~^/api/families/\d+/assign-links$~D',$route))return 'Gán link cho khách';
+    if(preg_match('~^/api/invites/\d+/holder$~D',$route))return 'Đổi khách nhận link';
     if(preg_match('~^/api/invites/\d+/sent$~D',$route))return 'Đánh dấu link đã gửi';
     if(preg_match('~^/api/families/\d+/hand-over$~D',$route))return 'Cho khách vào Family mới';
     if(preg_match('~^/api/invites/\d+$~D',$route))return $method==='DELETE'?'Xóa link mời':'Sửa link mời';

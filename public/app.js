@@ -259,7 +259,8 @@ document.addEventListener('click', async event => {
     } else if (action==='add-member') {
       if (!state.families.length) return toast('Thêm Family trước, rồi thêm khách vào nhóm.');
       const familyField=id ? '' : select('family_id','Family nhận khách',Object.fromEntries(state.families.map(f=>[f.id,f.name+' · '+f.manager_email])),state.families[0].id);
-      modal('Thêm khách',familyField+memberFields(),async data=>{const added=await post('members',{...data,family_id:Number(id||data.family_id)});toast(added.assigned?.length?`Đã thêm khách và gán link ${added.assigned.map(a=>a.label).join(', ')}.`:'Đã thêm khách.');});
+      const waitingLink=id&&((state.invite_mails||[]).some(m=>m.family_id===Number(id)&&m.auto_assign>0));
+      modal('Thêm khách',familyField+(waitingLink?'<p class="notice">Family này có link mời đang chờ giao. Chọn trạng thái <strong>Mua mới</strong> để khách tự nhận link đó (hiện ngay trên trang tra cứu).</p>':'')+memberFields(),async data=>{const added=await post('members',{...data,family_id:Number(id||data.family_id)});toast(added.assigned?.length?`Đã thêm khách và gán link ${added.assigned.map(a=>a.label).join(', ')}.`:'Đã thêm khách.');});
     }
     else if (action === 'edit-member') {
       const m = state.members.find(m => m.id === Number(id)); modal('Sửa khách / Gia hạn', memberFields(m), async data => { await patch('members/' + id, data); toast('Đã cập nhật khách và hạn sử dụng.'); });
