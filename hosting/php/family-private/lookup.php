@@ -437,13 +437,27 @@ function lookupImportInvites(PDO $db,array $items,array $want=[]): array {
         $mails[]=['url'=>$url,'to'=>$to,'date'=>$date,'at'=>$at,'family'=>$wanted?$wantFamily:($owner??$alias),'wanted'=>$wanted,'moved'=>!$wanted&&$owner&&$alias&&(int)$owner['id']!==(int)$alias['id']?$alias['name']:''];
     }
     usort($mails,fn($a,$b)=>strcmp($b['at'],$a['at']));
-    $out=['found'=>count($mails),'added'=>0,'updated'=>0,'unchanged'=>0,'assigned'=>0];$unmatched=[];$families=[];$seen=[];$mismatched=[];$wantedId=null;$wantedAdded=false;
+    $out=['found'=>count($mails),'added'=>0,'updated'=>0,'unchanged'=>0,'assigned'=>0,'restored'=>false,'moved_from'=>''];$unmatched=[];$families=[];$seen=[];$mismatched=[];$wantedId=null;$wantedAdded=false;
     $hit=function(array $m,int $id)use(&$wantedId){if($m['wanted']&&$wantedId===null)$wantedId=$id;};
     foreach($mails as $m){
         $f=$m['family'];if(!$f){$unmatched[$m['to']]=true;continue;}
         $key=$f['id']."\0".$m['to'];if(isset($seen[$key]))continue;$seen[$key]=true;
         if($m['moved']!=='')$mismatched[$m['to']]=['email'=>$m['to'],'generated_for'=>$m['moved'],'invited_by'=>$f['name']];
-        if($known=one($db,'SELECT id FROM family_invites WHERE url=?',[$m['url']])){$hit($m,(int)$known['id']);$out['unchanged']++;continue;}
+        if($known=one($db,'SELECT i.id,i.family_id,i.retired_at,i.sent_at,f.name FROM family_invites i JOIN families f ON f.id=i.family_id WHERE i.url=?',[$m['url']])){
+            // Asked for by mail: the link comes to this Family even if it was set aside on Đã fix
+            // (made before the error report) or waits unused in another Family's pool.
+            if($m['wanted']&&$wantedId===null){
+                $kid=(int)$known['id'];$elsewhere=(int)$known['family_id']!==(int)$f['id'];
+                $free=lookupInviteHolder(lookupInviteRefs($db,$kid))['state']==='ready'&&$known['sent_at']==='';
+                if($known['retired_at']!==''||($elsewhere&&$free)){
+                    q($db,"UPDATE family_invites SET retired_at='',family_id=?,revision=revision+1,updated_at=? WHERE id=?",[$f['id'],lookupNow(),$kid]);
+                    logEntry($db,"Cá nhân: lấy lại link mời {$m['to']} cho {$f['name']}".($known['retired_at']!==''?' (link đã bỏ khi Đã fix)':" (chuyển từ {$known['name']})"));
+                    if($known['retired_at']!=='')$out['restored']=true;if($elsewhere)$out['moved_from']=$known['name'];
+                    $wantedAdded=true;$families[$f['name']]=true;
+                }
+            }
+            $hit($m,(int)$known['id']);$out['unchanged']++;continue;
+        }
         $old=one($db,"SELECT * FROM family_invites WHERE family_id=? AND label=? AND retired_at='' ORDER BY id DESC LIMIT 1",[$f['id'],$m['to']]);
         // A link someone joined with, or one ticked as sent by hand, is kept as it is. A link held
         // for a customer (handed out on lookup or by a move) takes the newer link, so that customer

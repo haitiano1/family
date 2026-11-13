@@ -1,3 +1,7 @@
+# 0.32.11 — Lấy link theo mail không điều kiện
+
+Dùng **Cập nhật một chạm**.
+
 # 0.32.10 — Lấy link theo mail không kiểm người gửi
 
 Dùng **Cập nhật một chạm**.
