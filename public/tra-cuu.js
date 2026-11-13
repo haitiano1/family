@@ -106,9 +106,11 @@ function joinTodo(move, includeLeave) {
   // two pages Google can open: an inactive group to leave, or no group at all.
   // Each case folds to one line; the screenshot opens on tap so the page stays short.
   const leaveSeen = includeLeave
-    ? 'Thấy dòng <strong>Nhóm gia đình của bạn không hoạt động</strong> (có dòng này mới rời được)'
+    ? 'Thấy dòng <strong>Nhóm gia đình của bạn không hoạt động</strong> mới được rời'
     : 'Đang ở một nhóm gia đình, thấy nút <strong>Rời khỏi nhóm gia đình</strong>';
-  const caseOf = (cls, tag, seen, todo, body) => `<details class="case${cls}"><summary><span class="case-tag">${tag}</span><span class="case-more" aria-hidden="true"></span><span class="case-text">${seen} → ${todo}</span></summary>${body}</details>`;
+  // A customer whose old group was scanned leaves only when Google shows it inactive (leaving an active group can lock them for 12 months).
+  const leaveWarn = includeLeave ? '<span class="case-warn"><span class="warn-mark" aria-hidden="true">!</span><span>Không có dòng này thì <strong>KHÔNG được rời nhóm</strong>. Tự ý rời → bị <strong>hệ thống khoá</strong> → <strong>shop không xử lý lại được</strong>.</span></span>' : '';
+  const caseOf = (cls, tag, seen, todo, body, warn = '') => `<details class="case${cls}"><summary><span class="case-tag">${tag}</span><span class="case-more" aria-hidden="true"></span><span class="case-text">${seen} → ${todo}</span>${warn}</summary>${body}</details>`;
   const shot = (src, w, h, alt) => `<img src="/${src}" width="${w}" height="${h}" loading="lazy" alt="${alt}">`;
   // Trường hợp 1 opens on the whole way out, from the shop's screen recording (no password screen shown).
   const leaveSteps = '<ol class="case-steps">'
@@ -119,9 +121,9 @@ function joinTodo(move, includeLeave) {
     + '</ol>';
   const leave = `<p>Bấm nút dưới để mở trang <strong>Gia đình Google</strong>, sẽ gặp <strong>1 trong 2</strong> trường hợp:</p>
         <a class="btn small" href="https://g.co/YourFamily" target="_blank" rel="noopener noreferrer">Rời nhóm gia đình cũ</a>
-        <button type="button" class="video-link" data-act="guide-video"><span class="play" aria-hidden="true"></span><span>Chưa biết cách rời? <strong>Xem video hướng dẫn</strong> (22 giây)</span></button>
+        <button type="button" class="video-link" data-act="guide-video"><span class="play" aria-hidden="true"></span><span>Chưa biết cách rời? <strong>Xem video hướng dẫn</strong> (26 giây)</span></button>
         <div class="cases">
-          ${caseOf(' case-guide', 'Trường hợp 1', leaveSeen, 'bấm <strong>Rời khỏi nhóm gia đình</strong> rồi xác nhận.', leaveSteps)}
+          ${caseOf(' case-guide', 'Trường hợp 1', leaveSeen, 'bấm <strong>Rời khỏi nhóm gia đình</strong> rồi xác nhận.', leaveSteps, leaveWarn)}
           ${caseOf(' case-skip', 'Trường hợp 2', 'Thấy <strong>Gia đình của bạn trên Google</strong> và nút Bắt đầu', 'bạn <strong>không còn ở nhóm nào</strong>, <strong>bỏ qua bước này</strong> (không bấm Bắt đầu).', `<div class="case-shot">${shot('huong-dan-khong-co-nhom.png', 720, 269, 'Trang Gia đình Google: Gia đình của bạn trên Google, nút Bắt đầu')}</div>`)}
         </div>`;
   return `<ol class="todo">

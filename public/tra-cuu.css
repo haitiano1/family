@@ -141,6 +141,9 @@ main { padding-top: 22px; padding-bottom: 32px; display: flex; flex-direction: c
 .case-tag { grid-column: 1; justify-self: start; padding: 1px 8px; border-radius: 999px; background: var(--stop-tint); color: var(--stop-ink); font-size: 12px; font-weight: 750; }
 .case-skip .case-tag { background: var(--go-tint); color: var(--go-deep); }
 .case-text { grid-column: 1 / -1; }
+.case-warn { grid-column: 1 / -1; display: flex; align-items: flex-start; gap: 8px; margin-top: 4px; padding: 8px 10px; border: 1px solid #f8a5a5; border-radius: 10px; background: var(--stop-tint); color: var(--stop-ink); font-size: 14px; }
+.case-warn strong { color: #c81e1e; }
+.warn-mark { flex: none; display: grid; place-items: center; width: 20px; height: 20px; margin-top: 1px; border-radius: 999px; background: var(--stop); color: #fff; font-size: 13px; font-weight: 800; }
 .case-more { grid-column: 2; grid-row: 1; white-space: nowrap; color: var(--blue-dark); font-size: 13px; font-weight: 650; }
 .case-more::before { content: "Xem ảnh ▾"; }
 .case[open] .case-more::before { content: "Ẩn ảnh ▴"; }
