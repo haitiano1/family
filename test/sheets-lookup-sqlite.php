@@ -208,7 +208,15 @@ check($wantGmail(['to'=>'shop+none@gmail.com','family_id'=>$ten])['wanted']===nu
 fails(fn()=>$wantGmail(['to'=>'shop+qj2@gmail.com','family_id'=>999999]),404,'unknown Family refused');fails(fn()=>$wantGmail(['to'=>'nope','family_id'=>$ten]),422,'bad mail refused');
 check(!one($db,"SELECT id FROM family_invites WHERE url LIKE '%/q2'"),'refused requests store nothing');
 // A link set aside on Đã fix comes back as 'wanted' (the web explains it); a new invitation gives a new link.
-q($db,'UPDATE family_invites SET retired_at=? WHERE id=?',[stamp(),$q['id']]);check($wantGmail(['to'=>'shop+qj1@gmail.com','family_id'=>$ten])['wanted']===(int)$q['id'],'retired link reported, not copied');
+q($db,'UPDATE family_invites SET retired_at=? WHERE id=?',[stamp(),$q['id']]);$r=$gmail();check($r['wanted']===null&&one($db,'SELECT retired_at FROM family_invites WHERE id=?',[$q['id']])['retired_at']!=='','Lấy link mời leaves set-aside links alone');
+$r=$wantGmail(['to'=>'shop+qj1@gmail.com','family_id'=>$ten]);$back=one($db,'SELECT * FROM family_invites WHERE id=?',[$q['id']]);
+check($r['wanted']===(int)$q['id']&&$r['restored']===true&&$back['retired_at']===''&&(int)$back['family_id']===$ten&&$back['url']==='https://families.google.com/join/promo/q1','asked-for link set aside on Đã fix comes back: '.json_encode($r));
+// An unused link in another Family's pool moves over when asked for; a link given to a customer stays.
+q($db,'UPDATE family_invites SET family_id=? WHERE id=?',[$b,$q['id']]);$r=$wantGmail(['to'=>'shop+qj1@gmail.com','family_id'=>$ten]);
+check($r['moved_from']==='Family 15'&&(int)one($db,'SELECT family_id FROM family_invites WHERE id=?',[$q['id']])['family_id']===$ten,'free link moved: '.json_encode($r));
+q($db,"UPDATE family_invites SET family_id=?,sent_at=? WHERE id=?",[$b,stamp(),$q['id']]);$r=$wantGmail(['to'=>'shop+qj1@gmail.com','family_id'=>$ten]);
+check($r['moved_from']===''&&(int)one($db,'SELECT family_id FROM family_invites WHERE id=?',[$q['id']])['family_id']===$b,'link sent to a customer stays');
+q($db,"UPDATE family_invites SET family_id=?,sent_at='' WHERE id=?",[$ten,$q['id']]);
 $gmailReply['invites'][]=$mail('shop+qj1@gmail.com','https://families.google.com/join/promo/q3',['newowner@example.com'],'2026-11-07T08:00:00.000Z');
 $r=$wantGmail(['to'=>'shop+qj1@gmail.com','family_id'=>$ten]);$q3=one($db,'SELECT * FROM family_invites WHERE id=?',[$r['wanted']]);
 check($q3['url']==='https://families.google.com/join/promo/q3'&&$q3['retired_at']===''&&(int)$q3['family_id']===$ten,'re-invited mail gets a fresh link');

@@ -1,4 +1,4 @@
-# 0.32.11 — Báo rõ link của chủ cũ khi lấy link theo mail
+# 0.32.11 — Lấy link theo mail không điều kiện
 
 Dùng **Cập nhật một chạm**.
 
