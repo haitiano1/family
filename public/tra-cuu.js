@@ -109,7 +109,7 @@ function joinTodo(move, includeLeave) {
     ? 'Thấy dòng <strong>Nhóm gia đình của bạn không hoạt động</strong> (có dòng này mới rời được)'
     : 'Đang ở một nhóm gia đình, thấy nút <strong>Rời khỏi nhóm gia đình</strong>';
   const caseOf = (cls, tag, seen, todo, img) => `<details class="case${cls}"><summary><span class="case-tag">${tag}</span><span class="case-more" aria-hidden="true"></span><span class="case-text">${seen} → ${todo}</span></summary>${img}</details>`;
-  const leave = `<p>Bấm nút bên dưới để mở trang <strong>Gia đình Google</strong>, trang sẽ hiện <strong>1 trong 2</strong> trường hợp (bấm vào để xem ảnh):</p>
+  const leave = `<p>Bấm nút dưới để mở trang <strong>Gia đình Google</strong>, sẽ gặp <strong>1 trong 2</strong> trường hợp:</p>
         <a class="btn small" href="https://g.co/YourFamily" target="_blank" rel="noopener noreferrer">Rời nhóm gia đình cũ</a>
         <div class="cases">
           ${caseOf('', 'Trường hợp 1', leaveSeen, 'bấm <strong>Rời khỏi nhóm gia đình</strong> rồi xác nhận.', '<img src="/huong-dan-roi-nhom.png" width="482" height="295" loading="lazy" alt="Trang Gia đình Google: Nhóm gia đình của bạn không hoạt động, bên dưới có nút Rời khỏi nhóm gia đình">')}
@@ -117,7 +117,7 @@ function joinTodo(move, includeLeave) {
         </div>`;
   return `<ol class="todo">
       <li><div><h3>${includeLeave ? 'Rời nhóm cũ' : 'Rời nhóm cũ (nếu có)'}</h3>${leave}</div></li>
-      <li><div><h3>Đăng nhập đúng Gmail</h3><p>Chỉ Gmail <strong>đang đăng nhập</strong> trên trình duyệt mới được vào nhóm. Trước khi bấm <strong>${go}</strong>, kiểm tra trình duyệt đang đăng nhập đúng Gmail này:</p><p class="must-mail">${escape(data.email)}</p><p><strong>Lưu ý:</strong> Google hỏi chọn tài khoản thì chọn <strong>đúng Gmail trên</strong>. Đăng nhập Gmail khác thì <strong>Gmail đó sẽ vào nhóm thay bạn</strong>.</p></div></li>
+      <li><div><h3>Đăng nhập đúng Gmail</h3><p>Trình duyệt phải đăng nhập <strong>đúng Gmail này</strong>:</p><p class="must-mail">${escape(data.email)}</p><p>Google hỏi chọn tài khoản thì chọn đúng Gmail trên. Chọn nhầm thì <strong>Gmail đó vào nhóm thay bạn</strong>.</p></div></li>
       <li><div><h3>${includeLeave ? 'Bấm vào nhóm mới' : 'Bấm vào nhóm'}</h3><p>Google mở trang mời, bạn bấm <strong>đồng ý tham gia</strong> là xong.</p>${link}</div></li>
     </ol>${inAppHint()}`;
 }
