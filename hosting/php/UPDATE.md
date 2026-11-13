@@ -1,3 +1,7 @@
+# 0.32.9 — Thêm link mời bằng mail đã mời
+
+Dùng **Cập nhật một chạm**.
+
 # 0.32.8 — Đã mời, chưa vào như khách đang ở nhóm
 
 Dùng **Cập nhật một chạm**.
