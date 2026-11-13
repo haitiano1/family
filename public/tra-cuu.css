@@ -147,15 +147,8 @@ main { padding-top: 22px; padding-bottom: 32px; display: flex; flex-direction: c
 .case-more { grid-column: 2; grid-row: 1; white-space: nowrap; color: var(--blue-dark); font-size: 13px; font-weight: 650; }
 .case-more::before { content: "Xem ảnh ▾"; }
 .case[open] .case-more::before { content: "Ẩn ảnh ▴"; }
-.case-guide .case-more::before { content: "Xem cách rời ▾"; }
-.case-guide[open] .case-more::before { content: "Ẩn ▴"; }
 .case img { display: block; width: 100%; height: auto; border: 1px solid var(--line); border-radius: 10px; background: #fff; }
 .case-shot { padding: 0 12px 12px; }
-.case-steps { list-style: none; margin: 0; padding: 0 12px 12px; display: grid; gap: 14px; counter-reset: leave; }
-.case-steps li { display: grid; gap: 6px; counter-increment: leave; }
-.todo .case-steps p { color: var(--ink); font-size: 14px; }
-.case-steps p::before { content: counter(leave); display: inline-grid; place-items: center; width: 20px; height: 20px; margin-right: 6px; border-radius: 999px; background: var(--stop); color: #fff; font-size: 12px; font-weight: 750; vertical-align: 1px; }
-.case-steps img { max-width: 420px; }
 /* Chưa biết cách rời? → video popup */
 .video-link { display: inline-flex; align-items: center; gap: 8px; align-self: start; min-height: 40px; padding: 0 2px; border: 0; background: none; color: var(--blue-dark); font: inherit; font-size: 14px; text-align: left; cursor: pointer; }
 .video-link strong { text-decoration: underline; text-underline-offset: 3px; }
@@ -206,6 +199,8 @@ main { padding-top: 22px; padding-bottom: 32px; display: flex; flex-direction: c
 .btn.big { min-height: 54px; font-size: 16px; font-weight: 750; border-radius: 14px; width: 100%; }
 .btn.success { background: var(--go-tint); border-color: var(--go-line); color: var(--go-deep); }
 .btn.small { min-height: 42px; align-self: start; font-size: 14px; }
+.btn.danger { background: var(--stop); border-color: var(--stop); color: #fff; box-shadow: 0 8px 20px -10px rgba(229, 72, 77, .9); }
+.btn.danger:hover { background: #d63b40; }
 .btn.quiet { border-color: transparent; background: transparent; color: var(--blue-dark); padding: 0 6px; min-height: 40px; }
 .btn:disabled { opacity: .6; cursor: wait; }
 .actions { display: flex; flex-wrap: wrap; gap: 10px; }

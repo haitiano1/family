@@ -1,3 +1,7 @@
+# 0.32.13 — Nút Rời nhóm đỏ, Trường hợp 1 gọn hơn
+
+Dùng **Cập nhật một chạm**.
+
 # 0.32.12 — Ảnh hướng dẫn Rời nhóm cũ trên trang tra cứu
 
 Dùng **Cập nhật một chạm**.
