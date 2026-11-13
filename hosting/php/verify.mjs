@@ -799,7 +799,7 @@ test('PHP lookup page: Family status, invite pool, bulk move, Gmail + code sign-
  const m61=await a('members','POST',{family_id:f60.id,email:'m61@example.com',joined_at:'2026-11-11',plan_months:1,membership_status:'new'},201);assert.deepEqual(m61.assigned.map(x=>x.label),[g60.mails[0]],'a Mua mới customer added later gets the waiting link');
  assert.deepEqual((await a('families/'+f60.id+'/assign-links','POST',{})).assigned.map(x=>x.email),['m60@example.com'],'by hand it may go to anyone');
  state=await a('state');const h60=state.invites.find(i=>i.label===g60.mails[1]);await a('invites/'+h60.id+'/holder','PATCH',{member_id:null,revision:h60.revision});state=await a('state');assert.equal(state.invites.find(i=>i.id===h60.id).holder_state,'ready');
- state=await a('state');assert.ok(state.invite_mails.filter(m=>m.family_id===f60.id).every(m=>m.auto_assign===1));
+ state=await a('state');assert.ok(state.invite_mails.filter(m=>m.family_id===f60.id).every(m=>m.auto_assign===2));
  // Việc cần làm (0.30.0) on MySQL, and deleting an open owner case puts the Family back to Hoạt động.
  await a('todos','POST',{text:'  '},400);const t1=await a('todos','POST',{text:'  Gọi   khách ',due_on:'2099-01-02'},201);assert.equal(t1.text,'Gọi khách');
  const t2=await a('todos','POST',{text:'Không ngày'},201);state=await a('state');assert.deepEqual(state.todos.map(t=>t.id),[t1.id,t2.id]);
