@@ -1,3 +1,7 @@
+# 0.32.7 — Bước rời nhóm cũ trên trang tra cứu
+
+Dùng **Cập nhật một chạm**.
+
 # 0.32.6 — Chỉ gán link cho khách cần link; đổi/bỏ khách nhận link
 
 Dùng **Cập nhật một chạm**.

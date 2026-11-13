@@ -100,10 +100,15 @@ function joinTodo(move, includeLeave) {
   const link = move.invite_url
     ? `<a class="btn go big" href="${escape(move.invite_url)}" rel="noreferrer" data-open="${move.id}">${includeLeave ? 'Vào nhóm mới' : 'Vào nhóm'}</a><span class="sub">Link riêng của bạn, chỉ dùng được 1 lần. Đừng gửi cho người khác.</span>${move.invite_expires_on ? `<span class="sub">Link còn hiệu lực đến ${day(move.invite_expires_on)}.</span>` : ''}`
     : '';
+  // Google allows one family group at a time: leaving the old one comes first, also for a new customer
+  // whose Gmail is still in some other group (skipped when it is in none).
+  const leave = includeLeave
+    ? 'Vào trang Gia đình của Google, chọn <strong>Rời khỏi nhóm gia đình</strong> rồi xác nhận. Google báo bạn không còn ở nhóm nào thì bỏ qua bước này.'
+    : 'Gmail của bạn đang ở một nhóm gia đình khác thì vào trang Gia đình của Google, chọn <strong>Rời khỏi nhóm gia đình</strong> rồi xác nhận. Chưa ở nhóm nào thì bỏ qua bước này.';
   return `<ol class="todo">
-      ${includeLeave ? `<li><div><h3>Rời nhóm cũ</h3><p>Vào trang Gia đình của Google, chọn Rời khỏi nhóm gia đình. Google báo bạn không còn ở nhóm nào thì bỏ qua bước này.</p><a class="btn small" href="https://g.co/YourFamily" target="_blank" rel="noopener noreferrer">Mở trang Gia đình Google</a></div></li>` : ''}
+      <li><div><h3>${includeLeave ? 'Rời nhóm cũ' : 'Rời nhóm cũ (nếu có)'}</h3><p>${leave}</p><a class="btn small" href="https://g.co/YourFamily" target="_blank" rel="noopener noreferrer">Mở trang Gia đình Google</a></div></li>
       <li><div><h3>Đăng nhập đúng Gmail</h3><p>Mở link bằng trình duyệt đang đăng nhập <strong>${escape(data.email)}</strong>. Trình duyệt đang đăng nhập Gmail khác thì Gmail đó sẽ vào nhóm thay bạn.</p></div></li>
-      <li><div><h3>${includeLeave ? 'Bấm vào nhóm mới' : 'Bấm vào nhóm'}</h3><p>Google mở trang mời, bạn bấm đồng ý tham gia là xong.${includeLeave ? '' : ' Google báo bạn đang ở nhóm gia đình khác thì rời nhóm đó trước.'}</p>${link}</div></li>
+      <li><div><h3>${includeLeave ? 'Bấm vào nhóm mới' : 'Bấm vào nhóm'}</h3><p>Google mở trang mời, bạn bấm đồng ý tham gia là xong.</p>${link}</div></li>
     </ol>${inAppHint()}`;
 }
 
@@ -122,7 +127,7 @@ function flowOf(item) {
       steps: [
         { label: 'Đăng ký', title: 'Shop nhận đơn', detail: 'Shop đã ghi nhận Gmail của bạn.' },
         { label: 'Chuẩn bị', title: 'Chuẩn bị link vào nhóm', detail: current > 1 ? 'Link riêng của bạn đã sẵn sàng.' : 'Shop đang chuẩn bị link riêng cho bạn. Bạn chưa cần làm gì, link sẽ hiện ngay tại đây.' },
-        { label: 'Vào nhóm', title: 'Bạn thao tác để vào nhóm', detail: current === 2 ? '' : 'Mở link riêng để vào nhóm.', body: current === 2 ? joinTodo(move, false) : '' }
+        { label: 'Vào nhóm', title: 'Bạn thao tác để vào nhóm', detail: current === 2 ? '' : 'Rời nhóm gia đình cũ (nếu có) rồi mở link riêng để vào nhóm.', body: current === 2 ? joinTodo(move, false) : '' }
       ]
     };
   }
