@@ -207,6 +207,11 @@ $r=$wantGmail(['to'=>'shop+qj1@gmail.com','family_id'=>$ten]);check($r['wanted']
 check($wantGmail(['to'=>'shop+none@gmail.com','family_id'=>$ten])['wanted']===null,'no mail, nothing found');
 fails(fn()=>$wantGmail(['to'=>'shop+qj2@gmail.com','family_id'=>999999]),404,'unknown Family refused');fails(fn()=>$wantGmail(['to'=>'nope','family_id'=>$ten]),422,'bad mail refused');
 check(!one($db,"SELECT id FROM family_invites WHERE url LIKE '%/q2'"),'refused requests store nothing');
+// A link set aside on Đã fix comes back as 'wanted' (the web explains it); a new invitation gives a new link.
+q($db,'UPDATE family_invites SET retired_at=? WHERE id=?',[stamp(),$q['id']]);check($wantGmail(['to'=>'shop+qj1@gmail.com','family_id'=>$ten])['wanted']===(int)$q['id'],'retired link reported, not copied');
+$gmailReply['invites'][]=$mail('shop+qj1@gmail.com','https://families.google.com/join/promo/q3',['newowner@example.com'],'2026-11-07T08:00:00.000Z');
+$r=$wantGmail(['to'=>'shop+qj1@gmail.com','family_id'=>$ten]);$q3=one($db,'SELECT * FROM family_invites WHERE id=?',[$r['wanted']]);
+check($q3['url']==='https://families.google.com/join/promo/q3'&&$q3['retired_at']===''&&(int)$q3['family_id']===$ten,'re-invited mail gets a fresh link');
 
 // ---- Đã fix · Đổi sang mail mới keeps customers in the same Family ----
 beginAudit($db,'Dữ liệu giả');$s16=saveFamilyRecord($db,null,['name'=>'Family 16','manager_email'=>'owner16@example.com'])['id'];finishAudit();

@@ -1,3 +1,7 @@
+# 0.32.11 — Báo rõ link của chủ cũ khi lấy link theo mail
+
+Dùng **Cập nhật một chạm**.
+
 # 0.32.10 — Lấy link theo mail không kiểm người gửi
 
 Dùng **Cập nhật một chạm**.
