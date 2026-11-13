@@ -1,6 +1,6 @@
 {
   "name": "fam-manager",
-  "version": "0.32.14",
+  "version": "0.32.15",
   "private": true,
   "type": "module",
   "scripts": { "start": "node server.js", "dev": "node --watch server.js", "test": "node --test", "test:php": "node --test hosting/php/verify.mjs", "package:php": "python3 scripts/package-php.py" },
