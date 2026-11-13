@@ -192,6 +192,22 @@ $wait=one($db,"SELECT * FROM member_moves WHERE member_id=? AND to_family_id=? A
 try{lookupHandOver($db,$b,['to_family_id'=>$ten,'expected_manager_email'=>$tenOwner]);check(false,'empty Family refused');}catch(FamilyError $e){check($e->status===409,'empty Family refused');}
 beginAudit($db,'Fix thử');saveIssue($db,$moving['id'],['revision'=>(int)$open['revision'],'status'=>'done','resolution'=>'move','move_family_id'=>$ten]);finishAudit();
 check(one($db,'SELECT resolution_note FROM issues WHERE id=?',[$moving['id']])['resolution_note']==='Đã chuyển khách sang Family 10.'&&$statusOf($b)==='scanned','move keeps Bị quét');
+// ---- + Thêm link mời with only the invited mail: filed under the chosen Family whoever sent it ----
+$wantGmail=fn(array $want)=>sheetsGmailInvites($db,$c,$gmailSend,$want);
+$gmailReply=['ok'=>true,'invites'=>[
+    $mail('shop+qj1@gmail.com','https://families.google.com/join/promo/q0',['stranger@example.com'],'2026-11-05T08:00:00.000Z'),
+    $mail('shop+qj1@gmail.com','https://families.google.com/join/promo/q1',['someone@example.com'],'2026-11-06T08:00:00.000Z'),
+    $mail('shop+qj2@gmail.com','https://families.google.com/join/promo/q2',['stranger@example.com'],'2026-11-06T08:00:00.000Z'),
+]];
+$r=$gmail();check($r['wanted']===null&&$r['added']===0&&in_array('shop+qj1@gmail.com',$r['unmatched'],true),'without a request an unknown sender stays unmatched');
+$r=$wantGmail(['to'=>'S.hop+QJ1@gmail.com','family_id'=>$ten]);$q=one($db,'SELECT * FROM family_invites WHERE id=?',[$r['wanted']]);
+check($q&&(int)$q['family_id']===$ten&&$q['label']==='shop+qj1@gmail.com'&&$q['url']==='https://families.google.com/join/promo/q1'&&$q['sent_on']==='2026-11-06'&&$r['added']===1,'requested mail filed under that Family: '.json_encode($r));
+check($r['unmatched']===['shop+qj2@gmail.com'],'other unknown mails stay unmatched');
+$r=$wantGmail(['to'=>'shop+qj1@gmail.com','family_id'=>$ten]);check($r['wanted']===(int)$q['id']&&$r['added']===0&&$r['updated']===0,'asking again finds the same link');
+check($wantGmail(['to'=>'shop+none@gmail.com','family_id'=>$ten])['wanted']===null,'no mail, nothing found');
+fails(fn()=>$wantGmail(['to'=>'shop+qj2@gmail.com','family_id'=>999999]),404,'unknown Family refused');fails(fn()=>$wantGmail(['to'=>'nope','family_id'=>$ten]),422,'bad mail refused');
+check(!one($db,"SELECT id FROM family_invites WHERE url LIKE '%/q2'"),'refused requests store nothing');
+
 // ---- Đã fix · Đổi sang mail mới keeps customers in the same Family ----
 beginAudit($db,'Dữ liệu giả');$s16=saveFamilyRecord($db,null,['name'=>'Family 16','manager_email'=>'owner16@example.com'])['id'];finishAudit();
 foreach(['p1@example.com'=>'active','p2@example.com'=>'invited'] as $address=>$state)q($db,"INSERT INTO members(family_id,email,customer_name,expires_at,plan_months,membership_status) VALUES (?,?,?,?,1,?)",[$s16,$address,'Khách '.$address,'2020-01-01',$state]);

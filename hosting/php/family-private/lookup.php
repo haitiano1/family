@@ -408,7 +408,22 @@ function lookupSaveInvite(PDO $db,?int $familyId,?int $id,array $d): array {
 // owner Gmail appears in the mail (the group the link really joins), otherwise under the Family a
 // generated address (Gen mail mời) belongs to, and labelled with the Gmail that received it. The newest
 // mail per address wins: a link already in a pool is left alone, and a newer link replaces one nobody has used.
-function lookupImportInvites(PDO $db,array $items): array {
+// Gmail ignores dots in the name part, so hai.hoangrr+1@ and haihoangrr+1@ are the same inbox.
+function lookupPlainMail(string $mail): string {
+    $mail=strtolower(trim($mail));$at=strrpos($mail,'@');if($at===false)return $mail;
+    $name=substr($mail,0,$at);$domain=substr($mail,$at+1);
+    return (in_array($domain,['gmail.com','googlemail.com'],true)?str_replace('.','',$name):$name).'@'.$domain;
+}
+// $want (+ Thêm link mời with the link left empty): the newest mail to that address is filed under that
+// Family whoever sent it, and its invite id comes back as 'wanted'.
+function lookupImportInvites(PDO $db,array $items,array $want=[]): array {
+    $wantTo='';$wantFamily=null;
+    if($want){
+        $to=is_string($want['to']??null)?strtolower(trim($want['to'])):'';
+        if(strlen($to)>200||!preg_match('/^[^\s@]+@[^\s@]+\.[^\s@]+$/uD',$to))fail('Nhập mail đã nhận lời mời.',422);
+        $wf=lookupActiveFamily($db,$want['family_id']??null);if(!$wf)fail('Không tìm thấy Family đang hoạt động.',404);
+        $wantTo=lookupPlainMail($to);$wantFamily=['id'=>(int)$wf['id'],'name'=>$wf['name']];
+    }
     $owners=[];foreach(all($db,"SELECT f.id,f.name,a.email FROM families f JOIN accounts a ON a.id=f.manager_id WHERE f.archived_at=''") as $f)$owners[$f['email']]=$f;
     $aliases=[];foreach(all($db,"SELECT i.email AS alias,f.id,f.name,a.email FROM invite_mails i JOIN families f ON f.id=i.family_id JOIN accounts a ON a.id=f.manager_id WHERE f.archived_at=''") as $r)$aliases[$r['alias']]=['id'=>$r['id'],'name'=>$r['name'],'email'=>$r['email']];
     $mails=[];
@@ -417,36 +432,41 @@ function lookupImportInvites(PDO $db,array $items): array {
         $url=is_string($item['url']??null)?trim($item['url']):'';$to=is_string($item['to']??null)?strtolower(trim($item['to'])):'';$date=is_string($item['date']??null)?$item['date']:'';
         if($url===''||strlen($url)>2000||!lookupGoogleUrl($url)||strlen($to)>200||!preg_match('/^[^\s@]+@[^\s@]+\.[^\s@]+$/uD',$to)||!preg_match('/^(\d{4})-(\d{2})-(\d{2})$/D',$date,$p)||!checkdate((int)$p[2],(int)$p[3],(int)$p[1]))continue;
         $owner=null;foreach(is_array($item['emails']??null)?array_slice($item['emails'],0,20):[] as $address)if(is_string($address)&&isset($owners[strtolower(trim($address))])){$owner=$owners[strtolower(trim($address))];break;}
-        $alias=$aliases[$to]??null;
+        $alias=$aliases[$to]??null;$wanted=$wantFamily&&lookupPlainMail($to)===$wantTo;
         $at=is_string($item['sent_at']??null)&&strlen($item['sent_at'])<=40?$item['sent_at']:$date;
-        $mails[]=['url'=>$url,'to'=>$to,'date'=>$date,'at'=>$at,'family'=>$owner??$alias,'moved'=>$owner&&$alias&&(int)$owner['id']!==(int)$alias['id']?$alias['name']:''];
+        $mails[]=['url'=>$url,'to'=>$to,'date'=>$date,'at'=>$at,'family'=>$wanted?$wantFamily:($owner??$alias),'wanted'=>$wanted,'moved'=>!$wanted&&$owner&&$alias&&(int)$owner['id']!==(int)$alias['id']?$alias['name']:''];
     }
     usort($mails,fn($a,$b)=>strcmp($b['at'],$a['at']));
-    $out=['found'=>count($mails),'added'=>0,'updated'=>0,'unchanged'=>0,'assigned'=>0];$unmatched=[];$families=[];$seen=[];$mismatched=[];
+    $out=['found'=>count($mails),'added'=>0,'updated'=>0,'unchanged'=>0,'assigned'=>0];$unmatched=[];$families=[];$seen=[];$mismatched=[];$wantedId=null;$wantedAdded=false;
+    $hit=function(array $m,int $id)use(&$wantedId){if($m['wanted']&&$wantedId===null)$wantedId=$id;};
     foreach($mails as $m){
         $f=$m['family'];if(!$f){$unmatched[$m['to']]=true;continue;}
         $key=$f['id']."\0".$m['to'];if(isset($seen[$key]))continue;$seen[$key]=true;
         if($m['moved']!=='')$mismatched[$m['to']]=['email'=>$m['to'],'generated_for'=>$m['moved'],'invited_by'=>$f['name']];
-        if(one($db,'SELECT id FROM family_invites WHERE url=?',[$m['url']])){$out['unchanged']++;continue;}
+        if($known=one($db,'SELECT id FROM family_invites WHERE url=?',[$m['url']])){$hit($m,(int)$known['id']);$out['unchanged']++;continue;}
         $old=one($db,"SELECT * FROM family_invites WHERE family_id=? AND label=? AND retired_at='' ORDER BY id DESC LIMIT 1",[$f['id'],$m['to']]);
         // A link someone joined with, or one ticked as sent by hand, is kept as it is. A link held
         // for a customer (handed out on lookup or by a move) takes the newer link, so that customer
         // keeps the same slot and sees a working link until they move to another group.
         $holder=$old?lookupInviteHolder(lookupInviteRefs($db,(int)$old['id']))['state']:'';
         if($old&&$holder!=='used'&&($holder==='assigned'||$old['sent_at']==='')){
+            $hit($m,(int)$old['id']);
             if($old['sent_on']!==''&&$old['sent_on']>$m['date']){$out['unchanged']++;continue;}
             q($db,'UPDATE family_invites SET url=?,sent_on=?,revision=revision+1,updated_at=? WHERE id=?',[$m['url'],$m['date'],lookupNow(),$old['id']]);
             logEntry($db,"Cá nhân: đổi link mời {$m['to']} của {$f['name']} theo thư mới trong Gmail");$out['updated']++;
         }else{
             q($db,'INSERT INTO family_invites(family_id,label,url,sent_on,revision,created_at,updated_at) VALUES (?,?,?,?,0,?,?)',[$f['id'],$m['to'],$m['url'],$m['date'],lookupNow(),lookupNow()]);$new=(int)$db->lastInsertId();
             logEntry($db,"Cá nhân: thêm link mời {$m['to']} cho {$f['name']} từ Gmail");$out['added']++;
+            if($m['wanted']&&$wantedId===null)$wantedAdded=true;$hit($m,$new);
         }
         $families[$f['name']]=true;
     }
     foreach($seen as $key=>$_)unset($unmatched[explode("\0",$key,2)[1]]);
     // Links that arrived before their customers were added are handed out now too.
     foreach(array_column(all($db,"SELECT DISTINCT family_id FROM invite_mails WHERE auto_assign>0"),'family_id') as $fid)$out['assigned']+=count(lookupAutoAssign($db,(int)$fid));
-    return [...$out,'families'=>array_keys($families),'unmatched'=>array_slice(array_keys($unmatched),0,20),'unmatched_count'=>count($unmatched),'mismatched'=>array_values($mismatched)];
+    // Like a link pasted in + Thêm link mời: a customer of that Family waiting for a link gets it.
+    if($wantedAdded)$out['assigned']+=count(lookupAutoAssign($db,$wantFamily['id']));
+    return [...$out,'wanted'=>$wantedId,'families'=>array_keys($families),'unmatched'=>array_slice(array_keys($unmatched),0,20),'unmatched_count'=>count($unmatched),'mismatched'=>array_values($mismatched)];
 }
 // Remove addresses made by mistake. Only addresses still waiting for their link can go;
 // one that already has a link is managed in the invite table.
