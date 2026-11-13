@@ -113,7 +113,7 @@ function joinTodo(move, includeLeave) {
   const caseOf = (cls, tag, seen, todo, body, warn = '') => `<details class="case${cls}"><summary><span class="case-tag">${tag}</span><span class="case-more" aria-hidden="true"></span><span class="case-text">${seen} → ${todo}</span>${warn}</summary>${body}</details>`;
   const shot = (src, w, h, alt) => `<img src="/${src}" width="${w}" height="${h}" loading="lazy" alt="${alt}">`;
   const leave = `<p>Bấm nút dưới để mở trang <strong>Gia đình Google</strong>, sẽ gặp <strong>1 trong 2</strong> trường hợp:</p>
-        <a class="btn small danger" href="https://g.co/YourFamily" target="_blank" rel="noopener noreferrer">Rời nhóm gia đình cũ</a>
+        <a class="btn big danger" href="https://g.co/YourFamily" target="_blank" rel="noopener noreferrer">Rời nhóm gia đình cũ</a>
         <button type="button" class="video-link" data-act="guide-video" data-video="leave"><span class="play" aria-hidden="true"></span><span>Chưa biết cách rời? <strong>Xem video hướng dẫn</strong></span></button>
         <div class="cases">
           ${caseOf('', 'Trường hợp 1', leaveSeen, 'bấm <strong>Rời khỏi nhóm gia đình</strong> rồi xác nhận.', `<div class="case-shot">${shot('huong-dan-roi-nhom.png', 720, 376, 'Trang Gia đình Google: Nhóm gia đình của bạn không hoạt động, nút Rời khỏi nhóm gia đình được khoanh đỏ')}</div>`, leaveWarn)}

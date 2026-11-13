@@ -1,3 +1,7 @@
+# 0.32.15 — Bước thao tác căn trái, nút to hơn
+
+Dùng **Cập nhật một chạm**.
+
 # 0.32.14 — Video hướng dẫn vào nhóm trên trang tra cứu
 
 Dùng **Cập nhật một chạm**.

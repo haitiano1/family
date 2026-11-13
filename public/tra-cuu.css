@@ -124,13 +124,18 @@ main { padding-top: 22px; padding-bottom: 32px; display: flex; flex-direction: c
 .now-chip { flex: none; white-space: nowrap; display: inline-flex; align-items: center; padding: 2px 9px; border-radius: 999px; background: var(--go-tint); color: var(--go-deep); font-size: 12px; font-weight: 700; }
 .warn-step .now-chip { background: var(--warn-tint); color: var(--warn-ink); }
 .step-body { display: grid; gap: 14px; margin-top: 10px; }
+/* The customer's own steps use the full card width: pulled left under the timeline dots. */
+.now > .step > .step-body { margin-left: -44px; }
+.timeline > li.now:has(.step-body)::before { display: none; }
 @keyframes ring { 70% { box-shadow: 0 0 0 9px rgba(34, 197, 94, 0); } 100% { box-shadow: 0 0 0 0 rgba(34, 197, 94, 0); } }
 
 /* What to do: numbered actions inside the current step */
 .todo { list-style: none; margin: 0; padding: 0; display: grid; gap: 14px; counter-reset: todo; }
-.todo > li { display: grid; grid-template-columns: 24px minmax(0, 1fr); gap: 10px; counter-increment: todo; }
+.todo > li { display: grid; grid-template-columns: 24px minmax(0, 1fr); gap: 8px 10px; align-items: center; counter-increment: todo; }
 .todo > li::before { content: counter(todo); width: 24px; height: 24px; border-radius: 8px; display: grid; place-items: center; background: var(--blue-tint); color: var(--blue-ink); font-size: 13px; font-weight: 750; }
-.todo > li > div { display: grid; gap: 6px; min-width: 0; }
+.todo > li > div { display: contents; }                       /* number beside the title, the rest flush left */
+.todo > li > div > * { grid-column: 1 / -1; min-width: 0; }
+.todo > li > div > h3 { grid-column: 2; }
 .todo p { color: var(--muted); font-size: 14px; }
 /* Rời nhóm cũ: the two pages Google can show. Each folds to one line; tap to see the screenshot. */
 .cases { display: grid; gap: 8px; }
@@ -196,7 +201,7 @@ main { padding-top: 22px; padding-bottom: 32px; display: flex; flex-direction: c
 .btn.primary:hover { background: var(--blue-dark); }
 .btn.go { background: var(--go); border-color: var(--go); color: #05361a; box-shadow: 0 8px 20px -10px rgba(34, 197, 94, .9); }
 .btn.go:hover { background: #1fb455; }
-.btn.big { min-height: 54px; font-size: 16px; font-weight: 750; border-radius: 14px; width: 100%; }
+.btn.big { min-height: 60px; font-size: 17px; font-weight: 750; border-radius: 16px; width: 100%; }
 .btn.success { background: var(--go-tint); border-color: var(--go-line); color: var(--go-deep); }
 .btn.small { min-height: 42px; align-self: start; font-size: 14px; }
 .btn.danger { background: var(--stop); border-color: var(--stop); color: #fff; box-shadow: 0 8px 20px -10px rgba(229, 72, 77, .9); }
