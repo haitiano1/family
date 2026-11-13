@@ -128,7 +128,7 @@ function joinTodo(move, includeLeave) {
         </div>`;
   return `<ol class="todo">
       <li><div><h3>${includeLeave ? 'Rời nhóm cũ' : 'Rời nhóm cũ (nếu có)'}</h3>${leave}</div></li>
-      <li><div><h3>Đăng nhập đúng Gmail</h3><p>Trình duyệt phải đăng nhập <strong>đúng Gmail này</strong>:</p><p class="must-mail">${escape(data.email)}</p><p>Google hỏi chọn tài khoản thì chọn đúng Gmail trên. Chọn nhầm thì <strong>Gmail đó vào nhóm thay bạn</strong>.</p></div></li>
+      <li><div><h3>Đăng nhập đúng Gmail</h3><p>Trình duyệt phải đăng nhập <strong>đúng Gmail này</strong>:</p><p class="must-mail">${escape(data.email).replace('@', '<wbr>@')}</p><p>Google hỏi chọn tài khoản thì chọn đúng Gmail trên. Chọn nhầm thì <strong>Gmail đó vào nhóm thay bạn</strong>.</p></div></li>
       <li><div><h3>${includeLeave ? 'Bấm vào nhóm mới' : 'Bấm vào nhóm'}</h3><p>Google mở trang mời, bạn bấm <strong>đồng ý tham gia</strong> là xong.</p>${link}</div></li>
     </ol>${inAppHint()}`;
 }
