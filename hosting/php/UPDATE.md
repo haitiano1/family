@@ -1,3 +1,7 @@
+# 0.32.8 — Đã mời, chưa vào như khách đang ở nhóm
+
+Dùng **Cập nhật một chạm**.
+
 # 0.32.7 — Bước rời nhóm cũ trên trang tra cứu
 
 Dùng **Cập nhật một chạm**.

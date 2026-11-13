@@ -172,7 +172,7 @@ beginAudit($db,'Báo lỗi thử');saveIssue($db,null,['family_id'=>$ten,'target
 // A link held for a customer (handed out on lookup) takes Google's newer link for the same Gmail.
 $heldMail=lookupGenerateInviteMails($db,$ten,['count'=>1])['mails'][0];
 $gmailReply=['ok'=>true,'invites'=>[$mail($heldMail,'https://families.google.com/join/promo/h1',['owner10-new@example.com'],'2026-11-05T03:00:00.000Z')]];check($gmail()['added']===1,'held link imported');
-q($db,"INSERT INTO members(family_id,email,customer_name,expires_at,plan_months,membership_status) VALUES (?,?,?,?,1,'invited')",[$ten,'newbie@example.com','Newbie',(new DateTimeImmutable(today()))->modify('+60 days')->format('Y-m-d')]);
+q($db,"INSERT INTO members(family_id,email,customer_name,expires_at,plan_months,membership_status) VALUES (?,?,?,?,1,'new')",[$ten,'newbie@example.com','Newbie',(new DateTimeImmutable(today()))->modify('+60 days')->format('Y-m-d')]);
 lookupSaveStatus($db,$ten,['status'=>'active','note'=>'','revision'=>(int)lookupStatusRow($db,$ten)['revision']]);
 foreach(all($db,"SELECT id FROM family_invites WHERE family_id=? AND sent_at='' AND url<>?",[$ten,'https://families.google.com/join/promo/h1']) as $other)q($db,'UPDATE family_invites SET sent_at=? WHERE id=?',[stamp(),$other['id']]);
 $first=lookupResult($db,'newbie@example.com')['items'][0]['move'];check($first['kind']==='join'&&$first['invite_url']==='https://families.google.com/join/promo/h1','customer holds the generated link');
@@ -200,10 +200,10 @@ sleep(1);beginAudit($db,'Báo lỗi thử');$c16=saveIssue($db,null,['family_id'
 $o16=one($db,'SELECT * FROM issues WHERE id=?',[$c16]);
 try{beginAudit($db,'Fix thử');saveIssue($db,$c16,['revision'=>(int)$o16['revision'],'status'=>'done','resolution'=>'replace','replacement_email'=>'owner16-new@example.com','expected_email'=>'owner16@example.com','invite_count'=>6]);finishAudit();check(false,'six mails refused');}catch(FamilyError $e){finishAudit(false);check($e->status===400,'six mails refused');}
 beginAudit($db,'Fix thử');$r16=saveIssue($db,$c16,['revision'=>(int)$o16['revision'],'status'=>'done','resolution'=>'replace','replacement_email'=>'owner16-new@example.com','expected_email'=>'owner16@example.com','invite_count'=>2]);finishAudit();
-check($r16['waiting_customers']===2&&$r16['retired_links']===1&&count($r16['invite_mails']['mails'])===2,'owner change result: '.json_encode($r16));
+check($r16['waiting_customers']===1&&$r16['retired_links']===1&&count($r16['invite_mails']['mails'])===2,'owner change result: '.json_encode($r16));
 check(array_column(all($db,'SELECT membership_status FROM members WHERE family_id=? ORDER BY id',[$s16]),'membership_status')===['active','invited'],'member statuses kept');
 check(one($db,'SELECT retired_at FROM family_invites WHERE id=?',[$oldLink])['retired_at']!==''&&$statusOf($s16)==='active','old link retired, Family active');
-check(count(all($db,"SELECT id FROM member_moves WHERE to_family_id=? AND state='assigned' AND invite_id IS NULL AND from_status='scanned'",[$s16]))===2,'both customers wait for a link');
+check(count(all($db,"SELECT id FROM member_moves WHERE to_family_id=? AND state='assigned' AND invite_id IS NULL AND from_status='scanned'",[$s16]))===1,'the customer in the group waits for a link; Đã mời, chưa vào does not');
 $held=array_values(array_filter(lookupAdminState($db)['invites'],fn($i)=>(int)$i['id']===$oldLink));check($held[0]['holder_state']==='retired','admin sees the link as retired');
 // Lấy link mời never brings the old link back; a new link of the new owner goes in, even for an old label.
 $gmailReply=['ok'=>true,'invites'=>[
@@ -257,7 +257,7 @@ $GLOBALS['family_telegram_transport']=function(){check(false,'nothing sent after
 check(count(all($db,'SELECT id FROM customer_reports WHERE email=?',['lan40@example.com']))===2,'both reports kept');
 // ---- A waiting customer's lookup reads Gmail by itself ----
 beginAudit($db,'Dữ liệu giả');$s50=saveFamilyRecord($db,null,['name'=>'Family 50','manager_email'=>'owner50@example.com'])['id'];finishAudit();
-q($db,"INSERT INTO members(family_id,email,customer_name,expires_at,plan_months,membership_status) VALUES (?,?,?,?,1,'invited')",[$s50,'wait50@example.com','Chờ','2099-01-01']);
+q($db,"INSERT INTO members(family_id,email,customer_name,expires_at,plan_months,membership_status) VALUES (?,?,?,?,1,'new')",[$s50,'wait50@example.com','Chờ','2099-01-01']);
 $code50=((array)lookupAdminState($db)['lookup_codes'])['wait50@example.com'];
 $GLOBALS['family_gmail_transport']=function()use(&$gmailReply){return $gmailReply;};$gmailReply=['ok'=>true,'invites'=>[]];
 q($db,"DELETE FROM lookup_settings WHERE name='gmail_auto_at'");
@@ -270,7 +270,7 @@ unset($GLOBALS['family_gmail_transport']);
 check(lookupShortDomain('HaiPre.vn/')==='https://haipre.vn','short domain normalised');check(lookupShortDomain('beeflix.vn/haiytb/')==='https://beeflix.vn/haiytb','path kept');try{lookupShortDomain('beeflix.vn/a/b');check(false,'two paths');}catch(FamilyError $e){check($e->status===400,'two-level path refused');}
 // ---- A checked, unused link goes back to the pool ----
 beginAudit($db,'Dữ liệu giả');$s70=saveFamilyRecord($db,null,['name'=>'Family 70','manager_email'=>'owner70@example.com'])['id'];finishAudit();
-foreach(['a70@example.com','b70@example.com'] as $x)q($db,"INSERT INTO members(family_id,email,customer_name,expires_at,plan_months,membership_status) VALUES (?,?,?,?,1,'invited')",[$s70,$x,'K','2099-01-01']);
+foreach(['a70@example.com','b70@example.com'] as $x)q($db,"INSERT INTO members(family_id,email,customer_name,expires_at,plan_months,membership_status) VALUES (?,?,?,?,1,'new')",[$s70,$x,'K','2099-01-01']);
 beginAudit($db,'Dữ liệu giả');lookupSaveInvite($db,$s70,null,['label'=>'slot70','url'=>'https://families.google.com/join/promo/s70','sent_on'=>gmdate('Y-m-d')]);finishAudit();
 $c70=(array)lookupAdminState($db)['lookup_codes'];lookupVerify($db,['email'=>'a70@example.com','code'=>$c70['a70@example.com']],'1.1.7.0');
 $mv70=one($db,"SELECT * FROM member_moves WHERE email='a70@example.com'");
