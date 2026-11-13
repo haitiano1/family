@@ -58,8 +58,9 @@ const lookupCookie=(res,token,age)=>res.setHeader('Set-Cookie',`fam_lookup=${tok
 async function lookupRequest(req,res,url){
   const route=url.pathname;
   if(req.method==='GET'&&route==='/api/lookup/info')return send(res,200,{shop:lookup.settings()});
-  if((req.method==='GET'||req.method==='HEAD')&&route==='/api/lookup/guide-video'){ // Video Hướng dẫn rời nhóm, with byte ranges for phones.
-    const video=readFileSync(path.join(root,'public','huong-dan-roi-nhom.mp4')),size=video.length,m=/^bytes=(\d*)-(\d*)$/.exec(req.headers.range||'');
+  const guide={'/api/lookup/guide-video':'huong-dan-roi-nhom.mp4','/api/lookup/guide-video/join':'huong-dan-vao-nhom.mp4'}[route];
+  if((req.method==='GET'||req.method==='HEAD')&&guide){ // Guide videos (rời nhóm, vào nhóm), with byte ranges for phones.
+    const video=readFileSync(path.join(root,'public',guide)),size=video.length,m=/^bytes=(\d*)-(\d*)$/.exec(req.headers.range||'');
     let start=0,end=size-1,status=200;const head={'Content-Type':'video/mp4','Accept-Ranges':'bytes','Cache-Control':'no-store'};
     if(m&&(m[1]||m[2])){if(m[1]==='')start=Math.max(0,size-Number(m[2]));else{start=Number(m[1]);if(m[2])end=Math.min(end,Number(m[2]));}
       if(start>end){res.writeHead(416,{'Content-Range':`bytes */${size}`});return res.end();}

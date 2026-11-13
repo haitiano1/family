@@ -780,11 +780,12 @@ function lookupWithFreshLinks(PDO &$db,array $c,array $result): array {
 function lookupCookie(array $c,string $token,int $age): void {
     setcookie('fam_lookup',$token,['expires'=>$age>0?time()+$age:1,'path'=>'/api/lookup','secure'=>$c['secure'],'httponly'=>true,'samesite'=>'Strict']);
 }
-// Video Hướng dẫn rời nhóm on the lookup page. One-click update ships only code files, so the
-// MP4 travels as base64 inside family-private/guide-video.php (made by scripts/package-php.py).
+// Guide videos on the lookup page (rời nhóm, vào nhóm). One-click update ships only code files, so each
+// MP4 travels as base64 inside family-private/guide-video*.php (made by scripts/package-php.py).
 // Byte ranges let phones start and seek the video.
-function lookupGuideVideo(): never {
-    $file=__DIR__.'/guide-video.php';$data=is_file($file)?base64_decode((string)(require $file),true):false;
+const LOOKUP_GUIDE_VIDEOS=['/api/lookup/guide-video'=>'guide-video.php','/api/lookup/guide-video/join'=>'guide-video-join.php'];
+function lookupGuideVideo(string $name): never {
+    $file=__DIR__.'/'.$name;$data=is_file($file)?base64_decode((string)(require $file),true):false;
     if(!is_string($data)||$data==='')fail('Không tìm thấy.',404);
     $size=strlen($data);$start=0;$end=$size-1;
     if(preg_match('/^bytes=(\d*)-(\d*)$/D',(string)($_SERVER['HTTP_RANGE']??''),$m)&&($m[1]!==''||$m[2]!=='')){
