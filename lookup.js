@@ -518,8 +518,18 @@ export function initLookup(db, { fail, email, text, calendarDate, log }) {
     const duplicate = one('SELECT i.id,f.name FROM family_invites i JOIN families f ON f.id=i.family_id WHERE i.url=? AND i.id!=?', url, id || 0);
     if (duplicate) fail(`Link này đã có trong kho của ${duplicate.name}.`, 409);
     if (old) {
-      run('UPDATE family_invites SET label=?,url=?,sent_on=?,revision=revision+1,updated_at=? WHERE id=?', inviteLabel, url, sentOn, now(), id);
-      log(`Cá nhân: sửa link mời ${inviteLabel || '#' + id} của ${family.name}${old.url !== url ? ' (đổi link mới)' : ''}`);
+      // Link chưa dùng (Sửa link mời): ticked = not sent and no customer mail noted, so it shows in the
+      // Link chưa dùng list; unticked = marked used (Đã dùng). A link held or used by a customer stays as it is.
+      let sentAt = old.sent_at, recipients = old.recipients, change = '';
+      if (typeof data.unused === 'boolean') {
+        const state = inviteHolder(inviteRefs(id)).state, unused = state === 'ready' && !old.sent_at && !old.recipients;
+        if (data.unused !== unused) {
+          if (old.retired_at || state !== 'ready') fail(state === 'used' ? 'Link này đã có khách dùng.' : 'Link đang giao cho khách. Thu hồi link trước.', 409);
+          if (data.unused) { sentAt = ''; recipients = ''; change = ' (đánh dấu chưa dùng)'; } else { sentAt = now(); change = ' (đánh dấu đã dùng)'; }
+        }
+      }
+      run('UPDATE family_invites SET label=?,url=?,sent_on=?,sent_at=?,recipients=?,revision=revision+1,updated_at=? WHERE id=?', inviteLabel, url, sentOn, sentAt, recipients, now(), id);
+      log(`Cá nhân: sửa link mời ${inviteLabel || '#' + id} của ${family.name}${old.url !== url ? ' (đổi link mới)' : ''}${change}`);
       return { ok: true, id };
     }
     const result = run('INSERT INTO family_invites(family_id,label,url,sent_on,revision,created_at,updated_at) VALUES (?,?,?,?,0,?,?)', family.id, inviteLabel, url, sentOn, now(), now());
@@ -528,16 +538,17 @@ export function initLookup(db, { fail, email, text, calendarDate, log }) {
   }
   // Xóa nhiều link mời một lần (tick từng link hoặc Chọn tất cả). A link handed to a customer is
   // skipped and reported, as single delete refuses it.
+  // familyId null: the ticks of Link chưa dùng on the Tra cứu page, links of any active Family.
   function deleteInvites(familyId, data) {
-    const family = activeFamily(familyId); if (!family) fail('Không tìm thấy Family đang hoạt động.', 404);
+    const family = familyId == null ? null : activeFamily(familyId); if (familyId != null && !family) fail('Không tìm thấy Family đang hoạt động.', 404);
     const ids = data.ids; if (!Array.isArray(ids) || !ids.length || ids.length > 200 || ids.some(id => !Number.isSafeInteger(id))) fail('Chọn link mời cần xóa.');
-    const rows = [...new Set(ids)].map(id => one("SELECT * FROM family_invites WHERE id=? AND family_id=? AND retired_at=''", id, family.id));
+    const rows = [...new Set(ids)].map(id => one("SELECT i.*,f.name AS family_name FROM family_invites i JOIN families f ON f.id=i.family_id WHERE i.id=? AND i.retired_at='' AND f.archived_at=''", id)).map(row => row && (!family || row.family_id === family.id) ? row : null);
     if (rows.some(row => !row)) fail('Link mời đã thay đổi. Tải lại trang rồi thử lại.', 409);
     const held = rows.filter(row => inviteHolder(inviteRefs(row.id)).state === 'assigned'), gone = rows.filter(row => !held.includes(row));
     const name = row => row.label || '#' + row.id;
     return atomic('invites_delete', () => {
       for (const row of gone) run('DELETE FROM family_invites WHERE id=?', row.id);
-      if (gone.length) log(`Cá nhân: xóa ${gone.length} link mời của ${family.name}: ${gone.map(name).join(', ')}`);
+      if (gone.length) log(`Cá nhân: xóa ${gone.length} link mời của ${[...new Set(gone.map(row => row.family_name))].join(', ')}: ${gone.map(name).join(', ')}`);
       return { ok: true, deleted: gone.length, skipped: held.map(name) };
     });
   }

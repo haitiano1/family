@@ -920,3 +920,8 @@ td[data-column="family"] .subtext { margin-top: 1px; }
 .bulk-bar input[type=checkbox], .lookup-table td[data-column="pick"] input { width: 18px; height: 18px; accent-color: var(--blue); cursor: pointer; }
 .lookup-table th.pick-col, .lookup-table td[data-column="pick"] { width: 34px; padding-right: 0; }
 .lookup-table tr.is-picked td { background: var(--red-soft); }
+
+/* Link chưa dùng (Sửa link mời) */
+.check-field { display: flex; align-items: flex-start; gap: 10px; margin: 2px 0 12px; padding: 10px 12px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface-soft); font-size: 13px; line-height: 1.5; cursor: pointer; }
+.check-field input { flex: none; width: 18px; height: 18px; margin-top: 1px; accent-color: var(--blue); }
+.check-field em { display: block; font-style: normal; color: var(--muted); }

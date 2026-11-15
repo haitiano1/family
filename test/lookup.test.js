@@ -773,7 +773,35 @@ test('Xóa nhiều link mời: ticked links go in one step, a link handed to a c
     state = await a('state');
     assert.deepEqual(state.invites.filter(i => i.family_id === fam.id).map(i => i.id), [ids[0]]);
     assert.ok(state.invites.some(i => i.id === foreign), 'other Family untouched');
+    // Link chưa dùng on the Tra cứu page: ticks may span Families.
+    const extra = (await a(`families/${fam.id}/invites`, 'POST', { label: 'shop+xl9@gmail.com', url: 'https://families.google.com/join/promo/xl9', sent_on: day(0) }, 201)).id;
+    const across = await a('invites/delete', 'POST', { ids: [extra, foreign] });
+    assert.equal(across.deleted, 2); state = await a('state');
+    assert.ok(!state.invites.some(i => i.id === extra || i.id === foreign)); assert.ok(state.invites.some(i => i.id === ids[0]), 'held link kept');
     assert.ok((await a('journal')).entries.some(e => e.action === 'Xóa link mời'));
+  } finally { await f.close(); }
+});
+
+test('Link chưa dùng: Sửa link mời marks a link used or back to unused; a link held by a customer is refused', async () => {
+  const f = await server(); try {
+    const a = f.admin;
+    const fam = await a('families', 'POST', { name: 'Family 35', manager_email: 'owner35@example.com' }, 201);
+    const m = await a('members', 'POST', { family_id: fam.id, email: 'cd1@example.com', customer_name: 'CD 1', expires_at: '2099-01-01' }, 201);
+    const id = (await a(`families/${fam.id}/invites`, 'POST', { label: 'shop+cd1@gmail.com', url: 'https://families.google.com/join/promo/cd1', sent_on: day(0) }, 201)).id;
+    const link = async () => (await a('state')).invites.find(i => i.id === id);
+    const save = async (unused, status = 200) => { const i = await link(); return a(`invites/${id}`, 'PATCH', { label: i.label, url: i.url, sent_on: i.sent_on, revision: i.revision, unused }, status); };
+    let i = await link(); assert.equal(i.holder_state, 'ready'); assert.equal(i.sent_at, '');
+    await save(false); i = await link(); assert.equal(i.holder_state, 'sent'); assert.ok(i.sent_at, 'unticked = Đã dùng');
+    await save(true); i = await link(); assert.equal(i.holder_state, 'ready'); assert.equal(i.sent_at, '');
+    await a(`invites/${id}/recipients`, 'PATCH', { recipients: [{ email: 'cd1@example.com', name: 'CD 1' }], revision: i.revision });
+    i = await link(); assert.ok(i.recipients);
+    await save(true); i = await link(); assert.equal(i.recipients, '', 'ticking Link chưa dùng drops the noted mail'); assert.equal(i.holder_state, 'ready');
+    const before = (await link()).revision; await a(`invites/${id}`, 'PATCH', { label: 'shop+cd1@gmail.com', url: i.url, sent_on: i.sent_on, revision: before });
+    assert.equal((await link()).holder_state, 'ready', 'no flag = unchanged');
+    await a(`invites/${id}/holder`, 'PATCH', { member_id: m.id, revision: (await link()).revision });
+    await save(true, 409); assert.equal((await link()).holder_state, 'assigned', 'a held link cannot go back to unused');
+    await save(false); assert.equal((await link()).holder_state, 'assigned', 'same value on a held link changes nothing');
+    assert.ok((await a('journal')).entries.some(e => /đánh dấu chưa dùng/.test(e.message || e.summary || JSON.stringify(e))));
   } finally { await f.close(); }
 });
 
