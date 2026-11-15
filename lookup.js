@@ -526,6 +526,21 @@ export function initLookup(db, { fail, email, text, calendarDate, log }) {
     log(`Cá nhân: thêm link mời ${inviteLabel || '#' + result.lastInsertRowid} cho ${family.name}`);
     return { ok: true, id: Number(result.lastInsertRowid), assigned: autoAssign(family.id) };
   }
+  // Xóa nhiều link mời một lần (tick từng link hoặc Chọn tất cả). A link handed to a customer is
+  // skipped and reported, as single delete refuses it.
+  function deleteInvites(familyId, data) {
+    const family = activeFamily(familyId); if (!family) fail('Không tìm thấy Family đang hoạt động.', 404);
+    const ids = data.ids; if (!Array.isArray(ids) || !ids.length || ids.length > 200 || ids.some(id => !Number.isSafeInteger(id))) fail('Chọn link mời cần xóa.');
+    const rows = [...new Set(ids)].map(id => one("SELECT * FROM family_invites WHERE id=? AND family_id=? AND retired_at=''", id, family.id));
+    if (rows.some(row => !row)) fail('Link mời đã thay đổi. Tải lại trang rồi thử lại.', 409);
+    const held = rows.filter(row => inviteHolder(inviteRefs(row.id)).state === 'assigned'), gone = rows.filter(row => !held.includes(row));
+    const name = row => row.label || '#' + row.id;
+    return atomic('invites_delete', () => {
+      for (const row of gone) run('DELETE FROM family_invites WHERE id=?', row.id);
+      if (gone.length) log(`Cá nhân: xóa ${gone.length} link mời của ${family.name}: ${gone.map(name).join(', ')}`);
+      return { ok: true, deleted: gone.length, skipped: held.map(name) };
+    });
+  }
   function deleteInvite(id, data) {
     const old = one('SELECT i.*,f.name AS family_name FROM family_invites i JOIN families f ON f.id=i.family_id WHERE i.id=?', id); if (!old) fail('Không tìm thấy link mời.', 404);
     if (revision(data.revision) !== old.revision) fail('Link mời vừa được sửa ở nơi khác. Tải lại rồi thử lại.', 409);
@@ -783,5 +798,5 @@ export function initLookup(db, { fail, email, text, calendarDate, log }) {
     return { ok: true };
   }
 
-  return { saveNotice, saveMessageTemplates, setHolder, autoAssign, assignFamilyLinks, saveRecipients, todoList, saveTodo, deleteTodo, adminState, settings, saveSettings, rotateCode, generateInviteMails, deleteInviteMails, markInviteSent, handOver, issueStatus, ownerReplaced, saveStatus, customerProblem, handleReport, connectTelegram, testTelegram, disconnectTelegram, saveInvite, deleteInvite, bulkMove, updateMove, result, verify, sessionEmail, logout, customerOpen, customerJoined, customerReport };
+  return { deleteInvites, saveNotice, saveMessageTemplates, setHolder, autoAssign, assignFamilyLinks, saveRecipients, todoList, saveTodo, deleteTodo, adminState, settings, saveSettings, rotateCode, generateInviteMails, deleteInviteMails, markInviteSent, handOver, issueStatus, ownerReplaced, saveStatus, customerProblem, handleReport, connectTelegram, testTelegram, disconnectTelegram, saveInvite, deleteInvite, bulkMove, updateMove, result, verify, sessionEmail, logout, customerOpen, customerJoined, customerReport };
 }

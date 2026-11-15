@@ -772,7 +772,11 @@ test('PHP lookup page: Family status, invite pool, bulk move, Gmail + code sign-
  assert.equal((await a('families/'+next.id+'/notice','PATCH',{notice:''})).notice,'');
  // Lời nhắn mẫu: kept in order, blanks dropped, private to the shop.
  assert.deepEqual((await a('message-templates','PATCH',{templates:[' Mẫu A ','','Mẫu B']})).templates,['Mẫu A','Mẫu B']);assert.deepEqual((await a('state')).message_templates,['Mẫu A','Mẫu B']);
- assert.equal(JSON.stringify((await lookup('info')).body).includes('Mẫu A'),false);await a('message-templates','PATCH',{templates:Array(21).fill('x')},400);assert.equal((await lookup('me','GET',undefined,200,dmLook.cookie)).body.items[0].notice,'');
+ assert.equal(JSON.stringify((await lookup('info')).body).includes('Mẫu A'),false);await a('message-templates','PATCH',{templates:Array(21).fill('x')},400);
+ // Xóa nhiều link mời: ticked links of the Family go in one step.
+ const bulk1=await a('families/'+next.id+'/invites','POST',{label:'shop+bulk1@gmail.com',url:'https://families.google.com/join/promo/php-bulk1'},201),bulk2=await a('families/'+next.id+'/invites','POST',{label:'shop+bulk2@gmail.com',url:'https://families.google.com/join/promo/php-bulk2'},201);
+ const bulkDel=await a('families/'+next.id+'/invites/delete','POST',{ids:[bulk1.id,bulk2.id]});assert.equal(bulkDel.deleted,2);assert.deepEqual(bulkDel.skipped,[]);assert.ok(!(await a('state')).invites.some(i=>i.id===bulk1.id||i.id===bulk2.id));
+ await a('families/'+next.id+'/invites/delete','POST',{ids:[bulk1.id]},409);assert.equal((await lookup('me','GET',undefined,200,dmLook.cookie)).body.items[0].notice,'');
  await a('members/'+dm.id,'DELETE');
  // A customer tells the shop Premium stopped; reporting the owner mail closes it.
  const s30=await a('families','POST',{name:'Family 30',manager_email:'owner30@example.com'},201);await a('members','POST',{family_id:s30.id,email:'p30@example.com',expires_at:'2099-01-01',membership_status:'active'},201);

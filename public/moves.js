@@ -192,10 +192,30 @@ function expiryText(ctx, invite) {
   const badge = left < 0 ? `<span class="badge red">Đã hết hạn</span>` : left <= 2 ? `<span class="badge amber">Còn ${left} ngày</span>` : `<span class="badge green">Còn ${left} ngày</span>`;
   return `<strong class="date-value">${ctx.day(invite.expires_on)}</strong><span class="subtext">${badge}</span>`;
 }
+// Links ticked for Xóa đã chọn, kept across redraws of the Family page.
+const pickedInvites = new Set();
+function bulkBar(ctx, familyId, invites) {
+  const picked = invites.filter(i => pickedInvites.has(i.id)).length, all = picked > 0 && picked === invites.length;
+  return `<div class="bulk-bar" data-invite-bulk="${familyId}"><label class="bulk-all"><input type="checkbox" data-invite-all="${familyId}"${all ? ' checked' : ''}> Chọn tất cả</label><span class="bulk-count">${picked ? `Đã chọn <strong>${picked}</strong> link` : 'Tick từng link để xóa nhiều link một lần'}</span>${ctx.btn('invites-delete', picked ? `Xóa ${picked} link đã chọn` : 'Xóa đã chọn', 'danger tiny', `data-id="${familyId}"${picked ? '' : ' disabled'}`)}</div>`;
+}
+export function initInviteBulk(ctx) {
+  document.addEventListener('change', event => {
+    const one = event.target.closest('[data-invite-pick]'), all = event.target.closest('[data-invite-all]');
+    if (!one && !all) return;
+    const familyId = Number((one || all).dataset.family || all?.dataset.inviteAll);
+    const boxes = [...document.querySelectorAll(`[data-invite-pick][data-family="${familyId}"]`)];
+    if (all) boxes.forEach(box => { box.checked = all.checked; });
+    boxes.forEach(box => { box.checked ? pickedInvites.add(Number(box.dataset.invitePick)) : pickedInvites.delete(Number(box.dataset.invitePick)); box.closest('tr')?.classList.toggle('is-picked', box.checked); });
+    const bar = document.querySelector(`[data-invite-bulk="${familyId}"]`), invites = (ctx.state.invites || []).filter(i => i.family_id === familyId && i.holder_state !== 'retired');
+    if (bar) bar.outerHTML = bulkBar(ctx, familyId, invites);
+  });
+}
 function inviteTable(ctx, invites) {
   const { escape, btn } = ctx;
   if (!invites.length) return '<p class="muted">Chưa có link mời. Gửi lời mời từ tài khoản chủ Family tới các mail của bạn (ví dụ mail+1, mail+2…), rồi dán link nút <strong>Chấp nhận lời mời</strong> vào đây.</p>';
-  return `<div class="table-wrap"><table class="lookup-table"><thead><tr><th scope="col">LINK MỜI</th><th scope="col">LỜI MỜI HẾT HẠN</th><th scope="col">TRẠNG THÁI</th><th scope="col">THAO TÁC</th></tr></thead><tbody>${invites.map(i => `<tr><td data-column="invite">${inviteTitle(ctx, i)}<span class="subtext lookup-url">${escape(i.url)}</span></td><td data-column="expiry" class="date-cell">${expiryText(ctx, i)}</td><td data-column="state">${inviteStateBadge(ctx, i)}</td><td data-column="actions"><div class="row-actions">${unsendButton(ctx, i)}${ctx.copyButton(i.url, 'link mời', 'Copy link')}${btn('invite-recipients', recipientsOf(i).length ? 'Sửa mail gán' : 'Gán mail', 'secondary tiny', `data-id="${i.id}" title="Ghi lại mail khách bạn đã gửi link này"`)}${ctx.moreActions('Thao tác khác cho ' + inviteName(ctx, i), btn('invite-edit', 'Sửa link', 'secondary tiny', `data-id="${i.id}"`) + (i.holder_state === 'assigned' ? '' : btn('invite-delete', 'Xóa link', 'danger tiny', `data-id="${i.id}"`)))}</div></td></tr>`).join('')}</tbody></table></div>`;
+  const familyId = invites[0].family_id;
+  for (const id of [...pickedInvites]) if (!(ctx.state.invites || []).some(i => i.id === id)) pickedInvites.delete(id);
+  return bulkBar(ctx, familyId, invites) + `<div class="table-wrap"><table class="lookup-table"><thead><tr><th scope="col" class="pick-col"><span class="sr-label">Chọn</span></th><th scope="col">LINK MỜI</th><th scope="col">LỜI MỜI HẾT HẠN</th><th scope="col">TRẠNG THÁI</th><th scope="col">THAO TÁC</th></tr></thead><tbody>${invites.map(i => `<tr${pickedInvites.has(i.id) ? ' class="is-picked"' : ''}><td data-column="pick"><input type="checkbox" data-invite-pick="${i.id}" data-family="${familyId}" aria-label="Chọn ${escape(inviteName(ctx, i))}"${pickedInvites.has(i.id) ? ' checked' : ''}></td><td data-column="invite">${inviteTitle(ctx, i)}<span class="subtext lookup-url">${escape(i.url)}</span></td><td data-column="expiry" class="date-cell">${expiryText(ctx, i)}</td><td data-column="state">${inviteStateBadge(ctx, i)}</td><td data-column="actions"><div class="row-actions">${unsendButton(ctx, i)}${ctx.copyButton(i.url, 'link mời', 'Copy link')}${btn('invite-recipients', recipientsOf(i).length ? 'Sửa mail gán' : 'Gán mail', 'secondary tiny', `data-id="${i.id}" title="Ghi lại mail khách bạn đã gửi link này"`)}${ctx.moreActions('Thao tác khác cho ' + inviteName(ctx, i), btn('invite-edit', 'Sửa link', 'secondary tiny', `data-id="${i.id}"`) + (i.holder_state === 'assigned' ? '' : btn('invite-delete', 'Xóa link', 'danger tiny', `data-id="${i.id}"`)))}</div></td></tr>`).join('')}</tbody></table></div>`;
 }
 function moveBadge(ctx, move) {
   const key = move.effective_state === 'assigned' && move.invite_id == null ? 'waiting' : move.effective_state;
@@ -506,6 +526,17 @@ export async function handleLookupAction(ctx, action, button) {
       ctx.toast(result.assigned.length ? `Đã gán ${result.assigned.length} link: ${result.assigned.map(a => a.name || a.email).join(', ')}.` : 'Không còn link Sẵn sàng hoặc khách cần gán.', 8000);
       await ctx.refresh();
     } catch (error) { ctx.toast(error.message, 8000); } finally { if (button.isConnected) button.disabled = false; }
+    return true;
+  }
+  if (action === 'invites-delete') {
+    const family = state.families.find(f => f.id === id), picked = (state.invites || []).filter(i => i.family_id === id && i.holder_state !== 'retired' && pickedInvites.has(i.id));
+    if (!family || !picked.length) return ctx.toast('Tick chọn link cần xóa trước.'), true;
+    const held = picked.filter(i => i.holder_state === 'assigned');
+    ctx.modal(`Xóa ${picked.length} link mời?`, `<p>${picked.slice(0, 6).map(i => ctx.escape(inviteName(ctx, i))).join('<br>')}${picked.length > 6 ? `<br>… và ${picked.length - 6} link khác` : ''}</p><p>Chỉ xóa link khỏi kho của ${ctx.escape(family.name)}. Lời mời trên Google vẫn còn cho đến khi hết hạn.</p>${held.length ? `<p class="subtext">${held.length} link đang giao cho khách sẽ được giữ lại (thu hồi link trước nếu muốn xóa).</p>` : ''}`, async () => {
+      const result = await ctx.post(`families/${id}/invites/delete`, { ids: picked.map(i => i.id) });
+      picked.forEach(i => pickedInvites.delete(i.id));
+      ctx.toast(`Đã xóa ${result.deleted} link mời.${result.skipped.length ? ` Giữ lại ${result.skipped.length} link đang giao cho khách.` : ''}`);
+    }, 'Xóa');
     return true;
   }
   if (action === 'invite-delete') {

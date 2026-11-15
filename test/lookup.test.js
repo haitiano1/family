@@ -755,6 +755,28 @@ test('Thông báo cho khách: the shop message of one Family shows on its lookup
   } finally { await f.close(); }
 });
 
+test('Xóa nhiều link mời: ticked links go in one step, a link handed to a customer stays', async () => {
+  const f = await server(); try {
+    const a = f.admin;
+    const fam = await a('families', 'POST', { name: 'Family 33', manager_email: 'owner33@example.com' }, 201), other = await a('families', 'POST', { name: 'Family 34', manager_email: 'owner34@example.com' }, 201);
+    const m = await a('members', 'POST', { family_id: fam.id, email: 'xl1@example.com', customer_name: 'XL 1', expires_at: '2099-01-01' }, 201);
+    const ids = [];
+    for (let k = 1; k <= 4; k++) ids.push((await a(`families/${fam.id}/invites`, 'POST', { label: `shop+xl${k}@gmail.com`, url: `https://families.google.com/join/promo/xl${k}`, sent_on: day(0) }, 201)).id);
+    const foreign = (await a(`families/${other.id}/invites`, 'POST', { label: 'shop+xo@gmail.com', url: 'https://families.google.com/join/promo/xo', sent_on: day(0) }, 201)).id;
+    let state = await a('state'); const held = state.invites.find(i => i.id === ids[0]);
+    await a(`invites/${ids[0]}/holder`, 'PATCH', { member_id: m.id, revision: held.revision });
+    assert.equal((await a('state')).invites.find(i => i.id === ids[0]).holder_state, 'assigned');
+    await a(`families/${fam.id}/invites/delete`, 'POST', { ids: [ids[1], foreign] }, 409);
+    await a(`families/${fam.id}/invites/delete`, 'POST', { ids: [] }, 400);
+    const result = await a(`families/${fam.id}/invites/delete`, 'POST', { ids: [...ids, ids[2]] });
+    assert.equal(result.deleted, 3); assert.deepEqual(result.skipped, ['shop+xl1@gmail.com']);
+    state = await a('state');
+    assert.deepEqual(state.invites.filter(i => i.family_id === fam.id).map(i => i.id), [ids[0]]);
+    assert.ok(state.invites.some(i => i.id === foreign), 'other Family untouched');
+    assert.ok((await a('journal')).entries.some(e => e.action === 'Xóa link mời'));
+  } finally { await f.close(); }
+});
+
 test('Gán mail: note up to 5 customer mails on a link, optionally ticking it Đã gửi', async () => {
   const f = await server(), target = await server(); try {
     const a = f.admin;

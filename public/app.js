@@ -7,7 +7,7 @@ import { contactParts } from './contacts.js';
 import {mountVault,unmountVault} from './vault.js';
 import {mountStatistics,unmountStatistics} from './statistics.js';
 import {todoCard,initTodos} from './todos.js';
-import {familyLookupSections,familyStatusParts,noticeLine,familyStatus,initMessageTemplates,lookupPage,handleLookupAction,customerLookupAction,familyStatusBadge,inviteMailFields,createInviteMails,showInviteMails,customerReportsSection,customerReportsNotice,customerReportsCount} from './moves.js';
+import {familyLookupSections,familyStatusParts,noticeLine,familyStatus,initMessageTemplates,initInviteBulk,lookupPage,handleLookupAction,customerLookupAction,familyStatusBadge,inviteMailFields,createInviteMails,showInviteMails,customerReportsSection,customerReportsNotice,customerReportsCount} from './moves.js';
 const $ = selector => document.querySelector(selector);
 const escape = value => String(value ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const uiIcon = name => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${({clock:'<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',alert:'<path d="m10.3 4.9-8 14a1.5 1.5 0 0 0 1.3 2.2h16.8a1.5 1.5 0 0 0 1.3-2.2l-8-14a2 2 0 0 0-3.4 0Z"/><path d="M12 9v4m0 4h.01"/>',calendar:'<rect x="3" y="5" width="18" height="16" rx="3"/><path d="M16 3v4M8 3v4M3 11h18m-10 5h2"/>',wallet:'<path d="M20 8V6a2 2 0 0 0-2-2H6a3 3 0 0 0 0 6h14v10H6a3 3 0 0 1-3-3V7"/><path d="M20 13h-4v4h4"/>',arrow:'<path d="M5 12h14m-5-5 5 5-5 5"/>',spark:'<path d="m12 3 2.5 6.5L21 12l-6.5 2.5L12 21l-2.5-6.5L3 12l6.5-2.5z"/>',grid:'<rect x="3" y="3" width="7" height="7" rx="2"/><rect x="14" y="3" width="7" height="7" rx="2"/><rect x="3" y="14" width="7" height="7" rx="2"/><rect x="14" y="14" width="7" height="7" rx="2"/>',users:'<circle cx="9" cy="8" r="3"/><path d="M3 21v-2a6 6 0 0 1 12 0v2m1-16a3 3 0 0 1 0 6m2 5a5 5 0 0 1 3 5"/>',search:'<circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 5 5"/>',check:'<path d="m5 12 4 4L19 6"/>',chart:'<path d="M4 4v16h16M8 15l4-4 4 2 4-7"/>',shield:'<path d="m12 3 8 3v6c0 5-8 9-8 9s-8-4-8-9V6z"/><path d="m8 12 3 3 5-6"/>'})[name]||''}</svg>`;
@@ -84,7 +84,7 @@ function customerTable(members,compact=false) {
 }
 // Context handed to the Tra cứu & chuyển nhóm module (moves.js); state is read live.
 const lookupContext={get state(){return state;},escape,btn,input,select,modal,post,patch,api,toast,day,date,customerInfo,copyButton,expiryBadge,moreActions,empty,hero,refresh};
-initTodos(lookupContext);initMessageTemplates(lookupContext);
+initTodos(lookupContext);initMessageTemplates(lookupContext);initInviteBulk(lookupContext);
 function draw() {
   if (!state) return;
   let [page,id]=route();

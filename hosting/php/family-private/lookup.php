@@ -586,6 +586,21 @@ function lookupMarkInviteSent(PDO $db,int $id,array $d): array {
     logEntry($db,'Cá nhân: '.($d['sent']?'đánh dấu đã gửi':'bỏ đánh dấu đã gửi').' link mời '.($i['label']?:'#'.$id)." của {$f['name']}");
     return ['ok'=>true];
 }
+// Xóa nhiều link mời một lần (tick từng link hoặc Chọn tất cả). A link handed to a customer is
+// skipped and reported, as single delete refuses it.
+function lookupDeleteInvites(PDO $db,int $familyId,array $d): array {
+    $f=lookupActiveFamily($db,$familyId);if(!$f)fail('Không tìm thấy Family đang hoạt động.',404);
+    $ids=$d['ids']??null;if(!is_array($ids)||!$ids||!array_is_list($ids)||count($ids)>200||array_filter($ids,fn($id)=>!is_int($id)))fail('Chọn link mời cần xóa.');
+    $rows=array_map(fn($id)=>one($db,"SELECT * FROM family_invites WHERE id=? AND family_id=? AND retired_at=''",[$id,$f['id']]),array_values(array_unique($ids)));
+    if(in_array(false,$rows,true))fail('Link mời đã thay đổi. Tải lại trang rồi thử lại.',409);
+    $held=[];$gone=[];foreach($rows as $row){if(lookupInviteHolder(lookupInviteRefs($db,(int)$row['id']))['state']==='assigned')$held[]=$row;else $gone[]=$row;}
+    $name=fn($row)=>$row['label']!==''?$row['label']:'#'.$row['id'];
+    return transaction($db,function()use($db,$f,$held,$gone,$name){
+        foreach($gone as $row)q($db,'DELETE FROM family_invites WHERE id=?',[$row['id']]);
+        if($gone)logEntry($db,'Cá nhân: xóa '.count($gone).' link mời của '.$f['name'].': '.implode(', ',array_map($name,$gone)));
+        return ['ok'=>true,'deleted'=>count($gone),'skipped'=>array_map($name,$held)];
+    });
+}
 function lookupDeleteInvite(PDO $db,int $id,array $d): array {
     $old=one($db,'SELECT i.*,f.name AS family_name FROM family_invites i JOIN families f ON f.id=i.family_id WHERE i.id=?',[$id]);if(!$old)fail('Không tìm thấy link mời.',404);
     if(lookupRevision($d['revision']??null)!==(int)$old['revision'])fail('Link mời vừa được sửa ở nơi khác. Tải lại rồi thử lại.',409);
@@ -874,6 +889,7 @@ function lookupAdminRequest(PDO $db,string $route,string $method): void {
     if($route==='/api/todos'&&$method==='POST')reply(lookupSaveTodo($db,null,body()),201);
     if(preg_match('~^/api/todos/(\d+)$~D',$route,$p)&&$method==='PATCH')reply(lookupSaveTodo($db,(int)$p[1],body()));
     if(preg_match('~^/api/todos/(\d+)$~D',$route,$p)&&$method==='DELETE')reply(lookupDeleteTodo($db,(int)$p[1]));
+    if(preg_match('~^/api/families/(\d+)/invites/delete$~D',$route,$p)&&$method==='POST')reply(lookupDeleteInvites($db,(int)$p[1],body()));
     if(preg_match('~^/api/families/(\d+)/notice$~D',$route,$p)&&$method==='PATCH')reply(lookupSaveNotice($db,(int)$p[1],body()));
     if(preg_match('~^/api/families/(\d+)/status$~D',$route,$p)&&$method==='PATCH')reply(lookupSaveStatus($db,(int)$p[1],body()));
     if(preg_match('~^/api/invites/(\d+)/holder$~D',$route,$p)&&$method==='PATCH')reply(lookupSetHolder($db,(int)$p[1],body()));
@@ -897,6 +913,7 @@ function lookupAdminRequest(PDO $db,string $route,string $method): void {
     if($route==='/api/telegram'&&$method==='DELETE')reply(lookupDisconnectTelegram($db));
 }
 function lookupAuditAction(string $method,string $route): string {
+    if(preg_match('~^/api/families/\d+/invites/delete$~D',$route))return 'Xóa link mời';
     if(preg_match('~^/api/families/\d+/notice$~D',$route))return 'Sửa thông báo cho khách';
     if(preg_match('~^/api/families/\d+/status$~D',$route))return 'Sửa trạng thái Family';
     if(preg_match('~^/api/families/\d+/invites$~D',$route))return 'Thêm link mời';
