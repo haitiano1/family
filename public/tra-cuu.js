@@ -156,7 +156,7 @@ function flowOf(item) {
       : 'Bạn chưa cần làm gì, link vào nhóm mới sẽ hiện ngay tại đây sau khi mình fix xong.',
     steps: [
       { label: 'Báo lỗi', title: problem ? 'Bạn báo mất Premium' : 'Phát hiện sự cố mất Premium', time: problem?.created_at || '', detail: problem ? (problemLabels[problem.reason] || [problem.reason])[0] : '' },
-      { label: 'Tiếp nhận', title: current > 1 ? 'Shop đã tiếp nhận và đang xử lý' : 'Shop tiếp nhận', time: current > 1 && item.view === 'incident' ? item.status_updated_at : '', detail: current > 1 ? (shopNote || 'Nhóm Youtube của bạn bị Google quét nên có thể mất Premium. Shop đang xử lý và sẽ cập nhật tại đây.') : 'Shop đang kiểm tra nhóm của bạn. Nhóm gặp sự cố thì shop chuẩn bị nhóm mới cho bạn.' },
+      { label: 'Tiếp nhận', title: current > 1 ? 'Shop đã tiếp nhận và đang xử lý' : 'Shop tiếp nhận', time: current > 1 && item.view === 'incident' ? item.status_updated_at : '', detail: current > 1 ? (shopNote || 'Shop đã nhận sự cố của nhóm và đang xử lý. Kết quả sẽ cập nhật tại đây.') : 'Shop đang kiểm tra nhóm của bạn. Nhóm gặp sự cố thì shop chuẩn bị nhóm mới cho bạn.' },
       { label: 'Đang xử lý', title: 'Chuẩn bị nhóm mới', detail: current > 2 ? 'Link riêng của bạn đã sẵn sàng.' : current === 2 ? 'Shop đang tạo nhóm mới và link riêng cho bạn. Bạn chưa cần làm gì, trang tự cập nhật.' : 'Shop tạo nhóm mới và link riêng cho bạn.' },
       { label: 'Vào nhóm mới', title: 'Bạn thao tác để vào nhóm mới', detail: current === 3 ? '' : 'Bạn tiến hành rời nhóm cũ rồi mở link riêng để vào nhóm mới.', body: current === 3 ? joinTodo(move, true) : '' }
     ]

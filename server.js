@@ -121,6 +121,7 @@ async function handle(req, res) {
     if(['PATCH','DELETE'].includes(req.method)&&/^\/api\/invites\/\d+$/.test(url.pathname)){const id=Number(url.pathname.split('/')[3]);return send(res,200,req.method==='PATCH'?lookup.saveInvite(null,id,await body(req)):lookup.deleteInvite(id,await body(req)));}
     if(req.method==='POST'&&url.pathname==='/api/moves')return send(res,200,lookup.bulkMove(await body(req)));
     if(req.method==='PATCH'&&/^\/api\/moves\/\d+$/.test(url.pathname))return send(res,200,lookup.updateMove(Number(url.pathname.split('/')[3]),await body(req)));
+    if(req.method==='PATCH'&&url.pathname==='/api/message-templates')return send(res,200,lookup.saveMessageTemplates(await body(req)));
     if(req.method==='PATCH'&&url.pathname==='/api/lookup-settings')return send(res,200,lookup.saveSettings(await body(req)));
     if(req.method==='POST'&&url.pathname==='/api/lookup-codes')return send(res,200,lookup.rotateCode(await body(req)));
     if(req.method==='PATCH'&&/^\/api\/customer-reports\/\d+$/.test(url.pathname))return send(res,200,lookup.handleReport(Number(url.pathname.split('/')[3]),await body(req)));

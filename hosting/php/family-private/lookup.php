@@ -81,6 +81,18 @@ function lookupShortDomain(mixed $value): string {
     if(!$u||!in_array(strtolower($u['scheme']??''),['https','http'],true)||isset($u['user'])||isset($u['pass'])||isset($u['query'])||isset($u['fragment'])||!preg_match('~^(/[A-Za-z0-9_-]{1,40})?$~D',$path)||!preg_match('/^[a-z0-9.-]+\.[a-z]{2,}$/iD',$u['host']??''))fail($bad);
     return strtolower($u['scheme']).'://'.strtolower($u['host']).(isset($u['port'])?':'.$u['port']:'').$path;
 }
+// Lời nhắn mẫu: the shop's own reusable messages, picked in Thông báo cho khách and Đổi trạng thái.
+// One lookup_settings row per message (message_template:01…), never part of the public shop settings.
+function lookupMessageTemplates(PDO $db): array {return array_column(all($db,"SELECT value FROM lookup_settings WHERE name LIKE 'message_template:%' ORDER BY name"),'value');}
+function lookupSaveMessageTemplates(PDO $db,array $d): array {
+    $in=$d['templates']??null;if(!is_array($in)||!array_is_list($in)||count($in)>20)fail('Tối đa 20 lời nhắn mẫu.');
+    $list=array_values(array_filter(array_map(fn($t)=>text($t,1000),$in),fn($t)=>$t!==''));
+    return transaction($db,function()use($db,$list){
+        q($db,"DELETE FROM lookup_settings WHERE name LIKE 'message_template:%'");
+        foreach($list as $i=>$value)q($db,'INSERT INTO lookup_settings(name,value) VALUES (?,?)',['message_template:'.str_pad((string)($i+1),2,'0',STR_PAD_LEFT),$value]);
+        logEntry($db,'Cá nhân: sửa lời nhắn mẫu ('.count($list).' mẫu)');return ['ok'=>true,'templates'=>$list];
+    });
+}
 function lookupSaveSettings(PDO $db,array $d): array {
     $values=['shop_name'=>text($d['shop_name']??'',100),'contact_url'=>lookupContactUrl($d['contact_url']??''),'contact_label'=>text($d['contact_label']??'',60),'help_text'=>text($d['help_text']??'',500),'short_domain'=>lookupShortDomain($d['short_domain']??''),'zalo_url'=>lookupContactUrl($d['zalo_url']??''),'facebook_url'=>lookupContactUrl($d['facebook_url']??'')];
     return transaction($db,function()use($db,$values){
@@ -114,13 +126,12 @@ function lookupRotateCode(PDO $db,array $d): array {
 
 // Fix lỗi drives the status customers see: reporting the owner Gmail marks an active Family
 // "Bị quét"; completing the case (or keeping the mail) puts it back to "Đang hoạt động".
-function lookupAutoScannedNote(string $name): string {return 'Nhóm Youtube của bạn bị Google quét nên có thể mất Premium. Shop đang xử lý và sẽ cập nhật tại đây.';}
 function lookupIssueStatus(PDO $db,int $familyId,string $event): void {
     $f=lookupActiveFamily($db,$familyId);if(!$f)return;
     if($event==='reported')lookupCloseReports($db,$f);
     $old=one($db,'SELECT * FROM family_statuses WHERE family_id=?',[$f['id']]);$current=$old['status']??'active';
     if($event==='reported'?$current!=='active':$current==='active')return;
-    $next=$event==='reported'?'scanned':'active';$note=$event==='reported'?lookupAutoScannedNote($f['name']):'';
+    $next=$event==='reported'?'scanned':'active';$note='';
     if($old)q($db,'UPDATE family_statuses SET status=?,note=?,updated_at=?,revision=revision+1 WHERE family_id=?',[$next,$note,lookupNow(),$f['id']]);
     else q($db,'INSERT INTO family_statuses(family_id,status,note,updated_at,revision) VALUES (?,?,?,?,1)',[$f['id'],$next,$note,lookupNow()]);
     logEntry($db,'Tự động: đặt trạng thái '.$f['name'].' là '.LOOKUP_STATUS_LABELS[$next].($event==='reported'?' khi báo lỗi mail quản lý':' khi hoàn tất Fix lỗi'));
@@ -144,7 +155,7 @@ function lookupOwnerReplaced(PDO $db,int $familyId,string $since,?int $donorId,i
     $members=all($db,'SELECT * FROM members WHERE family_id=? ORDER BY id',[$f['id']]);
     // "Đã mời, chưa vào" customers are handled like a normal Family: they do not wait for a link.
     $waiting=array_values(array_filter($members,fn($m)=>$m['membership_status']!=='invited'));
-    foreach($waiting as $m)lookupAwaitLink($db,$m,$f,null,$f['name'],$problem?$status['status']:'scanned',$problem&&$status['note']!==''?$status['note']:lookupAutoScannedNote($f['name']));
+    foreach($waiting as $m)lookupAwaitLink($db,$m,$f,null,$f['name'],$problem?$status['status']:'scanned',$problem?$status['note']:'');
     logEntry($db,"Tự động: {$f['name']} đổi chủ sang {$f['manager_email']}: ".count($waiting)." khách chờ link vào nhóm mới".($retired?", bỏ $retired link của chủ cũ":''));
     // Gen mail kept here was made after the report, for the new owner's group: its links go to the customers.
     q($db,'UPDATE invite_mails SET auto_assign=2 WHERE family_id=?',[$f['id']]);
@@ -673,7 +684,7 @@ function lookupAdminState(PDO $db): array {
     $codes=[];foreach(all($db,'SELECT DISTINCT email FROM members') as $r)$codes[$r['email']]=lookupCodeFor($db,$r['email'],$salt);
     // Gmail import needs the Google Sheet connection (same Apps Script). Plain query: no DDL inside the state audit.
     $gmail=false;$mailbox='';try{$gmail=(bool)one($db,"SELECT name FROM family_sheet_state WHERE name='config'");$row=one($db,"SELECT value FROM family_sheet_state WHERE name='gmail_mailbox'");$mailbox=$row?(string)json_decode($row['value'],true):'';}catch(Throwable $e){}
-    return ['lookup_supported'=>true,'gmail_import'=>$gmail,'gmail_mailbox'=>$mailbox,'invite_base_email'=>LOOKUP_INVITE_MAIL_INBOX,'invite_mails'=>array_map(fn($r)=>[...$r,'id'=>(int)$r['id'],'family_id'=>(int)$r['family_id'],'auto_assign'=>(int)$r['auto_assign']],all($db,'SELECT id,family_id,email,created_at,auto_assign FROM invite_mails ORDER BY id')),'lookup_settings'=>lookupSettings($db),'family_statuses'=>all($db,'SELECT family_id,status,note,updated_at,revision,notice,notice_at FROM family_statuses'),'invites'=>$invites,'moves'=>$moves,'lookup_codes'=>(object)$codes,
+    return ['lookup_supported'=>true,'gmail_import'=>$gmail,'gmail_mailbox'=>$mailbox,'invite_base_email'=>LOOKUP_INVITE_MAIL_INBOX,'invite_mails'=>array_map(fn($r)=>[...$r,'id'=>(int)$r['id'],'family_id'=>(int)$r['family_id'],'auto_assign'=>(int)$r['auto_assign']],all($db,'SELECT id,family_id,email,created_at,auto_assign FROM invite_mails ORDER BY id')),'lookup_settings'=>lookupSettings($db),'family_statuses'=>all($db,'SELECT family_id,status,note,updated_at,revision,notice,notice_at FROM family_statuses'),'message_templates'=>lookupMessageTemplates($db),'invites'=>$invites,'moves'=>$moves,'lookup_codes'=>(object)$codes,
         // Open reports, and the ones handled in the last week for context.
         'customer_reports'=>array_map(fn($r)=>[...$r,'id'=>(int)$r['id'],'member_id'=>$r['member_id']===null?null:(int)$r['member_id'],'family_id'=>$r['family_id']===null?null:(int)$r['family_id'],'revision'=>(int)$r['revision']],all($db,"SELECT * FROM customer_reports WHERE handled_at='' OR handled_at>? ORDER BY id DESC LIMIT 300",[gmdate('Y-m-d\TH:i:s.000\Z',time()-604800)])),
         'problem_reasons'=>LOOKUP_PROBLEM_REASONS,'telegram'=>lookupTelegramState($db),'todos'=>lookupTodoList($db)];
@@ -877,6 +888,7 @@ function lookupAdminRequest(PDO $db,string $route,string $method): void {
     if(preg_match('~^/api/invites/(\d+)$~D',$route,$p)&&$method==='DELETE')reply(lookupDeleteInvite($db,(int)$p[1],body()));
     if($route==='/api/moves'&&$method==='POST')reply(lookupBulkMove($db,body()));
     if(preg_match('~^/api/moves/(\d+)$~D',$route,$p)&&$method==='PATCH')reply(lookupUpdateMove($db,(int)$p[1],body()));
+    if($route==='/api/message-templates'&&$method==='PATCH')reply(lookupSaveMessageTemplates($db,body()));
     if($route==='/api/lookup-settings'&&$method==='PATCH')reply(lookupSaveSettings($db,body()));
     if($route==='/api/lookup-codes'&&$method==='POST')reply(lookupRotateCode($db,body()));
     if(preg_match('~^/api/customer-reports/(\d+)$~D',$route,$p)&&$method==='PATCH')reply(lookupHandleReport($db,(int)$p[1],body()));
@@ -897,6 +909,7 @@ function lookupAuditAction(string $method,string $route): string {
     if(preg_match('~^/api/invites/\d+$~D',$route))return $method==='DELETE'?'Xóa link mời':'Sửa link mời';
     if($route==='/api/moves')return 'Chuyển Family';
     if(preg_match('~^/api/moves/\d+$~D',$route))return 'Sửa chuyển nhóm';
+    if($route==='/api/message-templates')return 'Sửa lời nhắn mẫu';
     if($route==='/api/lookup-settings')return 'Sửa trang tra cứu';
     if($route==='/api/lookup-codes')return 'Sửa mã tra cứu';
     if(preg_match('~^/api/customer-reports/\d+$~D',$route))return 'Xử lý khách báo lỗi';

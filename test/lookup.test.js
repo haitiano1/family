@@ -349,7 +349,7 @@ test('Fix lỗi sets the Family status: owner mail reported → Bị quét, case
     const status = async id => (await a('state')).family_statuses.find(s => s.family_id === id) || { status: 'active', note: '' };
     const created = await a('issues', 'POST', { family_id: oldFamily.id, target_type: 'manager', title: 'Mail chủ bị quét' }, 201);
     let s = await status(oldFamily.id);
-    assert.equal(s.status, 'scanned'); assert.match(s.note, /Nhóm Youtube của bạn bị Google quét/);
+    assert.equal(s.status, 'scanned'); assert.equal(s.note, '', 'no message is filled in by itself');
     assert.equal((await f.customer()('verify', 'POST', { email: 'minhanh@example.com', code: (await a('state')).lookup_codes['minhanh@example.com'] })).items[0].view, 'incident', 'customers see the incident at once');
     let issue = (await a('state')).issues.find(i => i.id === created.id);
     await a(`issues/${created.id}`, 'PATCH', { revision: issue.revision, status: 'done', resolution: 'replace', replacement_email: 'owner04-new@example.com', expected_email: 'owner04@example.com' });
@@ -743,6 +743,13 @@ test('Thông báo cho khách: the shop message of one Family shows on its lookup
     await a(`families/${other.id}/notice`, 'PATCH', { notice: 'x'.repeat(1001) }, 400);
     await a('families/99999/notice', 'PATCH', { notice: 'x' }, 404);
     assert.ok((await a('journal')).entries.some(e => e.action === 'Sửa thông báo cho khách'));
+    // Lời nhắn mẫu: the shop's own list, in order, blanks dropped, never on the public lookup.
+    assert.deepEqual((await a('message-templates', 'PATCH', { templates: [' Mẫu A ', '', 'Mẫu B\ndòng 2'] })).templates, ['Mẫu A', 'Mẫu B\ndòng 2']);
+    assert.deepEqual((await a('state')).message_templates, ['Mẫu A', 'Mẫu B\ndòng 2']);
+    assert.equal(JSON.stringify(await f.customer()('info')).includes('Mẫu A'), false);
+    await a('message-templates', 'PATCH', { templates: Array(21).fill('x') }, 400);
+    assert.deepEqual((await a('message-templates', 'PATCH', { templates: ['Mẫu B\ndòng 2'] })).templates, ['Mẫu B\ndòng 2']);
+    assert.ok((await a('journal')).entries.some(e => e.action === 'Sửa lời nhắn mẫu'));
     // A backup made before this field restores with an empty notice.
     const backup = await a('backup'); assert.ok('notice' in backup.tables.family_statuses[0]);
   } finally { await f.close(); }
