@@ -2,4 +2,6 @@
 
 **Lời nhắn mẫu** do bạn tự đặt (trang Tra cứu → Lời nhắn mẫu, tối đa 20 mẫu): trong hộp Thông báo cho khách và Đổi trạng thái, bấm một mẫu để chèn vào ô, hoặc **+ Lưu nội dung này làm mẫu**. Web **không tự điền** lời nhắn nào nữa: báo lỗi mail chủ chỉ đổi trạng thái sang Bị quét, đổi trạng thái không tự viết lời nhắn. Không viết gì thì khách vẫn thấy như cũ (“Nhóm Youtube của bạn bị Google quét nên có thể mất Premium…”), không có khung thông báo.
 
-**Xóa nhiều link mời**: bảng Link mời vào Family này có ô tick ở đầu mỗi dòng, **Chọn tất cả** và nút **Xóa N link đã chọn** (hỏi lại một lần). Link đang giao cho khách được giữ lại. Gồm bước thao tác căn trái (0.32.15). Dùng Cập nhật một chạm.
+**Xóa nhiều link mời**: bảng Link mời vào Family này có ô tick ở đầu mỗi dòng, **Chọn tất cả** và nút **Xóa N link đã chọn** (hỏi lại một lần). Link đang giao cho khách được giữ lại.
+
+Trang tra cứu: khi tới lượt khách thao tác, dòng xanh đầu thẻ tiến trình ghi **Shop đã xử lý xong** (thay cho “Bạn thao tác”). Gồm bước thao tác căn trái (0.32.15). Dùng Cập nhật một chạm.

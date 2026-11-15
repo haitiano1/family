@@ -164,7 +164,7 @@ function flowOf(item) {
 }
 const watched = item => ['reported', 'incident', 'waiting'].includes(item.view) || (item.view === 'move' && !item.move?.invite_url);
 function statusCard(item, flow) {
-  const pct = Math.round((flow.current + 0.5) / flow.n * 100), live = flow.yours ? 'Bạn thao tác' : 'Đang xử lý';
+  const pct = Math.round((flow.current + 0.5) / flow.n * 100), live = flow.yours ? 'Shop đã xử lý xong' : 'Đang xử lý';
   return `<section class="card status" data-progress="${pct}" data-key="${item.member_ref}" data-n="${flow.n}">
     <div class="status-meta"><span class="live">${live}</span><span class="step-count">Bước ${flow.current + 1}/${flow.n}</span></div>
     <h1>${escape(flow.title)}</h1>
