@@ -135,7 +135,8 @@ function initializeSchema(PDO $db): void {
 // 6 (0.31.0): family_invites.recipients, customer mails noted on a link (Gán mail).
 // 7 (0.32.0): invite_mails.auto_assign, Gen mail for a Family with no link yet hands links to customers.
 // 8 (0.32.16): family_statuses.notice/notice_at, Thông báo cho khách of one Family.
-const FAMILY_LOOKUP_SCHEMA_VERSION=8;
+// 9 (0.32.18): deleted_invites, links the shop deleted so Lấy link mời does not bring them back.
+const FAMILY_LOOKUP_SCHEMA_VERSION=9;
 function ensureLookupSchema(PDO $db): void {
     $row=one($db,"SELECT value FROM app_meta WHERE name='lookup_schema'");
     if(($row['value']??'')===(string)FAMILY_LOOKUP_SCHEMA_VERSION)return;

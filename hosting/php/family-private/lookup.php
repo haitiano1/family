@@ -413,7 +413,7 @@ function lookupSaveInvite(PDO $db,?int $familyId,?int $id,array $d): array {
     $old=null;
     if($id){$old=one($db,'SELECT * FROM family_invites WHERE id=?',[$id]);if(!$old)fail('Không tìm thấy link mời.',404);if(lookupRevision($d['revision']??null)!==(int)$old['revision'])fail('Link mời vừa được sửa ở nơi khác. Tải lại rồi thử lại.',409);$familyId=(int)$old['family_id'];}
     $f=lookupActiveFamily($db,$familyId);if(!$f)fail('Không tìm thấy Family đang hoạt động.',404);
-    $label=text($d['label']??'',200);$url=lookupInviteUrl($d['url']??'');$sent=calendarDate($d['sent_on']??'');
+    $label=text($d['label']??'',200);$url=lookupInviteUrl($d['url']??'');$sent=calendarDate($d['sent_on']??'');lookupRememberInvite($db,$url);
     $duplicate=one($db,'SELECT i.id,f.name FROM family_invites i JOIN families f ON f.id=i.family_id WHERE i.url=? AND i.id<>?',[$url,$id??0]);
     if($duplicate)fail("Link này đã có trong kho của {$duplicate['name']}.",409);
     if($old){
@@ -468,11 +468,14 @@ function lookupImportInvites(PDO $db,array $items,array $want=[]): array {
         $mails[]=['url'=>$url,'to'=>$to,'date'=>$date,'at'=>$at,'family'=>$wanted?$wantFamily:($owner??$alias),'wanted'=>$wanted,'moved'=>!$wanted&&$owner&&$alias&&(int)$owner['id']!==(int)$alias['id']?$alias['name']:''];
     }
     usort($mails,fn($a,$b)=>strcmp($b['at'],$a['at']));
-    $out=['found'=>count($mails),'added'=>0,'updated'=>0,'unchanged'=>0,'assigned'=>0,'restored'=>false,'moved_from'=>''];$unmatched=[];$families=[];$seen=[];$mismatched=[];$wantedId=null;$wantedAdded=false;
+    $out=['found'=>count($mails),'added'=>0,'updated'=>0,'unchanged'=>0,'assigned'=>0,'restored'=>false,'moved_from'=>'','skipped_deleted'=>0];$unmatched=[];$families=[];$seen=[];$mismatched=[];$wantedId=null;$wantedAdded=false;
     $hit=function(array $m,int $id)use(&$wantedId){if($m['wanted']&&$wantedId===null)$wantedId=$id;};
     foreach($mails as $m){
         $f=$m['family'];if(!$f){$unmatched[$m['to']]=true;continue;}
         $key=$f['id']."\0".$m['to'];if(isset($seen[$key]))continue;$seen[$key]=true;
+        // A link the shop deleted stays deleted (older mails to the same address are skipped too);
+        // asking for it by mail in + Thêm link mời brings it back.
+        if(lookupDeletedInvite($db,$m['url'])){if(!$m['wanted']){$out['skipped_deleted']++;continue;}lookupRememberInvite($db,$m['url']);}
         if($m['moved']!=='')$mismatched[$m['to']]=['email'=>$m['to'],'generated_for'=>$m['moved'],'invited_by'=>$f['name']];
         if($known=one($db,'SELECT i.id,i.family_id,i.retired_at,i.sent_at,f.name FROM family_invites i JOIN families f ON f.id=i.family_id WHERE i.url=?',[$m['url']])){
             // Asked for by mail: the link comes to this Family even if it was set aside on Đã fix
@@ -598,6 +601,14 @@ function lookupMarkInviteSent(PDO $db,int $id,array $d): array {
 }
 // Xóa nhiều link mời một lần (tick từng link hoặc Chọn tất cả). A link handed to a customer is
 // skipped and reported, as single delete refuses it.
+// A deleted link is remembered (hash of its URL) so Lấy link mời, which re-reads 14 days of Gmail,
+// does not add it again. Kept 30 days: invitations expire after 14.
+function lookupForgetInvite(PDO $db,string $url): void {
+    $hash=hash('sha256',$url);q($db,'DELETE FROM deleted_invites WHERE url_hash=? OR deleted_at<?',[$hash,gmdate('Y-m-d\TH:i:s.000\Z',time()-30*86400)]);
+    q($db,'INSERT INTO deleted_invites(url_hash,deleted_at) VALUES (?,?)',[$hash,lookupNow()]);
+}
+function lookupDeletedInvite(PDO $db,string $url): bool {return (bool)one($db,'SELECT url_hash FROM deleted_invites WHERE url_hash=?',[hash('sha256',$url)]);}
+function lookupRememberInvite(PDO $db,string $url): void {q($db,'DELETE FROM deleted_invites WHERE url_hash=?',[hash('sha256',$url)]);}
 // $familyId null: the ticks of Link chưa dùng on the Tra cứu page, links of any active Family.
 function lookupDeleteInvites(PDO $db,?int $familyId,array $d): array {
     $f=$familyId===null?null:lookupActiveFamily($db,$familyId);if($familyId!==null&&!$f)fail('Không tìm thấy Family đang hoạt động.',404);
@@ -607,7 +618,7 @@ function lookupDeleteInvites(PDO $db,?int $familyId,array $d): array {
     $held=[];$gone=[];foreach($rows as $row){if(lookupInviteHolder(lookupInviteRefs($db,(int)$row['id']))['state']==='assigned')$held[]=$row;else $gone[]=$row;}
     $name=fn($row)=>$row['label']!==''?$row['label']:'#'.$row['id'];
     return transaction($db,function()use($db,$f,$held,$gone,$name){
-        foreach($gone as $row)q($db,'DELETE FROM family_invites WHERE id=?',[$row['id']]);
+        foreach($gone as $row){q($db,'DELETE FROM family_invites WHERE id=?',[$row['id']]);lookupForgetInvite($db,$row['url']);}
         if($gone)logEntry($db,'Cá nhân: xóa '.count($gone).' link mời của '.implode(', ',array_unique(array_column($gone,'family_name'))).': '.implode(', ',array_map($name,$gone)));
         return ['ok'=>true,'deleted'=>count($gone),'skipped'=>array_map($name,$held)];
     });
@@ -616,7 +627,7 @@ function lookupDeleteInvite(PDO $db,int $id,array $d): array {
     $old=one($db,'SELECT i.*,f.name AS family_name FROM family_invites i JOIN families f ON f.id=i.family_id WHERE i.id=?',[$id]);if(!$old)fail('Không tìm thấy link mời.',404);
     if(lookupRevision($d['revision']??null)!==(int)$old['revision'])fail('Link mời vừa được sửa ở nơi khác. Tải lại rồi thử lại.',409);
     if(lookupInviteHolder(lookupInviteRefs($db,$id))['state']==='assigned')fail('Link đang giao cho khách. Thu hồi link trước khi xóa.',409);
-    q($db,'DELETE FROM family_invites WHERE id=?',[$id]);
+    q($db,'DELETE FROM family_invites WHERE id=?',[$id]);lookupForgetInvite($db,$old['url']);
     logEntry($db,'Cá nhân: xóa link mời '.($old['label']?:'#'.$id)." của {$old['family_name']}");
     return ['ok'=>true];
 }

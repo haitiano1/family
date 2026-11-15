@@ -1,3 +1,7 @@
+# 0.32.18 — Link đã xóa không bị thêm lại
+
+Dùng **Cập nhật một chạm**. Bản này thêm 1 bảng nhỏ ghi link đã xóa; web tự tạo khi chạy lần đầu.
+
 # 0.32.17 — Link chưa dùng
 
 Dùng **Cập nhật một chạm**.
