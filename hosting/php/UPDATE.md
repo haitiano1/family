@@ -1,3 +1,7 @@
+# 0.32.17 — Link chưa dùng
+
+Dùng **Cập nhật một chạm**.
+
 # 0.32.16 — Thông báo cho khách từng Family
 
 Dùng **Cập nhật một chạm**. Bản này thêm 2 cột vào bảng trạng thái Family; web tự thêm khi chạy lần đầu, dữ liệu cũ giữ nguyên.
