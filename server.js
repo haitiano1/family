@@ -108,6 +108,8 @@ async function handle(req, res) {
     if (access.enabled && req.method==='POST' && url.pathname==='/api/access/close') {
       res.setHeader('Set-Cookie','fam_access=; HttpOnly; Secure; SameSite=Strict; Path=/; Max-Age=0');return send(res,200,{ok:true});
     }
+    if(req.method==='POST'&&/^\/api\/families\/\d+\/invites\/delete$/.test(url.pathname))return send(res,200,lookup.deleteInvites(Number(url.pathname.split('/')[3]),await body(req)));
+    if(req.method==='PATCH'&&/^\/api\/families\/\d+\/notice$/.test(url.pathname))return send(res,200,lookup.saveNotice(Number(url.pathname.split('/')[3]),await body(req)));
     if(req.method==='PATCH'&&/^\/api\/families\/\d+\/status$/.test(url.pathname))return send(res,200,lookup.saveStatus(Number(url.pathname.split('/')[3]),await body(req)));
     if(req.method==='PATCH'&&/^\/api\/invites\/\d+\/holder$/.test(url.pathname))return send(res,200,lookup.setHolder(Number(url.pathname.split('/')[3]),await body(req)));
     if(req.method==='POST'&&/^\/api\/families\/\d+\/assign-links$/.test(url.pathname))return send(res,200,lookup.assignFamilyLinks(Number(url.pathname.split('/')[3])));
@@ -120,6 +122,7 @@ async function handle(req, res) {
     if(['PATCH','DELETE'].includes(req.method)&&/^\/api\/invites\/\d+$/.test(url.pathname)){const id=Number(url.pathname.split('/')[3]);return send(res,200,req.method==='PATCH'?lookup.saveInvite(null,id,await body(req)):lookup.deleteInvite(id,await body(req)));}
     if(req.method==='POST'&&url.pathname==='/api/moves')return send(res,200,lookup.bulkMove(await body(req)));
     if(req.method==='PATCH'&&/^\/api\/moves\/\d+$/.test(url.pathname))return send(res,200,lookup.updateMove(Number(url.pathname.split('/')[3]),await body(req)));
+    if(req.method==='PATCH'&&url.pathname==='/api/message-templates')return send(res,200,lookup.saveMessageTemplates(await body(req)));
     if(req.method==='PATCH'&&url.pathname==='/api/lookup-settings')return send(res,200,lookup.saveSettings(await body(req)));
     if(req.method==='POST'&&url.pathname==='/api/lookup-codes')return send(res,200,lookup.rotateCode(await body(req)));
     if(req.method==='PATCH'&&/^\/api\/customer-reports\/\d+$/.test(url.pathname))return send(res,200,lookup.handleReport(Number(url.pathname.split('/')[3]),await body(req)));

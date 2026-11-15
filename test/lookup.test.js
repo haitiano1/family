@@ -349,7 +349,7 @@ test('Fix lỗi sets the Family status: owner mail reported → Bị quét, case
     const status = async id => (await a('state')).family_statuses.find(s => s.family_id === id) || { status: 'active', note: '' };
     const created = await a('issues', 'POST', { family_id: oldFamily.id, target_type: 'manager', title: 'Mail chủ bị quét' }, 201);
     let s = await status(oldFamily.id);
-    assert.equal(s.status, 'scanned'); assert.match(s.note, /Nhóm Youtube của bạn bị Google quét/);
+    assert.equal(s.status, 'scanned'); assert.equal(s.note, '', 'no message is filled in by itself');
     assert.equal((await f.customer()('verify', 'POST', { email: 'minhanh@example.com', code: (await a('state')).lookup_codes['minhanh@example.com'] })).items[0].view, 'incident', 'customers see the incident at once');
     let issue = (await a('state')).issues.find(i => i.id === created.id);
     await a(`issues/${created.id}`, 'PATCH', { revision: issue.revision, status: 'done', resolution: 'replace', replacement_email: 'owner04-new@example.com', expected_email: 'owner04@example.com' });
@@ -712,6 +712,68 @@ test('an open owner case can be deleted (reported by mistake) and the Family goe
     state = await a('state');
     assert.equal(state.issues.length, 0);
     assert.equal(state.family_statuses.find(s => s.family_id === fam.id).status, 'active');
+  } finally { await f.close(); }
+});
+
+test('Thông báo cho khách: the shop message of one Family shows on its lookup, stays through Fix lỗi and goes when cleared', async () => {
+  const f = await server(); try {
+    const a = f.admin;
+    const fam = await a('families', 'POST', { name: 'Family 31', manager_email: 'owner31@example.com' }, 201), other = await a('families', 'POST', { name: 'Family 32', manager_email: 'owner32@example.com' }, 201);
+    await a('members', 'POST', { family_id: fam.id, email: 'tb1@example.com', customer_name: 'TB 1', expires_at: '2099-01-01' }, 201);
+    await a('members', 'POST', { family_id: other.id, email: 'tb2@example.com', customer_name: 'TB 2', expires_at: '2099-01-01' }, 201);
+    const message = 'Nhóm đang bị khoá thanh toán.\nShop xử lý trong hôm nay.';
+    const saved = await a(`families/${fam.id}/notice`, 'PATCH', { notice: '  ' + message + '  ' });
+    assert.equal(saved.notice, message); assert.ok(saved.notice_at);
+    let state = await a('state'); const row = state.family_statuses.find(s => s.family_id === fam.id);
+    assert.equal(row.notice, message); assert.equal(row.status, 'active');
+    const codes = state.lookup_codes, c1 = f.customer(), c2 = f.customer();
+    let item = (await c1('verify', 'POST', { email: 'tb1@example.com', code: codes['tb1@example.com'] })).items[0];
+    assert.equal(item.notice, message); assert.equal(item.notice_at, saved.notice_at);
+    assert.equal((await c2('verify', 'POST', { email: 'tb2@example.com', code: codes['tb2@example.com'] })).items[0].notice, '', 'other Family sees nothing');
+    // Reporting the owner mail rewrites the status note but keeps the shop notice.
+    await a('issues', 'POST', { family_id: fam.id, target_type: 'manager', title: 'Bị quét' }, 201);
+    state = await a('state'); const scanned = state.family_statuses.find(s => s.family_id === fam.id);
+    assert.equal(scanned.status, 'scanned'); assert.equal(scanned.notice, message);
+    item = (await c1('me')).items[0]; assert.equal(item.view, 'incident'); assert.equal(item.notice, message);
+    await a(`families/${fam.id}/status`, 'PATCH', { status: 'active', note: '', revision: scanned.revision });
+    assert.equal((await c1('me')).items[0].notice, message, 'status change keeps the notice');
+    const cleared = await a(`families/${fam.id}/notice`, 'PATCH', { notice: '' });
+    assert.equal(cleared.notice, ''); assert.equal(cleared.notice_at, '');
+    assert.equal((await c1('me')).items[0].notice, '');
+    await a(`families/${other.id}/notice`, 'PATCH', { notice: 'x'.repeat(1001) }, 400);
+    await a('families/99999/notice', 'PATCH', { notice: 'x' }, 404);
+    assert.ok((await a('journal')).entries.some(e => e.action === 'Sửa thông báo cho khách'));
+    // Lời nhắn mẫu: the shop's own list, in order, blanks dropped, never on the public lookup.
+    assert.deepEqual((await a('message-templates', 'PATCH', { templates: [' Mẫu A ', '', 'Mẫu B\ndòng 2'] })).templates, ['Mẫu A', 'Mẫu B\ndòng 2']);
+    assert.deepEqual((await a('state')).message_templates, ['Mẫu A', 'Mẫu B\ndòng 2']);
+    assert.equal(JSON.stringify(await f.customer()('info')).includes('Mẫu A'), false);
+    await a('message-templates', 'PATCH', { templates: Array(21).fill('x') }, 400);
+    assert.deepEqual((await a('message-templates', 'PATCH', { templates: ['Mẫu B\ndòng 2'] })).templates, ['Mẫu B\ndòng 2']);
+    assert.ok((await a('journal')).entries.some(e => e.action === 'Sửa lời nhắn mẫu'));
+    // A backup made before this field restores with an empty notice.
+    const backup = await a('backup'); assert.ok('notice' in backup.tables.family_statuses[0]);
+  } finally { await f.close(); }
+});
+
+test('Xóa nhiều link mời: ticked links go in one step, a link handed to a customer stays', async () => {
+  const f = await server(); try {
+    const a = f.admin;
+    const fam = await a('families', 'POST', { name: 'Family 33', manager_email: 'owner33@example.com' }, 201), other = await a('families', 'POST', { name: 'Family 34', manager_email: 'owner34@example.com' }, 201);
+    const m = await a('members', 'POST', { family_id: fam.id, email: 'xl1@example.com', customer_name: 'XL 1', expires_at: '2099-01-01' }, 201);
+    const ids = [];
+    for (let k = 1; k <= 4; k++) ids.push((await a(`families/${fam.id}/invites`, 'POST', { label: `shop+xl${k}@gmail.com`, url: `https://families.google.com/join/promo/xl${k}`, sent_on: day(0) }, 201)).id);
+    const foreign = (await a(`families/${other.id}/invites`, 'POST', { label: 'shop+xo@gmail.com', url: 'https://families.google.com/join/promo/xo', sent_on: day(0) }, 201)).id;
+    let state = await a('state'); const held = state.invites.find(i => i.id === ids[0]);
+    await a(`invites/${ids[0]}/holder`, 'PATCH', { member_id: m.id, revision: held.revision });
+    assert.equal((await a('state')).invites.find(i => i.id === ids[0]).holder_state, 'assigned');
+    await a(`families/${fam.id}/invites/delete`, 'POST', { ids: [ids[1], foreign] }, 409);
+    await a(`families/${fam.id}/invites/delete`, 'POST', { ids: [] }, 400);
+    const result = await a(`families/${fam.id}/invites/delete`, 'POST', { ids: [...ids, ids[2]] });
+    assert.equal(result.deleted, 3); assert.deepEqual(result.skipped, ['shop+xl1@gmail.com']);
+    state = await a('state');
+    assert.deepEqual(state.invites.filter(i => i.family_id === fam.id).map(i => i.id), [ids[0]]);
+    assert.ok(state.invites.some(i => i.id === foreign), 'other Family untouched');
+    assert.ok((await a('journal')).entries.some(e => e.action === 'Xóa link mời'));
   } finally { await f.close(); }
 });
 

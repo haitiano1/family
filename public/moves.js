@@ -12,11 +12,29 @@ const moveStates = {
   waiting: ['amber', 'Chờ link · khách tra cứu là nhận']
 };
 export const reportLabels = { twelve_months: 'Google báo chỉ được đổi nhóm 1 lần trong 12 tháng', invite_used: 'Lời mời đã dùng hoặc hết hạn', other_family: 'Khách đang ở nhóm gia đình khác', other: 'Lỗi khác' };
-const statusTemplates = {
-  checking: name => `Shop đang kiểm tra sự cố của ${name}. Bạn chưa cần làm gì, shop sẽ cập nhật tại đây.`,
-  scanned: name => `${name} bị Google quét nên một số thành viên mất Premium. Shop đang chuyển bạn sang nhóm mới, hạn dùng giữ nguyên.`,
-  disabled: name => `Tài khoản chủ của ${name} bị Google vô hiệu hoá. Shop đang chuyển bạn sang nhóm mới, hạn dùng giữ nguyên.`
-};
+// Lời nhắn mẫu: the shop's own messages (Cài đặt tra cứu → Lời nhắn mẫu). Nothing is filled in by itself:
+// tapping a template puts it in the message box, and the box's text can be kept as a new template.
+const shortText = t => t.length > 42 ? t.slice(0, 40).trimEnd() + '…' : t;
+export function templatePicker(ctx, target) {
+  const list = ctx.state.message_templates || [];
+  return `<div class="template-pick" data-template-target="${target}"><span class="template-label">Lời nhắn mẫu:</span>${list.length ? list.map((t, i) => `<button type="button" class="template-chip" data-template-use="${i}" title="${ctx.escape(t)}">${ctx.escape(shortText(t))}</button>`).join('') : '<span class="subtext-inline">Chưa có mẫu.</span>'}<button type="button" class="template-link" data-template-save>+ Lưu nội dung này làm mẫu</button><button type="button" class="template-link" data-action="message-templates">Sửa mẫu</button></div>`;
+}
+export function initMessageTemplates(ctx) {
+  document.addEventListener('click', async event => {
+    const use = event.target.closest('[data-template-use]'), save = event.target.closest('[data-template-save]');
+    if (!use && !save) return;
+    const pick = event.target.closest('.template-pick'), box = pick && document.getElementById(pick.dataset.templateTarget); if (!box) return;
+    const list = ctx.state.message_templates || [];
+    if (use) { box.value = list[Number(use.dataset.templateUse)] || ''; box.focus(); return; }
+    const value = box.value.trim(); if (!value) { ctx.toast('Viết lời nhắn vào ô trước rồi mới lưu làm mẫu.'); box.focus(); return; }
+    if (list.includes(value)) { ctx.toast('Lời nhắn này đã có trong mẫu.'); return; }
+    save.disabled = true;
+    try {
+      const saved = await ctx.patch('message-templates', { templates: [...list, value] });
+      ctx.state.message_templates = saved.templates; pick.outerHTML = templatePicker(ctx, pick.dataset.templateTarget); ctx.toast('Đã lưu làm lời nhắn mẫu.');
+    } catch (error) { ctx.toast(error.message); save.disabled = false; }
+  });
+}
 
 // The page link the shop shares: the short link when one is set (beeflix.vn/haiytb), else this site.
 export const lookupPageUrl = (state = {}) => { const base = state.lookup_settings?.short_domain; return base ? (/^https?:\/\/[^/]+\/./.test(base) ? base : base + '/') : location.origin + '/tra-cuu.html'; };
@@ -174,10 +192,30 @@ function expiryText(ctx, invite) {
   const badge = left < 0 ? `<span class="badge red">Đã hết hạn</span>` : left <= 2 ? `<span class="badge amber">Còn ${left} ngày</span>` : `<span class="badge green">Còn ${left} ngày</span>`;
   return `<strong class="date-value">${ctx.day(invite.expires_on)}</strong><span class="subtext">${badge}</span>`;
 }
+// Links ticked for Xóa đã chọn, kept across redraws of the Family page.
+const pickedInvites = new Set();
+function bulkBar(ctx, familyId, invites) {
+  const picked = invites.filter(i => pickedInvites.has(i.id)).length, all = picked > 0 && picked === invites.length;
+  return `<div class="bulk-bar" data-invite-bulk="${familyId}"><label class="bulk-all"><input type="checkbox" data-invite-all="${familyId}"${all ? ' checked' : ''}> Chọn tất cả</label><span class="bulk-count">${picked ? `Đã chọn <strong>${picked}</strong> link` : 'Tick từng link để xóa nhiều link một lần'}</span>${ctx.btn('invites-delete', picked ? `Xóa ${picked} link đã chọn` : 'Xóa đã chọn', 'danger tiny', `data-id="${familyId}"${picked ? '' : ' disabled'}`)}</div>`;
+}
+export function initInviteBulk(ctx) {
+  document.addEventListener('change', event => {
+    const one = event.target.closest('[data-invite-pick]'), all = event.target.closest('[data-invite-all]');
+    if (!one && !all) return;
+    const familyId = Number((one || all).dataset.family || all?.dataset.inviteAll);
+    const boxes = [...document.querySelectorAll(`[data-invite-pick][data-family="${familyId}"]`)];
+    if (all) boxes.forEach(box => { box.checked = all.checked; });
+    boxes.forEach(box => { box.checked ? pickedInvites.add(Number(box.dataset.invitePick)) : pickedInvites.delete(Number(box.dataset.invitePick)); box.closest('tr')?.classList.toggle('is-picked', box.checked); });
+    const bar = document.querySelector(`[data-invite-bulk="${familyId}"]`), invites = (ctx.state.invites || []).filter(i => i.family_id === familyId && i.holder_state !== 'retired');
+    if (bar) bar.outerHTML = bulkBar(ctx, familyId, invites);
+  });
+}
 function inviteTable(ctx, invites) {
   const { escape, btn } = ctx;
   if (!invites.length) return '<p class="muted">Chưa có link mời. Gửi lời mời từ tài khoản chủ Family tới các mail của bạn (ví dụ mail+1, mail+2…), rồi dán link nút <strong>Chấp nhận lời mời</strong> vào đây.</p>';
-  return `<div class="table-wrap"><table class="lookup-table"><thead><tr><th scope="col">LINK MỜI</th><th scope="col">LỜI MỜI HẾT HẠN</th><th scope="col">TRẠNG THÁI</th><th scope="col">THAO TÁC</th></tr></thead><tbody>${invites.map(i => `<tr><td data-column="invite">${inviteTitle(ctx, i)}<span class="subtext lookup-url">${escape(i.url)}</span></td><td data-column="expiry" class="date-cell">${expiryText(ctx, i)}</td><td data-column="state">${inviteStateBadge(ctx, i)}</td><td data-column="actions"><div class="row-actions">${unsendButton(ctx, i)}${ctx.copyButton(i.url, 'link mời', 'Copy link')}${btn('invite-recipients', recipientsOf(i).length ? 'Sửa mail gán' : 'Gán mail', 'secondary tiny', `data-id="${i.id}" title="Ghi lại mail khách bạn đã gửi link này"`)}${ctx.moreActions('Thao tác khác cho ' + inviteName(ctx, i), btn('invite-edit', 'Sửa link', 'secondary tiny', `data-id="${i.id}"`) + (i.holder_state === 'assigned' ? '' : btn('invite-delete', 'Xóa link', 'danger tiny', `data-id="${i.id}"`)))}</div></td></tr>`).join('')}</tbody></table></div>`;
+  const familyId = invites[0].family_id;
+  for (const id of [...pickedInvites]) if (!(ctx.state.invites || []).some(i => i.id === id)) pickedInvites.delete(id);
+  return bulkBar(ctx, familyId, invites) + `<div class="table-wrap"><table class="lookup-table"><thead><tr><th scope="col" class="pick-col"><span class="sr-label">Chọn</span></th><th scope="col">LINK MỜI</th><th scope="col">LỜI MỜI HẾT HẠN</th><th scope="col">TRẠNG THÁI</th><th scope="col">THAO TÁC</th></tr></thead><tbody>${invites.map(i => `<tr${pickedInvites.has(i.id) ? ' class="is-picked"' : ''}><td data-column="pick"><input type="checkbox" data-invite-pick="${i.id}" data-family="${familyId}" aria-label="Chọn ${escape(inviteName(ctx, i))}"${pickedInvites.has(i.id) ? ' checked' : ''}></td><td data-column="invite">${inviteTitle(ctx, i)}<span class="subtext lookup-url">${escape(i.url)}</span></td><td data-column="expiry" class="date-cell">${expiryText(ctx, i)}</td><td data-column="state">${inviteStateBadge(ctx, i)}</td><td data-column="actions"><div class="row-actions">${unsendButton(ctx, i)}${ctx.copyButton(i.url, 'link mời', 'Copy link')}${btn('invite-recipients', recipientsOf(i).length ? 'Sửa mail gán' : 'Gán mail', 'secondary tiny', `data-id="${i.id}" title="Ghi lại mail khách bạn đã gửi link này"`)}${ctx.moreActions('Thao tác khác cho ' + inviteName(ctx, i), btn('invite-edit', 'Sửa link', 'secondary tiny', `data-id="${i.id}"`) + (i.holder_state === 'assigned' ? '' : btn('invite-delete', 'Xóa link', 'danger tiny', `data-id="${i.id}"`)))}</div></td></tr>`).join('')}</tbody></table></div>`;
 }
 function moveBadge(ctx, move) {
   const key = move.effective_state === 'assigned' && move.invite_id == null ? 'waiting' : move.effective_state;
@@ -229,14 +267,18 @@ function telegramCard(ctx) {
 }
 
 // Customer-facing status, shown inside the Family info card: badge, message line, button, and the incident callout.
+// Thông báo cho khách: the shop's own message for one Family, shown on top of the lookup page.
+export function noticeLine(ctx, status) {
+  return status.notice ? `<p class="family-notice-line"><span class="badge amber">Thông báo cho khách</span> ${ctx.escape(status.notice)} <span class="subtext-inline">· ${ctx.date(status.notice_at)}</span></p>` : '';
+}
 export function familyStatusParts(ctx, family) {
   if (!ctx.state.lookup_supported) return { badge: '', line: '', action: '', callout: '' };
   const { state, escape, btn } = ctx;
   const status = familyStatus(state, family.id), members = state.members.filter(m => m.family_id === family.id);
   return {
     badge: `<span class="badge ${statusColors[status.status]}" title="Trạng thái khách thấy khi tra cứu">${escape(familyStatusLabels[status.status])}</span>`,
-    line: `<p>Lời nhắn cho khách: ${status.note ? escape(status.note) : 'Chưa có'}${status.updated_at ? ` <span class="subtext-inline">· cập nhật ${ctx.date(status.updated_at)}</span>` : ''}</p>`,
-    action: btn('family-status', 'Đổi trạng thái', 'secondary', `data-id="${family.id}"`),
+    line: `<p>Lời nhắn theo trạng thái: ${status.note ? escape(status.note) : 'Chưa có'}${status.updated_at ? ` <span class="subtext-inline">· cập nhật ${ctx.date(status.updated_at)}</span>` : ''}</p>` + noticeLine(ctx, status),
+    action: btn('family-notice', status.notice ? 'Sửa thông báo' : 'Thông báo cho khách', 'secondary', `data-id="${family.id}"`) + btn('family-status', 'Đổi trạng thái', 'secondary', `data-id="${family.id}"`),
     callout: problem(status.status) && members.length ? `<div class="notice lookup-callout"><div><strong>Nhóm đang có sự cố.</strong> Đã có Gmail chủ mới thì vào Fix lỗi → Đã fix → Đổi sang Gmail chủ mới: ${members.length} khách giữ nguyên trong Family này và tự nhận link mới khi tra cứu. Muốn dồn khách sang Family khác thì bấm nút bên cạnh.</div>${btn('move-open', 'Chuyển khách sang nhóm mới', 'primary', `data-id="${family.id}"`)}</div>` : ''
   };
 }
@@ -279,13 +321,13 @@ export function lookupPage(ctx) {
     // Folded like the Family page: the head keeps the counts, the full list opens on demand.
     + fold('lookup-moves', false, 'Link đã giao cho khách', [[waiting.length, 'chờ link', 'amber'], [handed.length, 'đã nhận link', 'green'], [moves.length - open.length, 'đã xong / cần xem', '']], moves.length ? moveTable(ctx, moves, true) + '<p class="subtext fold-help">Mới nhất trước. Khách chờ link sẽ tự nhận khi có link Sẵn sàng.</p>' : '<p class="muted">Chưa có khách nhận link.</p>')
     + telegramCard(ctx)
-    + `<section class="card"><div class="section-heading"><div><h2>Thông tin hiển thị cho khách</h2><p>Tên shop và link liên hệ xuất hiện trên trang tra cứu.</p></div><div class="row-actions">${btn('lookup-settings', 'Sửa thông tin', 'secondary')}</div></div><div class="list-item"><strong>Tên shop</strong><p>${escape(settings.shop_name || 'Chưa đặt')}</p></div><div class="list-item"><strong>Zalo</strong><p>${settings.zalo_url ? `<a class="contact-link" href="${escape(settings.zalo_url)}" target="_blank" rel="noopener noreferrer">${escape(settings.zalo_url)}</a>` : 'Chưa đặt'}</p></div><div class="list-item"><strong>Facebook</strong><p>${settings.facebook_url ? `<a class="contact-link" href="${escape(settings.facebook_url)}" target="_blank" rel="noopener noreferrer">${escape(settings.facebook_url)}</a>` : 'Chưa đặt'}</p></div><div class="list-item"><strong>Link liên hệ khác</strong><p>${settings.contact_url ? `<a class="contact-link" href="${escape(settings.contact_url)}" target="_blank" rel="noopener noreferrer">${escape(settings.contact_label || settings.contact_url)}</a>` : 'Chưa đặt'}</p></div><div class="list-item"><strong>Ghi chú cho khách</strong><p>${escape(settings.help_text || 'Chưa có')}</p></div></section>`
+    + `<section class="card"><div class="section-heading"><div><h2>Thông tin hiển thị cho khách</h2><p>Tên shop và link liên hệ xuất hiện trên trang tra cứu.</p></div><div class="row-actions">${btn('message-templates', 'Lời nhắn mẫu', 'secondary')}${btn('lookup-settings', 'Sửa thông tin', 'secondary')}</div></div><div class="list-item"><strong>Tên shop</strong><p>${escape(settings.shop_name || 'Chưa đặt')}</p></div><div class="list-item"><strong>Zalo</strong><p>${settings.zalo_url ? `<a class="contact-link" href="${escape(settings.zalo_url)}" target="_blank" rel="noopener noreferrer">${escape(settings.zalo_url)}</a>` : 'Chưa đặt'}</p></div><div class="list-item"><strong>Facebook</strong><p>${settings.facebook_url ? `<a class="contact-link" href="${escape(settings.facebook_url)}" target="_blank" rel="noopener noreferrer">${escape(settings.facebook_url)}</a>` : 'Chưa đặt'}</p></div><div class="list-item"><strong>Link liên hệ khác</strong><p>${settings.contact_url ? `<a class="contact-link" href="${escape(settings.contact_url)}" target="_blank" rel="noopener noreferrer">${escape(settings.contact_label || settings.contact_url)}</a>` : 'Chưa đặt'}</p></div><div class="list-item"><strong>Ghi chú cho khách</strong><p>${escape(settings.help_text || 'Chưa có')}</p></div></section>`
     + `<section class="card"><h2>Cách dùng</h2><ol class="lookup-steps"><li>Gửi mỗi khách link tra cứu riêng (menu … của khách → <strong>Copy link tra cứu</strong>), ví dụ lúc bán hoặc gia hạn.</li><li>Khi mail chủ bị quét: <strong>Fix lỗi → Báo lỗi</strong>. Family tự thành Bị quét và khách thấy lời nhắn.</li><li>Có Gmail chủ mới: <strong>Đã fix → Đổi sang Gmail chủ mới</strong>, chọn số mail mời. Khách ở lại Family và chờ link của chủ mới.</li><li>Mời các mail vừa tạo từ Gmail chủ mới, rồi bấm <strong>Lấy link mời</strong>${state.gmail_import ? '' : ' (cần kết nối Google Sheet; hoặc <strong>+ Thêm link mời</strong> để dán tay)'}.</li><li>Khách mở link tra cứu, nhập Gmail để thấy link vào nhóm mới; theo dõi tiến độ tại đây.</li></ol></section>`;
 }
 
 function statusFields(ctx, family, status) {
   const { escape } = ctx;
-  return `<div class="form-field"><label for="field-status">Trạng thái nhóm</label><select id="field-status" name="status">${Object.entries(familyStatusLabels).map(([key, text]) => `<option value="${key}" ${key === status.status ? 'selected' : ''}>${escape(text)}</option>`).join('')}</select></div><div class="form-field"><label for="field-note">Lời nhắn cho khách</label><textarea id="field-note" name="note" maxlength="1000" rows="5">${escape(status.note)}</textarea></div><p class="subtext">Khách chỉ thấy tên Family, trạng thái và lời nhắn này. Không hiện mail chủ hoặc khách khác.</p>`;
+  return `<div class="form-field"><label for="field-status">Trạng thái nhóm</label><select id="field-status" name="status">${Object.entries(familyStatusLabels).map(([key, text]) => `<option value="${key}" ${key === status.status ? 'selected' : ''}>${escape(text)}</option>`).join('')}</select></div><div class="form-field"><label for="field-note">Lời nhắn theo trạng thái (hiện trong tiến trình xử lý)</label><textarea id="field-note" name="note" maxlength="1000" rows="5">${escape(status.note)}</textarea></div><p class="subtext">Khách chỉ thấy tên Family, trạng thái và lời nhắn này. Không hiện mail chủ hoặc khách khác.</p>`;
 }
 // Gõ mail đã mời, để trống link: read the shop Gmail (same as Lấy link mời); the newest invitation to that
 // mail is filed under this Family whoever sent it.
@@ -399,14 +441,37 @@ export async function handleLookupAction(ctx, action, button) {
     ctx.modal('Tắt thông báo Telegram?', '<p>Khách vẫn báo mất Premium được và báo lỗi vẫn hiện ở Fix lỗi, chỉ không gửi tin Telegram nữa.</p>', async () => { await ctx.api('telegram', { method: 'DELETE', body: '{}' }); ctx.toast('Đã tắt thông báo Telegram.'); }, 'Tắt');
     return true;
   }
+  if (action === 'message-templates') {
+    const list = ctx.state.message_templates || [], rows = [...list, '', ''].slice(0, Math.max(20, list.length));
+    ctx.modal('Lời nhắn mẫu', '<p class="subtext">Mỗi ô là một mẫu, dùng cho <strong>Thông báo cho khách</strong> và <strong>Đổi trạng thái</strong>: bấm mẫu là chữ vào ô, không có gì tự điền. Xoá hết chữ trong ô để bỏ mẫu đó. Tối đa 20 mẫu.</p>'
+      + rows.slice(0, list.length + 2).map((t, i) => `<div class="form-field"><label for="field-tpl-${i}">Mẫu ${i + 1}${i >= list.length ? ' (mới)' : ''}</label><textarea id="field-tpl-${i}" name="tpl_${String(i).padStart(2, '0')}" maxlength="1000" rows="3" placeholder="Ví dụ: Nhóm đang bị Google khoá thanh toán, shop xử lý trong hôm nay. Bạn chưa cần làm gì.">${ctx.escape(t)}</textarea></div>`).join(''),
+      async data => {
+        const templates = Object.keys(data).filter(k => k.startsWith('tpl_')).sort().map(k => String(data[k]).trim()).filter(Boolean);
+        const saved = await ctx.patch('message-templates', { templates });
+        ctx.toast(`Đã lưu ${saved.templates.length} lời nhắn mẫu.`);
+      });
+    return true;
+  }
+  if (action === 'family-notice') {
+    const family = state.families.find(f => f.id === id); if (!family) return ctx.toast('Family đã thay đổi. Tải lại trang.'), true;
+    const status = familyStatus(state, id);
+    ctx.modal('Thông báo cho khách · ' + family.name,
+      `<div class="form-field"><label for="field-notice">Thông báo cho khách trong Family này</label><textarea id="field-notice" name="notice" maxlength="1000" rows="5" placeholder="Ví dụ: Nhóm đang bị Google khoá thanh toán, shop xử lý trong hôm nay. Bạn chưa cần làm gì, có link mới shop sẽ báo tại đây.">${ctx.escape(status.notice || '')}</textarea></div>`
+      + templatePicker(ctx, 'field-notice')
+      + '<p class="subtext">Khách trong Family này tra cứu sẽ thấy khung <strong>Thông báo từ shop</strong> ở đầu trang, cho đến khi bạn gỡ. Không ảnh hưởng trạng thái nhóm hay lời nhắn theo trạng thái. Xoá hết chữ rồi Lưu để gỡ thông báo.</p>',
+      async data => {
+        const saved = await ctx.patch(`families/${id}/notice`, { notice: data.notice });
+        ctx.toast(saved.notice ? 'Đã đăng thông báo. Khách trong Family này thấy ngay khi tra cứu.' : 'Đã gỡ thông báo cho khách.');
+      });
+    return true;
+  }
   if (action === 'family-status') {
     const family = state.families.find(f => f.id === id); if (!family) return ctx.toast('Family đã thay đổi. Tải lại trang.'), true;
     const status = familyStatus(state, id);
-    ctx.modal('Trạng thái cho khách · ' + family.name, statusFields(ctx, family, status), async data => {
+    ctx.modal('Trạng thái cho khách · ' + family.name, statusFields(ctx, family, status) + templatePicker(ctx, 'field-note'), async data => {
       await ctx.patch(`families/${id}/status`, { status: data.status, note: data.note, revision: status.revision });
       ctx.toast('Đã lưu trạng thái nhóm. Khách thấy ngay trên trang tra cứu.');
     });
-    $('#field-status').addEventListener('change', event => { const note = $('#field-note'); if (!note.value.trim() && statusTemplates[event.target.value]) note.value = statusTemplates[event.target.value](family.name); });
     return true;
   }
   if (action === 'invite-add') {
@@ -461,6 +526,17 @@ export async function handleLookupAction(ctx, action, button) {
       ctx.toast(result.assigned.length ? `Đã gán ${result.assigned.length} link: ${result.assigned.map(a => a.name || a.email).join(', ')}.` : 'Không còn link Sẵn sàng hoặc khách cần gán.', 8000);
       await ctx.refresh();
     } catch (error) { ctx.toast(error.message, 8000); } finally { if (button.isConnected) button.disabled = false; }
+    return true;
+  }
+  if (action === 'invites-delete') {
+    const family = state.families.find(f => f.id === id), picked = (state.invites || []).filter(i => i.family_id === id && i.holder_state !== 'retired' && pickedInvites.has(i.id));
+    if (!family || !picked.length) return ctx.toast('Tick chọn link cần xóa trước.'), true;
+    const held = picked.filter(i => i.holder_state === 'assigned');
+    ctx.modal(`Xóa ${picked.length} link mời?`, `<p>${picked.slice(0, 6).map(i => ctx.escape(inviteName(ctx, i))).join('<br>')}${picked.length > 6 ? `<br>… và ${picked.length - 6} link khác` : ''}</p><p>Chỉ xóa link khỏi kho của ${ctx.escape(family.name)}. Lời mời trên Google vẫn còn cho đến khi hết hạn.</p>${held.length ? `<p class="subtext">${held.length} link đang giao cho khách sẽ được giữ lại (thu hồi link trước nếu muốn xóa).</p>` : ''}`, async () => {
+      const result = await ctx.post(`families/${id}/invites/delete`, { ids: picked.map(i => i.id) });
+      picked.forEach(i => pickedInvites.delete(i.id));
+      ctx.toast(`Đã xóa ${result.deleted} link mời.${result.skipped.length ? ` Giữ lại ${result.skipped.length} link đang giao cho khách.` : ''}`);
+    }, 'Xóa');
     return true;
   }
   if (action === 'invite-delete') {

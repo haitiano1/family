@@ -18,7 +18,6 @@ export const inviteMailAlphabet = 'abcdefghjkmnpqrstuvwxyz23456789';
 export const inviteMailMax = 5;
 // The shop Gmail that receives every invitation (the Apps Script mailbox).
 export const inviteMailInbox = 'haihoangrr@gmail.com';
-export const autoScannedNote = name => 'Nhóm Youtube của bạn bị Google quét nên có thể mất Premium. Shop đang xử lý và sẽ cập nhật tại đây.';
 export function inviteMailBase(address) {
   const at = address.lastIndexOf('@'), local = address.slice(0, at).split('+')[0];
   return local && at > 0 ? local + address.slice(at) : '';
@@ -67,7 +66,7 @@ export function initLookup(db, { fail, email, text, calendarDate, log }) {
   }
   const revision = (value, message = 'Dữ liệu đã thay đổi. Tải lại trang rồi thử lại.') => { if (!Number.isInteger(value)) fail(message); return value; };
   const activeFamily = id => Number.isSafeInteger(id) && id > 0 ? one("SELECT f.*,a.email AS manager_email FROM families f JOIN accounts a ON a.id=f.manager_id WHERE f.id=? AND f.archived_at=''", id) : undefined;
-  const statusRow = familyId => one('SELECT * FROM family_statuses WHERE family_id=?', familyId) || { family_id: familyId, status: 'active', note: '', updated_at: '', revision: 0 };
+  const statusRow = familyId => one('SELECT * FROM family_statuses WHERE family_id=?', familyId) || { family_id: familyId, status: 'active', note: '', updated_at: '', revision: 0, notice: '', notice_at: '' };
   // A link already shown to a customer (Đã gửi) is not handed out again; a link of a replaced
   // owner (retired) is never handed out.
   const inviteState = invite => { if (invite.retired_at) return 'retired'; const state = inviteHolder(inviteRefs(invite.id)).state; return state === 'ready' && invite.sent_at ? 'sent' : state; };
@@ -92,6 +91,19 @@ export function initLookup(db, { fail, email, text, calendarDate, log }) {
     const path = url.pathname.replace(/\/+$/, '');
     if (!['https:', 'http:'].includes(url.protocol) || url.username || url.password || !/^(\/[A-Za-z0-9_-]{1,40})?$/.test(path) || url.search || url.hash || !/^[a-z0-9.-]+\.[a-z]{2,}$/i.test(url.hostname)) fail('Link ngắn không hợp lệ, ví dụ beeflix.vn hoặc beeflix.vn/haiytb');
     return url.origin.toLowerCase() + path;
+  }
+  // Lời nhắn mẫu: the shop's own reusable messages, picked in Thông báo cho khách and Đổi trạng thái.
+  // One lookup_settings row per message (message_template:01…), never part of the public shop settings.
+  function messageTemplates() { return all("SELECT value FROM lookup_settings WHERE name LIKE 'message_template:%' ORDER BY name").map(r => r.value); }
+  function saveMessageTemplates(data) {
+    if (!Array.isArray(data.templates) || data.templates.length > 20) fail('Tối đa 20 lời nhắn mẫu.');
+    const list = data.templates.map(t => text(t, 1000)).filter(Boolean);
+    return atomic('message_templates_save', () => {
+      run("DELETE FROM lookup_settings WHERE name LIKE 'message_template:%'");
+      list.forEach((value, i) => run('INSERT INTO lookup_settings(name,value) VALUES (?,?)', 'message_template:' + String(i + 1).padStart(2, '0'), value));
+      log(`Cá nhân: sửa lời nhắn mẫu (${list.length} mẫu)`);
+      return { ok: true, templates: list };
+    });
   }
   function saveSettings(data) {
     const values = { shop_name: text(data.shop_name, 100), contact_url: contactUrl(data.contact_url), contact_label: text(data.contact_label, 60), help_text: text(data.help_text, 500), short_domain: shortDomain(data.short_domain), zalo_url: contactUrl(data.zalo_url), facebook_url: contactUrl(data.facebook_url) };
@@ -341,7 +353,7 @@ export function initLookup(db, { fail, email, text, calendarDate, log }) {
     if (event === 'reported') closeReports(family);
     const old = one('SELECT * FROM family_statuses WHERE family_id=?', family.id), current = old?.status || 'active';
     if (event === 'reported' ? current !== 'active' : current === 'active') return;
-    const next = event === 'reported' ? 'scanned' : 'active', note = event === 'reported' ? autoScannedNote(family.name) : '';
+    const next = event === 'reported' ? 'scanned' : 'active', note = '';
     if (old) run('UPDATE family_statuses SET status=?,note=?,updated_at=?,revision=revision+1 WHERE family_id=?', next, note, now(), family.id);
     else run('INSERT INTO family_statuses(family_id,status,note,updated_at,revision) VALUES (?,?,?,?,1)', family.id, next, note, now());
     log(`Tự động: đặt trạng thái ${family.name} là ${label(next)} ${event === 'reported' ? 'khi báo lỗi mail quản lý' : 'khi hoàn tất Fix lỗi'}`);
@@ -364,7 +376,7 @@ export function initLookup(db, { fail, email, text, calendarDate, log }) {
     }
     // Customers keep their member status; each one waits for a link of the new owner's group.
     const status = statusRow(family.id), problem = problemStatuses.includes(status.status);
-    const old = { id: null, name: family.name, status: problem ? status.status : 'scanned', note: problem && status.note ? status.note : autoScannedNote(family.name) };
+    const old = { id: null, name: family.name, status: problem ? status.status : 'scanned', note: problem ? status.note : '' };
     const members = all('SELECT * FROM members WHERE family_id=? ORDER BY id', family.id);
     // "Đã mời, chưa vào" customers are handled like a normal Family: they do not wait for a link.
     const waiting = members.filter(member => member.membership_status !== 'invited');
@@ -377,6 +389,17 @@ export function initLookup(db, { fail, email, text, calendarDate, log }) {
     return { waiting: waiting.length, retired, invite_mails: mails };
   }
 
+  // Thông báo cho khách: free text for one Family, shown on top of its customers' lookup page until
+  // the shop clears it. Independent of the status note, which Fix lỗi rewrites by itself.
+  function saveNotice(familyId, data) {
+    const family = activeFamily(familyId); if (!family) fail('Không tìm thấy Family đang hoạt động.', 404);
+    const notice = text(data.notice, 1000), at = notice ? now() : '';
+    const old = one('SELECT * FROM family_statuses WHERE family_id=?', family.id);
+    if (old) run('UPDATE family_statuses SET notice=?,notice_at=?,revision=revision+1 WHERE family_id=?', notice, at, family.id);
+    else run("INSERT INTO family_statuses(family_id,status,note,updated_at,revision,notice,notice_at) VALUES (?,'active','',?,1,?,?)", family.id, now(), notice, at);
+    log(`Cá nhân: ${notice ? 'đặt' : 'gỡ'} thông báo cho khách ${family.name}`);
+    return { ok: true, notice, notice_at: at };
+  }
   function saveStatus(familyId, data) {
     const family = activeFamily(familyId); if (!family) fail('Không tìm thấy Family đang hoạt động.', 404);
     if (!familyStatuses.includes(data.status)) fail('Trạng thái nhóm không hợp lệ.');
@@ -503,6 +526,21 @@ export function initLookup(db, { fail, email, text, calendarDate, log }) {
     log(`Cá nhân: thêm link mời ${inviteLabel || '#' + result.lastInsertRowid} cho ${family.name}`);
     return { ok: true, id: Number(result.lastInsertRowid), assigned: autoAssign(family.id) };
   }
+  // Xóa nhiều link mời một lần (tick từng link hoặc Chọn tất cả). A link handed to a customer is
+  // skipped and reported, as single delete refuses it.
+  function deleteInvites(familyId, data) {
+    const family = activeFamily(familyId); if (!family) fail('Không tìm thấy Family đang hoạt động.', 404);
+    const ids = data.ids; if (!Array.isArray(ids) || !ids.length || ids.length > 200 || ids.some(id => !Number.isSafeInteger(id))) fail('Chọn link mời cần xóa.');
+    const rows = [...new Set(ids)].map(id => one("SELECT * FROM family_invites WHERE id=? AND family_id=? AND retired_at=''", id, family.id));
+    if (rows.some(row => !row)) fail('Link mời đã thay đổi. Tải lại trang rồi thử lại.', 409);
+    const held = rows.filter(row => inviteHolder(inviteRefs(row.id)).state === 'assigned'), gone = rows.filter(row => !held.includes(row));
+    const name = row => row.label || '#' + row.id;
+    return atomic('invites_delete', () => {
+      for (const row of gone) run('DELETE FROM family_invites WHERE id=?', row.id);
+      if (gone.length) log(`Cá nhân: xóa ${gone.length} link mời của ${family.name}: ${gone.map(name).join(', ')}`);
+      return { ok: true, deleted: gone.length, skipped: held.map(name) };
+    });
+  }
   function deleteInvite(id, data) {
     const old = one('SELECT i.*,f.name AS family_name FROM family_invites i JOIN families f ON f.id=i.family_id WHERE i.id=?', id); if (!old) fail('Không tìm thấy link mời.', 404);
     if (revision(data.revision) !== old.revision) fail('Link mời vừa được sửa ở nơi khác. Tải lại rồi thử lại.', 409);
@@ -608,7 +646,8 @@ export function initLookup(db, { fail, email, text, calendarDate, log }) {
     });
     return {
       lookup_supported: true, lookup_settings: settings(),
-      family_statuses: all('SELECT family_id,status,note,updated_at,revision FROM family_statuses'),
+      family_statuses: all('SELECT family_id,status,note,updated_at,revision,notice,notice_at FROM family_statuses'),
+      message_templates: messageTemplates(),
       invites, moves, lookup_codes: Object.fromEntries(all('SELECT DISTINCT email FROM members').map(r => [r.email, codeFor(r.email, key)])),
       invite_mails: all('SELECT id,family_id,email,created_at,auto_assign FROM invite_mails ORDER BY id'), invite_base_email: inviteMailInbox,
       // Open reports, and the ones handled in the last week for context.
@@ -659,7 +698,7 @@ export function initLookup(db, { fail, email, text, calendarDate, log }) {
       }
       const waiting = !allocated && !move && joinable(member) && status.status === 'active', problem = latestReport(member.id);
       const view = move && openMoveStates.includes(move.state) ? 'move' : problemStatuses.includes(status.status) ? 'incident' : problem?.state === 'open' ? 'reported' : waiting ? 'waiting' : period.expiry_status === 'expired' ? 'expired' : 'normal';
-      return { member_ref: member.id, problem, family_name: member.family_name, plan_months: member.plan_months, expires_at: member.expires_at, ...period, membership_status: member.membership_status, status: status.status, status_note: status.note, status_updated_at: status.updated_at, view, move };
+      return { member_ref: member.id, problem, family_name: member.family_name, plan_months: member.plan_months, expires_at: member.expires_at, ...period, membership_status: member.membership_status, status: status.status, status_note: status.note, status_updated_at: status.updated_at, notice: status.notice || '', notice_at: status.notice_at || '', view, move };
     });
     return { email: address, today: current, shop: settings(), items };
   }
@@ -759,5 +798,5 @@ export function initLookup(db, { fail, email, text, calendarDate, log }) {
     return { ok: true };
   }
 
-  return { setHolder, autoAssign, assignFamilyLinks, saveRecipients, todoList, saveTodo, deleteTodo, adminState, settings, saveSettings, rotateCode, generateInviteMails, deleteInviteMails, markInviteSent, handOver, issueStatus, ownerReplaced, saveStatus, customerProblem, handleReport, connectTelegram, testTelegram, disconnectTelegram, saveInvite, deleteInvite, bulkMove, updateMove, result, verify, sessionEmail, logout, customerOpen, customerJoined, customerReport };
+  return { deleteInvites, saveNotice, saveMessageTemplates, setHolder, autoAssign, assignFamilyLinks, saveRecipients, todoList, saveTodo, deleteTodo, adminState, settings, saveSettings, rotateCode, generateInviteMails, deleteInviteMails, markInviteSent, handOver, issueStatus, ownerReplaced, saveStatus, customerProblem, handleReport, connectTelegram, testTelegram, disconnectTelegram, saveInvite, deleteInvite, bulkMove, updateMove, result, verify, sessionEmail, logout, customerOpen, customerJoined, customerReport };
 }

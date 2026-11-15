@@ -904,3 +904,19 @@ td[data-column="family"] .subtext { margin-top: 1px; }
 .assign-all .subtext { margin: 8px 0 0; }
 .pending-plan { margin-left: 6px; font-size: 12px; color: #0f766e; }
 .pending-plan.muted { color: var(--muted); }
+
+/* 0.32.16 Thông báo cho khách + Lời nhắn mẫu */
+.family-notice-line { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px; }
+.template-pick { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: -4px 0 12px; }
+.template-label { font-size: 12px; font-weight: 650; color: var(--muted); }
+.template-chip { max-width: 100%; padding: 6px 10px; border: 1px solid var(--border-strong); border-radius: 999px; background: var(--surface); color: var(--ink); font-size: 12px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.template-chip:hover { border-color: var(--blue); color: var(--blue-dark); background: var(--blue-soft); }
+.template-link { padding: 6px 4px; border: 0; background: none; color: var(--blue-dark); font-size: 12px; font-weight: 650; text-decoration: underline; text-underline-offset: 3px; }
+
+/* Xóa nhiều link mời */
+.bulk-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 14px; margin: 4px 0 8px; padding: 8px 12px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface-soft); }
+.bulk-all { display: inline-flex; align-items: center; gap: 7px; font-size: 13px; font-weight: 650; cursor: pointer; }
+.bulk-count { flex: 1 1 auto; font-size: 13px; color: var(--muted); }
+.bulk-bar input[type=checkbox], .lookup-table td[data-column="pick"] input { width: 18px; height: 18px; accent-color: var(--blue); cursor: pointer; }
+.lookup-table th.pick-col, .lookup-table td[data-column="pick"] { width: 34px; padding-right: 0; }
+.lookup-table tr.is-picked td { background: var(--red-soft); }

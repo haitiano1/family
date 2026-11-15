@@ -129,6 +129,15 @@ main { padding-top: 22px; padding-bottom: 32px; display: flex; flex-direction: c
 .timeline > li.now:has(.step-body)::before { display: none; }
 @keyframes ring { 70% { box-shadow: 0 0 0 9px rgba(34, 197, 94, 0); } 100% { box-shadow: 0 0 0 0 rgba(34, 197, 94, 0); } }
 
+/* Thông báo từ shop: the shop's message for this Family, first thing on the page */
+.shop-notice { gap: 8px; border-color: var(--warn-line); background: var(--warn-tint); box-shadow: inset 4px 0 0 var(--warn); }
+.shop-notice-head { display: flex; align-items: center; gap: 10px; }
+.shop-notice-head h2 { color: var(--warn-ink); }
+.shop-notice-icon { flex: none; display: grid; place-items: center; width: 34px; height: 34px; border-radius: 999px; background: var(--warn); color: #fff; }
+.shop-notice-icon svg { width: 19px; height: 19px; }
+.shop-notice p { color: var(--ink); font-size: 15px; white-space: pre-line; overflow-wrap: anywhere; }
+.shop-notice .sub { color: var(--warn-ink); }
+
 /* What to do: numbered actions inside the current step */
 .todo { list-style: none; margin: 0; padding: 0; display: grid; gap: 14px; counter-reset: todo; }
 .todo > li { display: grid; grid-template-columns: 24px minmax(0, 1fr); gap: 8px 10px; align-items: center; counter-increment: todo; }
