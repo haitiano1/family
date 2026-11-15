@@ -715,6 +715,39 @@ test('an open owner case can be deleted (reported by mistake) and the Family goe
   } finally { await f.close(); }
 });
 
+test('Thông báo cho khách: the shop message of one Family shows on its lookup, stays through Fix lỗi and goes when cleared', async () => {
+  const f = await server(); try {
+    const a = f.admin;
+    const fam = await a('families', 'POST', { name: 'Family 31', manager_email: 'owner31@example.com' }, 201), other = await a('families', 'POST', { name: 'Family 32', manager_email: 'owner32@example.com' }, 201);
+    await a('members', 'POST', { family_id: fam.id, email: 'tb1@example.com', customer_name: 'TB 1', expires_at: '2099-01-01' }, 201);
+    await a('members', 'POST', { family_id: other.id, email: 'tb2@example.com', customer_name: 'TB 2', expires_at: '2099-01-01' }, 201);
+    const message = 'Nhóm đang bị khoá thanh toán.\nShop xử lý trong hôm nay.';
+    const saved = await a(`families/${fam.id}/notice`, 'PATCH', { notice: '  ' + message + '  ' });
+    assert.equal(saved.notice, message); assert.ok(saved.notice_at);
+    let state = await a('state'); const row = state.family_statuses.find(s => s.family_id === fam.id);
+    assert.equal(row.notice, message); assert.equal(row.status, 'active');
+    const codes = state.lookup_codes, c1 = f.customer(), c2 = f.customer();
+    let item = (await c1('verify', 'POST', { email: 'tb1@example.com', code: codes['tb1@example.com'] })).items[0];
+    assert.equal(item.notice, message); assert.equal(item.notice_at, saved.notice_at);
+    assert.equal((await c2('verify', 'POST', { email: 'tb2@example.com', code: codes['tb2@example.com'] })).items[0].notice, '', 'other Family sees nothing');
+    // Reporting the owner mail rewrites the status note but keeps the shop notice.
+    await a('issues', 'POST', { family_id: fam.id, target_type: 'manager', title: 'Bị quét' }, 201);
+    state = await a('state'); const scanned = state.family_statuses.find(s => s.family_id === fam.id);
+    assert.equal(scanned.status, 'scanned'); assert.equal(scanned.notice, message);
+    item = (await c1('me')).items[0]; assert.equal(item.view, 'incident'); assert.equal(item.notice, message);
+    await a(`families/${fam.id}/status`, 'PATCH', { status: 'active', note: '', revision: scanned.revision });
+    assert.equal((await c1('me')).items[0].notice, message, 'status change keeps the notice');
+    const cleared = await a(`families/${fam.id}/notice`, 'PATCH', { notice: '' });
+    assert.equal(cleared.notice, ''); assert.equal(cleared.notice_at, '');
+    assert.equal((await c1('me')).items[0].notice, '');
+    await a(`families/${other.id}/notice`, 'PATCH', { notice: 'x'.repeat(1001) }, 400);
+    await a('families/99999/notice', 'PATCH', { notice: 'x' }, 404);
+    assert.ok((await a('journal')).entries.some(e => e.action === 'Sửa thông báo cho khách'));
+    // A backup made before this field restores with an empty notice.
+    const backup = await a('backup'); assert.ok('notice' in backup.tables.family_statuses[0]);
+  } finally { await f.close(); }
+});
+
 test('Gán mail: note up to 5 customer mails on a link, optionally ticking it Đã gửi', async () => {
   const f = await server(), target = await server(); try {
     const a = f.admin;

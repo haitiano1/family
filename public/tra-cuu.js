@@ -197,6 +197,12 @@ function problemForm(item) {
     <div class="actions"><button type="submit" class="btn primary">Gửi cho shop</button><button type="button" class="btn" data-act="problem-cancel">Quay lại</button></div>
   </form></section>`;
 }
+// Thông báo từ shop: the shop's message for this customer's Family, on top until the shop removes it.
+const megaphone = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 11v2a1 1 0 0 0 1 1h2l5 4V6L6 10H4a1 1 0 0 0-1 1z"/><path d="M15 9a3 3 0 0 1 0 6"/><path d="M18 6a7 7 0 0 1 0 12"/></svg>';
+function noticeCard(item) {
+  if (!item.notice) return '';
+  return `<section class="card shop-notice" role="note" aria-label="Thông báo từ shop"><div class="shop-notice-head"><span class="shop-notice-icon">${megaphone}</span><h2>Thông báo từ shop</h2></div><p>${escape(item.notice)}</p>${item.notice_at ? `<span class="sub">Cập nhật ${time(item.notice_at)}</span>` : ''}</section>`;
+}
 function calmCard(item) {
   const expired = item.view === 'expired', open = problemOpen === item.member_ref, handled = item.problem?.state === 'handled';
   return `<section class="card status ${expired ? 'stop' : 'done'}">
@@ -213,7 +219,7 @@ function calmCard(item) {
 }
 function itemView(item) {
   const flow = flowOf(item);
-  return flow ? statusCard(item, flow) + timelineCard(flow) + planCard(item) : calmCard(item);
+  return noticeCard(item) + (flow ? statusCard(item, flow) + timelineCard(flow) + planCard(item) : calmCard(item));
 }
 function resultView(focus = true) {
   const items = data.items || [];

@@ -752,7 +752,7 @@ test('PHP lookup page: Family status, invite pool, bulk move, Gmail + code sign-
  await a('invites/'+invite.id+'/sent','PATCH',{sent:true,revision:state.invites.find(i=>i.id===invite.id).revision},409);assert.ok((await a('journal')).entries.some(e=>e.action==='Đánh dấu link đã gửi'));
  const fresh=await a('backup');assert.equal(fresh.version,10);assert.equal(fresh.tables.invite_mails.length,3);assert.ok(fresh.tables.family_invites.every(i=>'sent_at' in i));
  sql(`ALTER TABLE ${f.db}.family_invites DROP COLUMN sent_at, DROP COLUMN retired_at`);sql(`DROP TABLE ${f.db}.invite_mails`);sql(`UPDATE ${f.db}.app_meta SET value='1' WHERE name='lookup_schema'`);
- state=await a('state');assert.equal(state.invite_mails.length,0);assert.ok(state.invites.every(i=>i.sent_at===''&&i.retired_at===''));assert.equal(sql(`SELECT value FROM ${f.db}.app_meta WHERE name='lookup_schema'`),'7');
+ state=await a('state');assert.equal(state.invite_mails.length,0);assert.ok(state.invites.every(i=>i.sent_at===''&&i.retired_at===''));assert.equal(sql(`SELECT value FROM ${f.db}.app_meta WHERE name='lookup_schema'`),'8');
  // Fix lỗi on the owner mail marks the Family Bị quét; completing the case puts it back to active.
  const issue=await a('issues','POST',{family_id:next.id,target_type:'manager',title:'Mail chủ bị quét'},201);state=await a('state');const auto=state.family_statuses.find(x=>x.family_id===next.id);assert.equal(auto.status,'scanned');assert.match(auto.note,/Nhóm Youtube của bạn bị Google quét/);
  const opened=state.issues.find(x=>x.id===issue.id);await a('issues/'+issue.id,'PATCH',{revision:opened.revision,status:'done',resolution:'keep'});state=await a('state');assert.equal(state.family_statuses.find(x=>x.family_id===next.id).status,'active');
@@ -766,6 +766,10 @@ test('PHP lookup page: Family status, invite pool, bulk move, Gmail + code sign-
  state=await a('state');const held=state.invites.find(i=>i.url===handed.invite_url);assert.equal(held.holder_state,'assigned');assert.ok(held.sent_at);
  // "Đã mời, chưa vào" is handled like a customer in the group: no waiting page, no link.
  const dmLook=await lookup('verify','POST',{email:'damoi@example.com',code:state.lookup_codes['damoi@example.com']});assert.equal(dmLook.body.items[0].view,'normal');assert.equal(dmLook.body.items[0].move,null);
+ // Thông báo cho khách: the shop's message for the Family reaches its customers and goes when cleared.
+ const tb=await a('families/'+next.id+'/notice','PATCH',{notice:'  Nhóm đang khoá thanh toán.\nShop xử lý hôm nay.  '});assert.equal(tb.notice,'Nhóm đang khoá thanh toán.\nShop xử lý hôm nay.');assert.ok(tb.notice_at);
+ assert.equal((await a('state')).family_statuses.find(x=>x.family_id===next.id).notice,tb.notice);assert.equal((await lookup('me','GET',undefined,200,dmLook.cookie)).body.items[0].notice,tb.notice);
+ assert.equal((await a('families/'+next.id+'/notice','PATCH',{notice:''})).notice,'');assert.equal((await lookup('me','GET',undefined,200,dmLook.cookie)).body.items[0].notice,'');
  await a('members/'+dm.id,'DELETE');
  // A customer tells the shop Premium stopped; reporting the owner mail closes it.
  const s30=await a('families','POST',{name:'Family 30',manager_email:'owner30@example.com'},201);await a('members','POST',{family_id:s30.id,email:'p30@example.com',expires_at:'2099-01-01',membership_status:'active'},201);

@@ -1,3 +1,7 @@
+# 0.32.16 — Thông báo cho khách từng Family
+
+Dùng **Cập nhật một chạm**. Bản này thêm 2 cột vào bảng trạng thái Family; web tự thêm khi chạy lần đầu, dữ liệu cũ giữ nguyên.
+
 # 0.32.15 — Bước thao tác căn trái, nút to hơn
 
 Dùng **Cập nhật một chạm**.

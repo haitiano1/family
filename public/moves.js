@@ -229,14 +229,18 @@ function telegramCard(ctx) {
 }
 
 // Customer-facing status, shown inside the Family info card: badge, message line, button, and the incident callout.
+// Thông báo cho khách: the shop's own message for one Family, shown on top of the lookup page.
+export function noticeLine(ctx, status) {
+  return status.notice ? `<p class="family-notice-line"><span class="badge amber">Thông báo cho khách</span> ${ctx.escape(status.notice)} <span class="subtext-inline">· ${ctx.date(status.notice_at)}</span></p>` : '';
+}
 export function familyStatusParts(ctx, family) {
   if (!ctx.state.lookup_supported) return { badge: '', line: '', action: '', callout: '' };
   const { state, escape, btn } = ctx;
   const status = familyStatus(state, family.id), members = state.members.filter(m => m.family_id === family.id);
   return {
     badge: `<span class="badge ${statusColors[status.status]}" title="Trạng thái khách thấy khi tra cứu">${escape(familyStatusLabels[status.status])}</span>`,
-    line: `<p>Lời nhắn cho khách: ${status.note ? escape(status.note) : 'Chưa có'}${status.updated_at ? ` <span class="subtext-inline">· cập nhật ${ctx.date(status.updated_at)}</span>` : ''}</p>`,
-    action: btn('family-status', 'Đổi trạng thái', 'secondary', `data-id="${family.id}"`),
+    line: `<p>Lời nhắn theo trạng thái: ${status.note ? escape(status.note) : 'Chưa có'}${status.updated_at ? ` <span class="subtext-inline">· cập nhật ${ctx.date(status.updated_at)}</span>` : ''}</p>` + noticeLine(ctx, status),
+    action: btn('family-notice', status.notice ? 'Sửa thông báo' : 'Thông báo cho khách', 'secondary', `data-id="${family.id}"`) + btn('family-status', 'Đổi trạng thái', 'secondary', `data-id="${family.id}"`),
     callout: problem(status.status) && members.length ? `<div class="notice lookup-callout"><div><strong>Nhóm đang có sự cố.</strong> Đã có Gmail chủ mới thì vào Fix lỗi → Đã fix → Đổi sang Gmail chủ mới: ${members.length} khách giữ nguyên trong Family này và tự nhận link mới khi tra cứu. Muốn dồn khách sang Family khác thì bấm nút bên cạnh.</div>${btn('move-open', 'Chuyển khách sang nhóm mới', 'primary', `data-id="${family.id}"`)}</div>` : ''
   };
 }
@@ -397,6 +401,18 @@ export async function handleLookupAction(ctx, action, button) {
   if (action === 'telegram-test') { try { await ctx.post('telegram/test', {}); ctx.toast('Đã gửi tin thử. Kiểm tra Telegram.'); } catch (error) { ctx.toast(error.message); } return true; }
   if (action === 'telegram-off') {
     ctx.modal('Tắt thông báo Telegram?', '<p>Khách vẫn báo mất Premium được và báo lỗi vẫn hiện ở Fix lỗi, chỉ không gửi tin Telegram nữa.</p>', async () => { await ctx.api('telegram', { method: 'DELETE', body: '{}' }); ctx.toast('Đã tắt thông báo Telegram.'); }, 'Tắt');
+    return true;
+  }
+  if (action === 'family-notice') {
+    const family = state.families.find(f => f.id === id); if (!family) return ctx.toast('Family đã thay đổi. Tải lại trang.'), true;
+    const status = familyStatus(state, id);
+    ctx.modal('Thông báo cho khách · ' + family.name,
+      `<div class="form-field"><label for="field-notice">Thông báo cho khách trong Family này</label><textarea id="field-notice" name="notice" maxlength="1000" rows="5" placeholder="Ví dụ: Nhóm đang bị Google khoá thanh toán, shop xử lý trong hôm nay. Bạn chưa cần làm gì, có link mới shop sẽ báo tại đây.">${ctx.escape(status.notice || '')}</textarea></div>`
+      + '<p class="subtext">Khách trong Family này tra cứu sẽ thấy khung <strong>Thông báo từ shop</strong> ở đầu trang, cho đến khi bạn gỡ. Không ảnh hưởng trạng thái nhóm hay lời nhắn theo trạng thái. Xoá hết chữ rồi Lưu để gỡ thông báo.</p>',
+      async data => {
+        const saved = await ctx.patch(`families/${id}/notice`, { notice: data.notice });
+        ctx.toast(saved.notice ? 'Đã đăng thông báo. Khách trong Family này thấy ngay khi tra cứu.' : 'Đã gỡ thông báo cho khách.');
+      });
     return true;
   }
   if (action === 'family-status') {

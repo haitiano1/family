@@ -67,7 +67,7 @@ export function initLookup(db, { fail, email, text, calendarDate, log }) {
   }
   const revision = (value, message = 'Dữ liệu đã thay đổi. Tải lại trang rồi thử lại.') => { if (!Number.isInteger(value)) fail(message); return value; };
   const activeFamily = id => Number.isSafeInteger(id) && id > 0 ? one("SELECT f.*,a.email AS manager_email FROM families f JOIN accounts a ON a.id=f.manager_id WHERE f.id=? AND f.archived_at=''", id) : undefined;
-  const statusRow = familyId => one('SELECT * FROM family_statuses WHERE family_id=?', familyId) || { family_id: familyId, status: 'active', note: '', updated_at: '', revision: 0 };
+  const statusRow = familyId => one('SELECT * FROM family_statuses WHERE family_id=?', familyId) || { family_id: familyId, status: 'active', note: '', updated_at: '', revision: 0, notice: '', notice_at: '' };
   // A link already shown to a customer (Đã gửi) is not handed out again; a link of a replaced
   // owner (retired) is never handed out.
   const inviteState = invite => { if (invite.retired_at) return 'retired'; const state = inviteHolder(inviteRefs(invite.id)).state; return state === 'ready' && invite.sent_at ? 'sent' : state; };
@@ -377,6 +377,17 @@ export function initLookup(db, { fail, email, text, calendarDate, log }) {
     return { waiting: waiting.length, retired, invite_mails: mails };
   }
 
+  // Thông báo cho khách: free text for one Family, shown on top of its customers' lookup page until
+  // the shop clears it. Independent of the status note, which Fix lỗi rewrites by itself.
+  function saveNotice(familyId, data) {
+    const family = activeFamily(familyId); if (!family) fail('Không tìm thấy Family đang hoạt động.', 404);
+    const notice = text(data.notice, 1000), at = notice ? now() : '';
+    const old = one('SELECT * FROM family_statuses WHERE family_id=?', family.id);
+    if (old) run('UPDATE family_statuses SET notice=?,notice_at=?,revision=revision+1 WHERE family_id=?', notice, at, family.id);
+    else run("INSERT INTO family_statuses(family_id,status,note,updated_at,revision,notice,notice_at) VALUES (?,'active','',?,1,?,?)", family.id, now(), notice, at);
+    log(`Cá nhân: ${notice ? 'đặt' : 'gỡ'} thông báo cho khách ${family.name}`);
+    return { ok: true, notice, notice_at: at };
+  }
   function saveStatus(familyId, data) {
     const family = activeFamily(familyId); if (!family) fail('Không tìm thấy Family đang hoạt động.', 404);
     if (!familyStatuses.includes(data.status)) fail('Trạng thái nhóm không hợp lệ.');
@@ -608,7 +619,7 @@ export function initLookup(db, { fail, email, text, calendarDate, log }) {
     });
     return {
       lookup_supported: true, lookup_settings: settings(),
-      family_statuses: all('SELECT family_id,status,note,updated_at,revision FROM family_statuses'),
+      family_statuses: all('SELECT family_id,status,note,updated_at,revision,notice,notice_at FROM family_statuses'),
       invites, moves, lookup_codes: Object.fromEntries(all('SELECT DISTINCT email FROM members').map(r => [r.email, codeFor(r.email, key)])),
       invite_mails: all('SELECT id,family_id,email,created_at,auto_assign FROM invite_mails ORDER BY id'), invite_base_email: inviteMailInbox,
       // Open reports, and the ones handled in the last week for context.
@@ -659,7 +670,7 @@ export function initLookup(db, { fail, email, text, calendarDate, log }) {
       }
       const waiting = !allocated && !move && joinable(member) && status.status === 'active', problem = latestReport(member.id);
       const view = move && openMoveStates.includes(move.state) ? 'move' : problemStatuses.includes(status.status) ? 'incident' : problem?.state === 'open' ? 'reported' : waiting ? 'waiting' : period.expiry_status === 'expired' ? 'expired' : 'normal';
-      return { member_ref: member.id, problem, family_name: member.family_name, plan_months: member.plan_months, expires_at: member.expires_at, ...period, membership_status: member.membership_status, status: status.status, status_note: status.note, status_updated_at: status.updated_at, view, move };
+      return { member_ref: member.id, problem, family_name: member.family_name, plan_months: member.plan_months, expires_at: member.expires_at, ...period, membership_status: member.membership_status, status: status.status, status_note: status.note, status_updated_at: status.updated_at, notice: status.notice || '', notice_at: status.notice_at || '', view, move };
     });
     return { email: address, today: current, shop: settings(), items };
   }
@@ -759,5 +770,5 @@ export function initLookup(db, { fail, email, text, calendarDate, log }) {
     return { ok: true };
   }
 
-  return { setHolder, autoAssign, assignFamilyLinks, saveRecipients, todoList, saveTodo, deleteTodo, adminState, settings, saveSettings, rotateCode, generateInviteMails, deleteInviteMails, markInviteSent, handOver, issueStatus, ownerReplaced, saveStatus, customerProblem, handleReport, connectTelegram, testTelegram, disconnectTelegram, saveInvite, deleteInvite, bulkMove, updateMove, result, verify, sessionEmail, logout, customerOpen, customerJoined, customerReport };
+  return { saveNotice, setHolder, autoAssign, assignFamilyLinks, saveRecipients, todoList, saveTodo, deleteTodo, adminState, settings, saveSettings, rotateCode, generateInviteMails, deleteInviteMails, markInviteSent, handOver, issueStatus, ownerReplaced, saveStatus, customerProblem, handleReport, connectTelegram, testTelegram, disconnectTelegram, saveInvite, deleteInvite, bulkMove, updateMove, result, verify, sessionEmail, logout, customerOpen, customerJoined, customerReport };
 }

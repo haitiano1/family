@@ -60,7 +60,7 @@ function lookupActiveFamily(PDO $db,mixed $id): array|false {
     return one($db,"SELECT f.*,a.email AS manager_email FROM families f JOIN accounts a ON a.id=f.manager_id WHERE f.id=? AND f.archived_at=''",[$id]);
 }
 function lookupStatusRow(PDO $db,int $familyId): array {
-    return one($db,'SELECT * FROM family_statuses WHERE family_id=?',[$familyId])?:['family_id'=>$familyId,'status'=>'active','note'=>'','updated_at'=>'','revision'=>0];
+    return one($db,'SELECT * FROM family_statuses WHERE family_id=?',[$familyId])?:['family_id'=>$familyId,'status'=>'active','note'=>'','updated_at'=>'','revision'=>0,'notice'=>'','notice_at'=>''];
 }
 
 function lookupSettings(PDO $db): array {
@@ -181,6 +181,16 @@ function lookupGenerateInviteMails(PDO $db,int $familyId,array $d): array {
     });
 }
 
+// Thông báo cho khách: free text for one Family, shown on top of its customers' lookup page until
+// the shop clears it. Independent of the status note, which Fix lỗi rewrites by itself.
+function lookupSaveNotice(PDO $db,int $familyId,array $d): array {
+    $f=lookupActiveFamily($db,$familyId);if(!$f)fail('Không tìm thấy Family đang hoạt động.',404);
+    $notice=text($d['notice']??'',1000);$at=$notice!==''?lookupNow():'';
+    if(one($db,'SELECT id FROM family_statuses WHERE family_id=?',[$f['id']]))q($db,'UPDATE family_statuses SET notice=?,notice_at=?,revision=revision+1 WHERE family_id=?',[$notice,$at,$f['id']]);
+    else q($db,"INSERT INTO family_statuses(family_id,status,note,updated_at,revision,notice,notice_at) VALUES (?,'active','',?,1,?,?)",[$f['id'],lookupNow(),$notice,$at]);
+    logEntry($db,'Cá nhân: '.($notice!==''?'đặt':'gỡ')." thông báo cho khách {$f['name']}");
+    return ['ok'=>true,'notice'=>$notice,'notice_at'=>$at];
+}
 function lookupSaveStatus(PDO $db,int $familyId,array $d): array {
     $f=lookupActiveFamily($db,$familyId);if(!$f)fail('Không tìm thấy Family đang hoạt động.',404);
     $status=$d['status']??null;if(!in_array($status,LOOKUP_FAMILY_STATUSES,true))fail('Trạng thái nhóm không hợp lệ.');
@@ -663,7 +673,7 @@ function lookupAdminState(PDO $db): array {
     $codes=[];foreach(all($db,'SELECT DISTINCT email FROM members') as $r)$codes[$r['email']]=lookupCodeFor($db,$r['email'],$salt);
     // Gmail import needs the Google Sheet connection (same Apps Script). Plain query: no DDL inside the state audit.
     $gmail=false;$mailbox='';try{$gmail=(bool)one($db,"SELECT name FROM family_sheet_state WHERE name='config'");$row=one($db,"SELECT value FROM family_sheet_state WHERE name='gmail_mailbox'");$mailbox=$row?(string)json_decode($row['value'],true):'';}catch(Throwable $e){}
-    return ['lookup_supported'=>true,'gmail_import'=>$gmail,'gmail_mailbox'=>$mailbox,'invite_base_email'=>LOOKUP_INVITE_MAIL_INBOX,'invite_mails'=>array_map(fn($r)=>[...$r,'id'=>(int)$r['id'],'family_id'=>(int)$r['family_id'],'auto_assign'=>(int)$r['auto_assign']],all($db,'SELECT id,family_id,email,created_at,auto_assign FROM invite_mails ORDER BY id')),'lookup_settings'=>lookupSettings($db),'family_statuses'=>all($db,'SELECT family_id,status,note,updated_at,revision FROM family_statuses'),'invites'=>$invites,'moves'=>$moves,'lookup_codes'=>(object)$codes,
+    return ['lookup_supported'=>true,'gmail_import'=>$gmail,'gmail_mailbox'=>$mailbox,'invite_base_email'=>LOOKUP_INVITE_MAIL_INBOX,'invite_mails'=>array_map(fn($r)=>[...$r,'id'=>(int)$r['id'],'family_id'=>(int)$r['family_id'],'auto_assign'=>(int)$r['auto_assign']],all($db,'SELECT id,family_id,email,created_at,auto_assign FROM invite_mails ORDER BY id')),'lookup_settings'=>lookupSettings($db),'family_statuses'=>all($db,'SELECT family_id,status,note,updated_at,revision,notice,notice_at FROM family_statuses'),'invites'=>$invites,'moves'=>$moves,'lookup_codes'=>(object)$codes,
         // Open reports, and the ones handled in the last week for context.
         'customer_reports'=>array_map(fn($r)=>[...$r,'id'=>(int)$r['id'],'member_id'=>$r['member_id']===null?null:(int)$r['member_id'],'family_id'=>$r['family_id']===null?null:(int)$r['family_id'],'revision'=>(int)$r['revision']],all($db,"SELECT * FROM customer_reports WHERE handled_at='' OR handled_at>? ORDER BY id DESC LIMIT 300",[gmdate('Y-m-d\TH:i:s.000\Z',time()-604800)])),
         'problem_reasons'=>LOOKUP_PROBLEM_REASONS,'telegram'=>lookupTelegramState($db),'todos'=>lookupTodoList($db)];
@@ -707,7 +717,7 @@ function lookupResult(PDO $db,string $address): array {
         }
         $waiting=!$allocated&&!$move&&lookupJoinable($m)&&$status['status']==='active';$problem=lookupLatestReport($db,(int)$m['id']);
         $view=$move&&in_array($move['state'],LOOKUP_OPEN_STATES,true)?'move':(in_array($status['status'],LOOKUP_PROBLEM_STATUSES,true)?'incident':(($problem['state']??'')==='open'?'reported':($waiting?'waiting':($period['expiry_status']==='expired'?'expired':'normal'))));
-        $items[]=['member_ref'=>(int)$m['id'],'problem'=>$problem,'family_name'=>$m['family_name'],'plan_months'=>(int)$m['plan_months'],'expires_at'=>$m['expires_at'],...$period,'membership_status'=>$m['membership_status'],'status'=>$status['status'],'status_note'=>$status['note'],'status_updated_at'=>$status['updated_at'],'view'=>$view,'move'=>$move];
+        $items[]=['member_ref'=>(int)$m['id'],'problem'=>$problem,'family_name'=>$m['family_name'],'plan_months'=>(int)$m['plan_months'],'expires_at'=>$m['expires_at'],...$period,'membership_status'=>$m['membership_status'],'status'=>$status['status'],'status_note'=>$status['note'],'notice'=>(string)($status['notice']??''),'notice_at'=>(string)($status['notice_at']??''),'status_updated_at'=>$status['updated_at'],'view'=>$view,'move'=>$move];
     }
     return ['email'=>$address,'today'=>today(),'shop'=>lookupSettings($db),'items'=>$items];
 }
@@ -853,6 +863,7 @@ function lookupAdminRequest(PDO $db,string $route,string $method): void {
     if($route==='/api/todos'&&$method==='POST')reply(lookupSaveTodo($db,null,body()),201);
     if(preg_match('~^/api/todos/(\d+)$~D',$route,$p)&&$method==='PATCH')reply(lookupSaveTodo($db,(int)$p[1],body()));
     if(preg_match('~^/api/todos/(\d+)$~D',$route,$p)&&$method==='DELETE')reply(lookupDeleteTodo($db,(int)$p[1]));
+    if(preg_match('~^/api/families/(\d+)/notice$~D',$route,$p)&&$method==='PATCH')reply(lookupSaveNotice($db,(int)$p[1],body()));
     if(preg_match('~^/api/families/(\d+)/status$~D',$route,$p)&&$method==='PATCH')reply(lookupSaveStatus($db,(int)$p[1],body()));
     if(preg_match('~^/api/invites/(\d+)/holder$~D',$route,$p)&&$method==='PATCH')reply(lookupSetHolder($db,(int)$p[1],body()));
     if(preg_match('~^/api/families/(\d+)/assign-links$~D',$route,$p)&&$method==='POST')reply(lookupAssignFamilyLinks($db,(int)$p[1]));
@@ -874,6 +885,7 @@ function lookupAdminRequest(PDO $db,string $route,string $method): void {
     if($route==='/api/telegram'&&$method==='DELETE')reply(lookupDisconnectTelegram($db));
 }
 function lookupAuditAction(string $method,string $route): string {
+    if(preg_match('~^/api/families/\d+/notice$~D',$route))return 'Sửa thông báo cho khách';
     if(preg_match('~^/api/families/\d+/status$~D',$route))return 'Sửa trạng thái Family';
     if(preg_match('~^/api/families/\d+/invites$~D',$route))return 'Thêm link mời';
     if(preg_match('~^/api/families/\d+/invite-mails$~D',$route))return $method==='DELETE'?'Xóa mail mời':'Tạo mail mời';
