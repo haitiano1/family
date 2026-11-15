@@ -220,6 +220,16 @@ q($db,"UPDATE family_invites SET family_id=?,sent_at='' WHERE id=?",[$ten,$q['id
 $gmailReply['invites'][]=$mail('shop+qj1@gmail.com','https://families.google.com/join/promo/q3',['newowner@example.com'],'2026-11-07T08:00:00.000Z');
 $r=$wantGmail(['to'=>'shop+qj1@gmail.com','family_id'=>$ten]);$q3=one($db,'SELECT * FROM family_invites WHERE id=?',[$r['wanted']]);
 check($q3['url']==='https://families.google.com/join/promo/q3'&&$q3['retired_at']===''&&(int)$q3['family_id']===$ten,'re-invited mail gets a fresh link');
+// A link the shop deleted is not brought back by Lấy link mời (nor an older mail to the same address);
+// asking for that mail in + Thêm link mời restores it.
+$tenMail=lookupActiveFamily($db,$ten)['manager_email'];
+$gmailReply['invites'][]=$mail('shop+del@gmail.com','https://families.google.com/join/promo/del-old',[$tenMail],'2026-11-04T07:00:00.000Z');
+$gmailReply['invites'][]=$mail('shop+del@gmail.com','https://families.google.com/join/promo/del-new',[$tenMail],'2026-11-05T07:00:00.000Z');
+$r=$gmail();$del=$invite($ten,'shop+del@gmail.com');check($del&&$del['url']==='https://families.google.com/join/promo/del-new','link to delete imported');
+beginAudit($db,'Xóa thử');lookupDeleteInvite($db,(int)$del['id'],['revision'=>(int)$del['revision']]);finishAudit();
+$r=$gmail();check($r['skipped_deleted']===1&&$r['added']===0&&!$invite($ten,'shop+del@gmail.com'),'deleted link stays deleted, older mail not added: '.json_encode($r));
+$r=$wantGmail(['to'=>'shop+del@gmail.com','family_id'=>$ten]);$back=$invite($ten,'shop+del@gmail.com');check($back&&$back['url']==='https://families.google.com/join/promo/del-new'&&$r['added']===1,'asked by mail: deleted link comes back');
+$r=$gmail();check($r['skipped_deleted']===0,'restored link is a normal link again');
 
 // ---- Đã fix · Đổi sang mail mới keeps customers in the same Family ----
 beginAudit($db,'Dữ liệu giả');$s16=saveFamilyRecord($db,null,['name'=>'Family 16','manager_email'=>'owner16@example.com'])['id'];finishAudit();

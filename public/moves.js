@@ -63,6 +63,7 @@ export function gmailSummary(result) {
   if (result.updated) parts.push(`cập nhật ${result.updated} link`);
   let text = parts.length ? `Đã ${parts.join(', ')} từ Gmail${result.families?.length ? ' cho ' + result.families.join(', ') : ''}.` : result.found ? 'Link mời trong Gmail đã có đủ trên web.' : 'Không thấy thư mời Family nào trong 14 ngày qua.';
   if (result.assigned) text += ` Đã gán ${result.assigned} link cho khách trong Family.`;
+  if (result.skipped_deleted) text += ` Bỏ qua ${result.skipped_deleted} link bạn đã xóa.`;
   if (result.unmatched_count) text += ` ${result.unmatched_count} thư chưa khớp mail chủ Family nào (${result.unmatched.slice(0, 3).join(', ')}${result.unmatched_count > 3 ? '…' : ''}).`;
   return text;
 }
@@ -563,7 +564,7 @@ export async function handleLookupAction(ctx, action, button) {
     const picked = scopeLinks(ctx, button.dataset.scope).filter(i => pickedInvites.has(i.id));
     if (!picked.length) return ctx.toast('Tick chọn link cần xóa trước.'), true;
     const held = picked.filter(i => i.holder_state === 'assigned'), names = [...new Set(picked.map(i => state.families.find(f => f.id === i.family_id)?.name).filter(Boolean))];
-    ctx.modal(`Xóa ${picked.length} link mời?`, `<p>${picked.slice(0, 6).map(i => ctx.escape(inviteName(ctx, i))).join('<br>')}${picked.length > 6 ? `<br>… và ${picked.length - 6} link khác` : ''}</p><p>Chỉ xóa link khỏi kho của ${ctx.escape(names.join(', '))}. Lời mời trên Google vẫn còn cho đến khi hết hạn.</p>${held.length ? `<p class="subtext">${held.length} link đang giao cho khách sẽ được giữ lại (thu hồi link trước nếu muốn xóa).</p>` : ''}`, async () => {
+    ctx.modal(`Xóa ${picked.length} link mời?`, `<p>${picked.slice(0, 6).map(i => ctx.escape(inviteName(ctx, i))).join('<br>')}${picked.length > 6 ? `<br>… và ${picked.length - 6} link khác` : ''}</p><p>Chỉ xóa link khỏi kho của ${ctx.escape(names.join(', '))}. Lời mời trên Google vẫn còn cho đến khi hết hạn.</p>${ctx.state.gmail_import ? '<p class="subtext">Lấy link mời sẽ không thêm lại các link đã xóa.</p>' : ''}${held.length ? `<p class="subtext">${held.length} link đang giao cho khách sẽ được giữ lại (thu hồi link trước nếu muốn xóa).</p>` : ''}`, async () => {
       const result = await ctx.post('invites/delete', { ids: picked.map(i => i.id) });
       picked.forEach(i => pickedInvites.delete(i.id));
       ctx.toast(`Đã xóa ${result.deleted} link mời.${result.skipped.length ? ` Giữ lại ${result.skipped.length} link đang giao cho khách.` : ''}`);
@@ -572,7 +573,7 @@ export async function handleLookupAction(ctx, action, button) {
   }
   if (action === 'invite-delete') {
     const invite = (state.invites || []).find(i => i.id === id); if (!invite) return ctx.toast('Link đã thay đổi. Tải lại trang.'), true;
-    ctx.modal('Xóa link mời?', `<p>${ctx.escape(inviteName(ctx, invite))}</p><p>Chỉ xóa link khỏi kho của Family. Lời mời trên Google vẫn còn cho đến khi hết hạn.</p>`, async () => { await ctx.api('invites/' + id, { method: 'DELETE', body: JSON.stringify({ revision: invite.revision }) }); ctx.toast('Đã xóa link mời.'); }, 'Xóa link');
+    ctx.modal('Xóa link mời?', `<p>${ctx.escape(inviteName(ctx, invite))}</p><p>Chỉ xóa link khỏi kho của Family. Lời mời trên Google vẫn còn cho đến khi hết hạn.</p>${ctx.state.gmail_import ? '<p class="subtext">Lấy link mời sẽ không thêm lại link đã xóa. Cần dùng lại thì gõ mail đó ở + Thêm link mời.</p>' : ''}`, async () => { await ctx.api('invites/' + id, { method: 'DELETE', body: JSON.stringify({ revision: invite.revision }) }); ctx.toast('Đã xóa link mời.'); }, 'Xóa link');
     return true;
   }
   if (action === 'move-open') { openBulkMove(ctx, id); return true; }
