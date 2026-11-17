@@ -99,16 +99,19 @@ export function initLookup(db, { fail, email, text, calendarDate, log, mediaDir 
   // A template holds the message and, for Lỗi ngoại lệ, a note and a link customers copy and a guide video:
   // rows message_template:NN (text), …:NN:video, …:NN:link, …:NN:note.
   const templateFields = { video: 'video', link: 'link', note: 'link_note' };
+  // Built-in guide videos a notice can use without uploading (shipped with the app).
+  const BUILTIN_VIDEOS = { travel: '/api/lookup/guide-video/travel' };
+  const videoUrl = id => BUILTIN_VIDEOS[id] || (mediaReady(id) ? '/api/lookup/media/' + mediaId(id) : '');
   function messageTemplates() {
     const out = new Map();
     for (const row of all("SELECT name,value FROM lookup_settings WHERE name LIKE 'message_template:%' ORDER BY name")) {
       const [, n, field] = row.name.split(':'); if (!out.has(n)) out.set(n, { text: '', video: '', link: '', link_note: '' });
       out.get(n)[field ? templateFields[field] : 'text'] = row.value;
     }
-    return [...out.values()].map(t => ({ ...t, video: mediaReady(t.video) ? t.video : '' }));
+    return [...out.values()].map(t => ({ ...t, video: videoUrl(t.video) ? t.video : '' }));
   }
   function noticeParts(data) {
-    const video = data.video ? mediaId(data.video) : ''; if (data.video && !mediaReady(video)) fail('Video chưa tải xong hoặc đã bị xóa. Chọn lại video.');
+    const video = BUILTIN_VIDEOS[data.video] ? data.video : data.video ? mediaId(data.video) : ''; if (data.video && !videoUrl(video)) fail('Video chưa tải xong hoặc đã bị xóa. Chọn lại video.');
     return { text: text(data.text ?? data.notice, 1000), video: video || '', link: noticeLink(data.link), link_note: text(data.link_note, 1000) };
   }
   function noticeLink(value) {
@@ -779,7 +782,7 @@ export function initLookup(db, { fail, email, text, calendarDate, log, mediaDir 
       }
       const waiting = !allocated && !move && joinable(member) && status.status === 'active', problem = latestReport(member.id);
       const view = move && openMoveStates.includes(move.state) ? 'move' : problemStatuses.includes(status.status) ? 'incident' : problem?.state === 'open' ? 'reported' : waiting ? 'waiting' : period.expiry_status === 'expired' ? 'expired' : 'normal';
-      return { member_ref: member.id, problem, family_name: member.family_name, plan_months: member.plan_months, expires_at: member.expires_at, ...period, membership_status: member.membership_status, status: status.status, status_note: status.note, status_updated_at: status.updated_at, notice: status.notice || '', notice_at: status.notice_at || '', notice_video: mediaReady(status.notice_video) ? '/api/lookup/media/' + status.notice_video : '', notice_link: status.notice_link || '', notice_link_note: status.notice_link_note || '', view, move };
+      return { member_ref: member.id, problem, family_name: member.family_name, plan_months: member.plan_months, expires_at: member.expires_at, ...period, membership_status: member.membership_status, status: status.status, status_note: status.note, status_updated_at: status.updated_at, notice: status.notice || '', notice_at: status.notice_at || '', notice_video: videoUrl(status.notice_video), notice_link: status.notice_link || '', notice_link_note: status.notice_link_note || '', view, move };
     });
     return { email: address, today: current, shop: settings(), items };
   }

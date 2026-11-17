@@ -86,13 +86,16 @@ function lookupShortDomain(mixed $value): string {
 // A template holds the message and, for Lỗi ngoại lệ, a note and a link customers copy and a guide video:
 // rows message_template:NN (text), …:NN:video, …:NN:link, …:NN:note.
 const LOOKUP_TEMPLATE_FIELDS=['video'=>'video','link'=>'link','note'=>'link_note'];
+// Built-in guide videos a notice can use without uploading (shipped with the app).
+const LOOKUP_BUILTIN_VIDEOS=['travel'=>'/api/lookup/guide-video/travel'];
+function lookupVideoUrl(PDO $db,string $id): string {return LOOKUP_BUILTIN_VIDEOS[$id]??(lookupMediaReady($db,$id)?'/api/lookup/media/'.$id:'');}
 function lookupMessageTemplates(PDO $db): array {
     $out=[];
     foreach(all($db,"SELECT name,value FROM lookup_settings WHERE name LIKE 'message_template:%' ORDER BY name") as $row){
         $parts=explode(':',$row['name']);$n=$parts[1]??'';$out[$n]??=['text'=>'','video'=>'','link'=>'','link_note'=>''];
         $out[$n][isset($parts[2])?(LOOKUP_TEMPLATE_FIELDS[$parts[2]]??'text'):'text']=$row['value'];
     }
-    return array_values(array_map(fn($t)=>[...$t,'video'=>lookupMediaReady($db,$t['video'])?$t['video']:''],$out));
+    return array_values(array_map(fn($t)=>[...$t,'video'=>lookupVideoUrl($db,$t['video'])!==''?$t['video']:''],$out));
 }
 function lookupNoticeLink(mixed $value): string {
     $url=text($value,500);if($url==='')return '';$u=parse_url($url);
@@ -100,7 +103,7 @@ function lookupNoticeLink(mixed $value): string {
     return $url;
 }
 function lookupNoticeParts(PDO $db,array $d): array {
-    $video=is_string($d['video']??null)?$d['video']:'';if($video!==''&&!lookupMediaReady($db,$video))fail('Video chưa tải xong hoặc đã bị xóa. Chọn lại video.');
+    $video=is_string($d['video']??null)?$d['video']:'';if($video!==''&&lookupVideoUrl($db,$video)==='')fail('Video chưa tải xong hoặc đã bị xóa. Chọn lại video.');
     return ['text'=>text($d['text']??($d['notice']??''),1000),'video'=>$video,'link'=>lookupNoticeLink($d['link']??''),'link_note'=>text($d['link_note']??'',1000)];
 }
 function lookupSaveMessageTemplates(PDO $db,array $d): array {
@@ -844,7 +847,7 @@ function lookupResult(PDO $db,string $address): array {
         }
         $waiting=!$allocated&&!$move&&lookupJoinable($m)&&$status['status']==='active';$problem=lookupLatestReport($db,(int)$m['id']);
         $view=$move&&in_array($move['state'],LOOKUP_OPEN_STATES,true)?'move':(in_array($status['status'],LOOKUP_PROBLEM_STATUSES,true)?'incident':(($problem['state']??'')==='open'?'reported':($waiting?'waiting':($period['expiry_status']==='expired'?'expired':'normal'))));
-        $items[]=['member_ref'=>(int)$m['id'],'problem'=>$problem,'family_name'=>$m['family_name'],'plan_months'=>(int)$m['plan_months'],'expires_at'=>$m['expires_at'],...$period,'membership_status'=>$m['membership_status'],'status'=>$status['status'],'status_note'=>$status['note'],'notice'=>(string)($status['notice']??''),'notice_at'=>(string)($status['notice_at']??''),'notice_video'=>lookupMediaReady($db,$status['notice_video']??'')?'/api/lookup/media/'.$status['notice_video']:'','notice_link'=>(string)($status['notice_link']??''),'notice_link_note'=>(string)($status['notice_link_note']??''),'status_updated_at'=>$status['updated_at'],'view'=>$view,'move'=>$move];
+        $items[]=['member_ref'=>(int)$m['id'],'problem'=>$problem,'family_name'=>$m['family_name'],'plan_months'=>(int)$m['plan_months'],'expires_at'=>$m['expires_at'],...$period,'membership_status'=>$m['membership_status'],'status'=>$status['status'],'status_note'=>$status['note'],'notice'=>(string)($status['notice']??''),'notice_at'=>(string)($status['notice_at']??''),'notice_video'=>lookupVideoUrl($db,(string)($status['notice_video']??'')),'notice_link'=>(string)($status['notice_link']??''),'notice_link_note'=>(string)($status['notice_link_note']??''),'status_updated_at'=>$status['updated_at'],'view'=>$view,'move'=>$move];
     }
     return ['email'=>$address,'today'=>today(),'shop'=>lookupSettings($db),'items'=>$items];
 }
@@ -920,7 +923,7 @@ function lookupCookie(array $c,string $token,int $age): void {
 // Guide videos on the lookup page (rời nhóm, vào nhóm). One-click update ships only code files, so each
 // MP4 travels as base64 inside family-private/guide-video*.php (made by scripts/package-php.py).
 // Byte ranges let phones start and seek the video.
-const LOOKUP_GUIDE_VIDEOS=['/api/lookup/guide-video'=>'guide-video.php','/api/lookup/guide-video/join'=>'guide-video-join.php'];
+const LOOKUP_GUIDE_VIDEOS=['/api/lookup/guide-video'=>'guide-video.php','/api/lookup/guide-video/join'=>'guide-video-join.php','/api/lookup/guide-video/travel'=>'guide-video-travel.php'];
 function lookupGuideVideo(string $name): never {
     $file=__DIR__.'/'.$name;$data=is_file($file)?base64_decode((string)(require $file),true):false;
     if(!is_string($data)||$data==='')fail('Không tìm thấy.',404);

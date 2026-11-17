@@ -792,6 +792,13 @@ test('Thông báo kèm video và link: upload in pieces, customers of that Famil
     const tpl = (await a('message-templates', 'PATCH', { templates: [{ text: 'Mẫu lỗi', video: up.id, link: 'https://example.com/a', link_note: 'Ghi chú' }, { text: '', link: 'https://example.com/b' }] })).templates;
     assert.deepEqual(tpl, [{ text: 'Mẫu lỗi', video: up.id, link: 'https://example.com/a', link_note: 'Ghi chú' }, { text: '', video: '', link: 'https://example.com/b', link_note: '' }]);
     assert.deepEqual((await a('state')).message_templates, tpl);
+    // Built-in video (Khách đi du lịch): no upload, served with the app.
+    assert.equal((await a(`families/${fam.id}/notice`, 'PATCH', { notice: 'Đi du lịch', video: 'travel' })).notice_video, 'travel');
+    const travel = (await f.customer()('verify', 'POST', { email: 'vd1@example.com', code: state.lookup_codes['vd1@example.com'] })).items[0];
+    assert.equal(travel.notice_video, '/api/lookup/guide-video/travel');
+    const tv = await fetch(f.base + travel.notice_video); assert.equal(tv.status, 200); assert.equal(tv.headers.get('content-type'), 'video/mp4'); assert.ok((await tv.arrayBuffer()).byteLength > 1000000);
+    assert.equal((await a('message-templates', 'PATCH', { templates: [{ text: 'Du lịch', video: 'travel' }] })).templates[0].video, 'travel');
+    await a(`families/${fam.id}/notice`, 'PATCH', { video: 'khong-co' }, 400);
   } finally { await f.close(); }
 });
 

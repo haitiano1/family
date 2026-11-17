@@ -308,7 +308,7 @@ document.addEventListener('submit', async event => {
 // Video Hướng dẫn rời nhóm in a popup; it plays with sound since the customer tapped to open it.
 const guideVideos = { leave: ['Cách rời nhóm gia đình cũ', '/api/lookup/guide-video'], join: ['Cách vào nhóm mới', '/api/lookup/guide-video/join'] };
 function guideVideo(kind, custom) {
-  const [title, src] = kind === 'notice' && custom ? ['Video hướng dẫn từ shop', custom] : guideVideos[kind] || guideVideos.leave;
+  const [title, src] = kind === 'notice' && custom ? [custom === '/api/lookup/guide-video/travel' ? 'Cách lấy lại YouTube Premium' : 'Video hướng dẫn từ shop', custom] : guideVideos[kind] || guideVideos.leave;
   let box = $('#guide-video');
   if (!box) {
     box = document.createElement('dialog'); box.id = 'guide-video'; box.className = 'video-box'; box.setAttribute('aria-labelledby', 'guide-video-title');

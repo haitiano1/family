@@ -783,6 +783,10 @@ test('PHP lookup page: Family status, invite pool, bulk move, Gmail + code sign-
  await a('families/'+next.id+'/notice','PATCH',{notice:'Cách xử lý',video:upv.id,link:'https://example.com/fix',link_note:'Ghi chú copy'});
  const exItem=(await lookup('me','GET',undefined,200,dmLook.cookie)).body.items[0];assert.equal(exItem.notice_video,doneV.url);assert.equal(exItem.notice_link,'https://example.com/fix');assert.equal(exItem.notice_link_note,'Ghi chú copy');
  assert.deepEqual((await a('message-templates','PATCH',{templates:[{text:'M',video:upv.id,link:'https://example.com/a',link_note:'N'}]})).templates,[{text:'M',video:upv.id,link:'https://example.com/a',link_note:'N'}]);
+ // Built-in video (Khách đi du lịch): no upload; the MP4 ships as base64 PHP.
+ await a('families/'+next.id+'/notice','PATCH',{notice:'Đi du lịch',video:'travel'});assert.equal((await lookup('me','GET',undefined,200,dmLook.cookie)).body.items[0].notice_video,'/api/lookup/guide-video/travel');
+ assert.equal((await a('message-templates','PATCH',{templates:[{text:'Du lịch',video:'travel'}]})).templates[0].video,'travel');await a('families/'+next.id+'/notice','PATCH',{video:'khong-co'},400);
+ if(process.env.FAMILY_PHP_SOURCE_ONLY!=='1'){const tv=await fetch(f.base+'/api/lookup/guide-video/travel');assert.equal(tv.status,200);assert.equal((await tv.arrayBuffer()).byteLength,readFileSync(root+'/public/huong-dan-di-du-lich.mp4').length);}
  await a('families/'+next.id+'/notice','PATCH',{notice:''});
  // Xóa nhiều link mời: ticked links of the Family go in one step.
  const bulk1=await a('families/'+next.id+'/invites','POST',{label:'shop+bulk1@gmail.com',url:'https://families.google.com/join/promo/php-bulk1'},201),bulk2=await a('families/'+next.id+'/invites','POST',{label:'shop+bulk2@gmail.com',url:'https://families.google.com/join/promo/php-bulk2'},201);
