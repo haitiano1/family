@@ -773,7 +773,7 @@ test('PHP lookup page: Family status, invite pool, bulk move, Gmail + code sign-
  assert.equal((await a('state')).family_statuses.find(x=>x.family_id===next.id).notice,tb.notice);assert.equal((await lookup('me','GET',undefined,200,dmLook.cookie)).body.items[0].notice,tb.notice);
  assert.equal((await a('families/'+next.id+'/notice','PATCH',{notice:''})).notice,'');
  // Lời nhắn mẫu: kept in order, blanks dropped, private to the shop.
- assert.deepEqual((await a('message-templates','PATCH',{templates:[' Mẫu A ','','Mẫu B']})).templates,['Mẫu A','Mẫu B']);assert.deepEqual((await a('state')).message_templates,['Mẫu A','Mẫu B']);
+ const tplAB=[{text:'Mẫu A',video:'',link:'',link_note:''},{text:'Mẫu B',video:'',link:'',link_note:''}];assert.deepEqual((await a('message-templates','PATCH',{templates:[' Mẫu A ','','Mẫu B']})).templates,tplAB);assert.deepEqual((await a('state')).message_templates,tplAB);
  assert.equal(JSON.stringify((await lookup('info')).body).includes('Mẫu A'),false);await a('message-templates','PATCH',{templates:Array(21).fill('x')},400);
  // Lỗi ngoại lệ: a video uploaded in pieces, served with ranges, shown with the link and note to that Family's customers.
  const vid=Buffer.concat([Buffer.from([0,0,0,24]),Buffer.from('ftypmp42'),Buffer.alloc(786432+500,9)]);const upv=await a('media','POST',{name:'loi.mp4',size:vid.length,type:'video/mp4'},201);
