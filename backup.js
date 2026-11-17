@@ -38,7 +38,7 @@ export function restoreCustomers(db,data,fail) {
         if(table==='other_purchases'&&data.version<9&&row&&typeof row==='object'&&!Object.hasOwn(row,'purchase_source'))row={...row,purchase_source:''};
         if(table==='family_invites'&&row&&typeof row==='object')row={sent_at:'',retired_at:'',recipients:'',...row};
         if(table==='invite_mails'&&row&&typeof row==='object')row={auto_assign:0,...row};
-        if(table==='family_statuses'&&row&&typeof row==='object')row={notice:'',notice_at:'',...row};
+        if(table==='family_statuses'&&row&&typeof row==='object')row={notice:'',notice_at:'',notice_video:'',notice_link:'',notice_link_note:'',...row};
         if (!row || typeof row!=='object' || columns.some(c=>!Object.hasOwn(row,c) || (row[c]!==null && !['string','number'].includes(typeof row[c])))) fail('Dữ liệu sao lưu thiếu trường hoặc sai định dạng.');
         if(table==='other_purchases'&&(typeof row.purchase_source!=='string'||row.purchase_source.length>200))fail('Nguồn mua trong sao lưu không hợp lệ.');
         if(table==='archived_customers'){

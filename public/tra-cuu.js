@@ -199,9 +199,17 @@ function problemForm(item) {
 }
 // Thông báo từ shop: the shop's message for this customer's Family, on top until the shop removes it.
 const megaphone = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 11v2a1 1 0 0 0 1 1h2l5 4V6L6 10H4a1 1 0 0 0-1 1z"/><path d="M15 9a3 3 0 0 1 0 6"/><path d="M18 6a7 7 0 0 1 0 12"/></svg>';
+// Lỗi ngoại lệ adds what the customer needs to fix it: a guide video, and a link and a note to copy.
+const copyBox = (label, value, kind) => `<div class="copy-box ${kind}"><span class="copy-label">${label}</span><div class="copy-value">${escape(value)}</div><button type="button" class="btn copy-btn" data-act="copy-text" data-copy="${escape(value)}" data-done="Đã copy ${kind === 'link' ? 'link' : 'ghi chú'}">Copy ${kind === 'link' ? 'link' : 'ghi chú'}</button></div>`;
 function noticeCard(item) {
-  if (!item.notice) return '';
-  return `<section class="card shop-notice" role="note" aria-label="Thông báo từ shop"><div class="shop-notice-head"><span class="shop-notice-icon">${megaphone}</span><h2>Thông báo từ shop</h2></div><p>${escape(item.notice)}</p>${item.notice_at ? `<span class="sub">Cập nhật ${time(item.notice_at)}</span>` : ''}</section>`;
+  if (!item.notice && !item.notice_video && !item.notice_link && !item.notice_link_note) return '';
+  const extra = item.notice_video || item.notice_link || item.notice_link_note;
+  return `<section class="card shop-notice${extra ? ' has-extra' : ''}" role="note" aria-label="Thông báo từ shop"><div class="shop-notice-head"><span class="shop-notice-icon">${megaphone}</span><h2>Thông báo từ shop</h2></div>`
+    + (item.notice ? `<p>${escape(item.notice)}</p>` : '')
+    + (item.notice_video ? `<button type="button" class="video-link" data-act="guide-video" data-video="notice" data-src="${escape(item.notice_video)}"><span class="play" aria-hidden="true"></span><span><strong>Xem video hướng dẫn</strong></span></button>` : '')
+    + (item.notice_link ? copyBox('Link', item.notice_link, 'link') : '')
+    + (item.notice_link_note ? copyBox('Ghi chú', item.notice_link_note, 'note') : '')
+    + (item.notice_at ? `<span class="sub">Cập nhật ${time(item.notice_at)}</span>` : '') + '</section>';
 }
 function calmCard(item) {
   const expired = item.view === 'expired', open = problemOpen === item.member_ref, handled = item.problem?.state === 'handled';
@@ -268,6 +276,17 @@ async function copyPage() {
   try { await navigator.clipboard.writeText(value); alertInline('Đã sao chép link. Mở Chrome/Safari và dán vào ô địa chỉ.'); }
   catch { window.prompt('Sao chép link này rồi mở bằng Chrome/Safari:', value); }
 }
+async function copyText(button) {
+  const value = button.dataset.copy, label = button.dataset.label || (button.dataset.label = button.textContent);
+  try { await navigator.clipboard.writeText(value); }
+  catch { // Older in-app browsers: select a hidden textarea and copy.
+    const area = document.createElement('textarea'); area.value = value; area.setAttribute('readonly', ''); area.style.cssText = 'position:fixed;top:0;left:0;opacity:0';
+    document.body.append(area); area.select(); area.setSelectionRange(0, value.length);
+    const ok = document.execCommand('copy'); area.remove(); if (!ok) { window.prompt('Sao chép nội dung này:', value); return; }
+  }
+  button.textContent = '✓ ' + button.dataset.done; button.classList.add('done');
+  clearTimeout(button._t); button._t = setTimeout(() => { button.textContent = label; button.classList.remove('done'); }, 2500);
+}
 function alertInline(text) { const box = document.querySelector('.inapp'); if (box) { let line = box.querySelector('.sub'); if (!line) { line = document.createElement('span'); line.className = 'sub ok'; box.append(line); } line.textContent = text; } }
 
 document.addEventListener('submit', async event => {
@@ -288,8 +307,8 @@ document.addEventListener('submit', async event => {
 });
 // Video Hướng dẫn rời nhóm in a popup; it plays with sound since the customer tapped to open it.
 const guideVideos = { leave: ['Cách rời nhóm gia đình cũ', '/api/lookup/guide-video'], join: ['Cách vào nhóm mới', '/api/lookup/guide-video/join'] };
-function guideVideo(kind) {
-  const [title, src] = guideVideos[kind] || guideVideos.leave;
+function guideVideo(kind, custom) {
+  const [title, src] = kind === 'notice' && custom ? ['Video hướng dẫn từ shop', custom] : guideVideos[kind] || guideVideos.leave;
   let box = $('#guide-video');
   if (!box) {
     box = document.createElement('dialog'); box.id = 'guide-video'; box.className = 'video-box'; box.setAttribute('aria-labelledby', 'guide-video-title');
@@ -300,7 +319,7 @@ function guideVideo(kind) {
     box.addEventListener('click', event => { if (event.target === box) box.close(); }); // tap outside closes
     document.body.append(box);
   }
-  box.querySelector('h2').textContent = title;
+  box.querySelector('h2').textContent = title; box.classList.toggle('free', kind === 'notice');
   const video = box.querySelector('video');
   if (video.getAttribute('src') !== src) video.setAttribute('src', src);
   box.showModal(); video.currentTime = 0; video.play().catch(() => {});
@@ -318,7 +337,8 @@ document.addEventListener('click', async event => {
     if (act === 'problem-open') { problemOpen = Number(button.dataset.member); resultView(false); $('#problem-card')?.scrollIntoView({ block: 'start', behavior: 'smooth' }); }
     else if (act === 'problem-cancel') { problemOpen = null; resultView(false); }
     else if (act === 'copy-page') await copyPage();
-    else if (act === 'guide-video') guideVideo(button.dataset.video);
+    else if (act === 'guide-video') guideVideo(button.dataset.video, button.dataset.src);
+    else if (act === 'copy-text') await copyText(button);
     else if (act === 'guide-video-close') $('#guide-video')?.close();
     else if (act === 'logout') { await call('logout', {}).catch(() => {}); problemOpen = null; clearInterval(pollTimer); loginView('', data?.email || ''); }
   } catch (error) {

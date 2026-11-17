@@ -744,14 +744,54 @@ test('Thông báo cho khách: the shop message of one Family shows on its lookup
     await a('families/99999/notice', 'PATCH', { notice: 'x' }, 404);
     assert.ok((await a('journal')).entries.some(e => e.action === 'Sửa thông báo cho khách'));
     // Lời nhắn mẫu: the shop's own list, in order, blanks dropped, never on the public lookup.
-    assert.deepEqual((await a('message-templates', 'PATCH', { templates: [' Mẫu A ', '', 'Mẫu B\ndòng 2'] })).templates, ['Mẫu A', 'Mẫu B\ndòng 2']);
-    assert.deepEqual((await a('state')).message_templates, ['Mẫu A', 'Mẫu B\ndòng 2']);
+    const texts = list => list.map(t => t.text);
+    assert.deepEqual(texts((await a('message-templates', 'PATCH', { templates: [' Mẫu A ', '', 'Mẫu B\ndòng 2'] })).templates), ['Mẫu A', 'Mẫu B\ndòng 2']);
+    assert.deepEqual(texts((await a('state')).message_templates), ['Mẫu A', 'Mẫu B\ndòng 2']);
     assert.equal(JSON.stringify(await f.customer()('info')).includes('Mẫu A'), false);
     await a('message-templates', 'PATCH', { templates: Array(21).fill('x') }, 400);
-    assert.deepEqual((await a('message-templates', 'PATCH', { templates: ['Mẫu B\ndòng 2'] })).templates, ['Mẫu B\ndòng 2']);
+    assert.deepEqual(texts((await a('message-templates', 'PATCH', { templates: ['Mẫu B\ndòng 2'] })).templates), ['Mẫu B\ndòng 2']);
     assert.ok((await a('journal')).entries.some(e => e.action === 'Sửa lời nhắn mẫu'));
     // A backup made before this field restores with an empty notice.
     const backup = await a('backup'); assert.ok('notice' in backup.tables.family_statuses[0]);
+  } finally { await f.close(); }
+});
+
+test('Thông báo kèm video và link: upload in pieces, customers of that Family see the video, the link and its note', async () => {
+  const f = await server(); try {
+    const a = f.admin;
+    const fam = await a('families', 'POST', { name: 'Family 36', manager_email: 'owner36@example.com' }, 201);
+    await a('members', 'POST', { family_id: fam.id, email: 'vd1@example.com', customer_name: 'VD 1', expires_at: '2099-01-01' }, 201);
+    // A tiny MP4-looking file in 3 pieces.
+    const bytes = Buffer.concat([Buffer.from([0, 0, 0, 24]), Buffer.from('ftypmp42'), Buffer.alloc(786432 * 2 + 100, 7)]);
+    await a('media', 'POST', { name: 'loi.exe', size: 10, type: 'application/x-msdownload' }, 400);
+    await a('media', 'POST', { name: 'big.mp4', size: 81 * 1024 * 1024, type: 'video/mp4' }, 400);
+    const up = await a('media', 'POST', { name: 'huong-dan.mp4', size: bytes.length, type: 'video/mp4' }, 201);
+    assert.match(up.id, /^[a-f0-9]{32}$/); assert.equal(up.chunk, 786432);
+    await a(`media/${up.id}/finish`, 'POST', {}, 409);
+    for (let offset = 0; offset < bytes.length; offset += up.chunk) {
+      if (offset === up.chunk) await a(`media/${up.id}/chunk`, 'POST', { offset: 0, data: bytes.subarray(0, 10).toString('base64') }, 409);
+      await a(`media/${up.id}/chunk`, 'POST', { offset, data: bytes.subarray(offset, offset + up.chunk).toString('base64') });
+    }
+    const done = await a(`media/${up.id}/finish`, 'POST', {}); assert.equal(done.url, '/api/lookup/media/' + up.id);
+    const full = await fetch(f.base + done.url); assert.equal(full.status, 200); assert.ok(Buffer.from(await full.arrayBuffer()).equals(bytes));
+    const part = await fetch(f.base + done.url, { headers: { Range: 'bytes=4-11' } }); assert.equal(part.status, 206); assert.equal(Buffer.from(await part.arrayBuffer()).toString('latin1'), 'ftypmp42');
+    // A file that is not a video is refused at the end.
+    const bad = await a('media', 'POST', { name: 'fake.mp4', size: 20, type: 'video/mp4' }, 201);
+    await a(`media/${bad.id}/chunk`, 'POST', { offset: 0, data: Buffer.alloc(20, 1).toString('base64') });
+    await a(`media/${bad.id}/finish`, 'POST', {}, 400); assert.equal((await fetch(f.base + '/api/lookup/media/' + bad.id)).status, 404);
+    // The notice carries the video, a link and its note.
+    await a(`families/${fam.id}/notice`, 'PATCH', { notice: 'Lỗi riêng', link: 'ftp://x' }, 400);
+    await a(`families/${fam.id}/notice`, 'PATCH', { notice: 'Lỗi riêng', video: 'f'.repeat(32) }, 400);
+    const saved = await a(`families/${fam.id}/notice`, 'PATCH', { notice: 'Family đang lỗi riêng, xem video.', video: up.id, link: 'https://example.com/fix?a=1', link_note: 'Mở link bằng Gmail đang dùng YouTube.' });
+    assert.equal(saved.notice_video, up.id);
+    const state = await a('state'); assert.ok(state.media.some(m => m.id === up.id && m.name === 'huong-dan.mp4'));
+    const item = (await f.customer()('verify', 'POST', { email: 'vd1@example.com', code: state.lookup_codes['vd1@example.com'] })).items[0];
+    assert.equal(item.notice_video, '/api/lookup/media/' + up.id); assert.equal(item.notice_link, 'https://example.com/fix?a=1'); assert.equal(item.notice_link_note, 'Mở link bằng Gmail đang dùng YouTube.');
+    // A video-only notice counts; templates keep video, link and note.
+    assert.equal((await a(`families/${fam.id}/notice`, 'PATCH', { video: up.id })).notice_video, up.id);
+    const tpl = (await a('message-templates', 'PATCH', { templates: [{ text: 'Mẫu lỗi', video: up.id, link: 'https://example.com/a', link_note: 'Ghi chú' }, { text: '', link: 'https://example.com/b' }] })).templates;
+    assert.deepEqual(tpl, [{ text: 'Mẫu lỗi', video: up.id, link: 'https://example.com/a', link_note: 'Ghi chú' }, { text: '', video: '', link: 'https://example.com/b', link_note: '' }]);
+    assert.deepEqual((await a('state')).message_templates, tpl);
   } finally { await f.close(); }
 });
 

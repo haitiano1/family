@@ -74,6 +74,9 @@ try {
   // 0.32.0: Gen mail made for a Family with no link yet hands each arriving link to a customer.
   if(!db.prepare('PRAGMA table_info(invite_mails)').all().some(column=>column.name==='auto_assign'))db.exec('ALTER TABLE invite_mails ADD COLUMN auto_assign INTEGER NOT NULL DEFAULT 0');
   // Thông báo cho khách: a message the shop writes for one Family, shown on top of the lookup page until removed.
+  // Thông báo cho khách can carry a guide video (uploaded, see media) and a link with a note for customers to copy.
+  db.exec("CREATE TABLE IF NOT EXISTS media(id TEXT PRIMARY KEY,name TEXT NOT NULL,mime TEXT NOT NULL DEFAULT '',size INTEGER NOT NULL,received INTEGER NOT NULL DEFAULT 0,ready INTEGER NOT NULL DEFAULT 0,created_at TEXT NOT NULL)");
+  for(const column of ['notice_video','notice_link','notice_link_note'])if(!db.prepare('PRAGMA table_info(family_statuses)').all().some(c=>c.name===column))db.exec(`ALTER TABLE family_statuses ADD COLUMN ${column} TEXT NOT NULL DEFAULT ''`);
   for(const column of ['notice','notice_at'])if(!db.prepare('PRAGMA table_info(family_statuses)').all().some(c=>c.name===column))db.exec(`ALTER TABLE family_statuses ADD COLUMN ${column} TEXT NOT NULL DEFAULT ''`);
   if(!db.prepare('PRAGMA table_info(family_invites)').all().some(column=>column.name==='recipients'))db.exec("ALTER TABLE family_invites ADD COLUMN recipients TEXT NOT NULL DEFAULT ''");
   db.prepare("INSERT OR IGNORE INTO lookup_settings(name,value) VALUES ('code_salt',?)").run(randomBytes(32).toString('hex'));

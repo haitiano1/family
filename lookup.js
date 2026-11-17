@@ -1,6 +1,8 @@
 // Tra cứu & chuyển nhóm: Family status for customers, invite link pools, bulk moves
 // with one invite per customer, and the public lookup page (Gmail + personal code).
 import { createHash, createHmac, randomBytes, randomInt, timingSafeEqual } from 'node:crypto';
+import { appendFileSync, closeSync, existsSync, mkdirSync, openSync, readSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import path from 'node:path';
 import { today, expiry, familyStatusLabels, inviteExpiry } from './domain.js';
 
 export const familyStatuses = ['active', 'checking', 'scanned', 'disabled'];
@@ -51,7 +53,7 @@ export function isGoogleInviteUrl(value) {
   return url.protocol === 'https:' && !url.username && !url.password && (host === 'google.com' || host.endsWith('.google.com') || host.endsWith('.googleapis.com') || host === 'g.co');
 }
 
-export function initLookup(db, { fail, email, text, calendarDate, log }) {
+export function initLookup(db, { fail, email, text, calendarDate, log, mediaDir = '' }) {
   const one = (sql, ...args) => db.prepare(sql).get(...args);
   const all = (sql, ...args) => db.prepare(sql).all(...args);
   const run = (sql, ...args) => db.prepare(sql).run(...args);
@@ -66,7 +68,7 @@ export function initLookup(db, { fail, email, text, calendarDate, log }) {
   }
   const revision = (value, message = 'Dữ liệu đã thay đổi. Tải lại trang rồi thử lại.') => { if (!Number.isInteger(value)) fail(message); return value; };
   const activeFamily = id => Number.isSafeInteger(id) && id > 0 ? one("SELECT f.*,a.email AS manager_email FROM families f JOIN accounts a ON a.id=f.manager_id WHERE f.id=? AND f.archived_at=''", id) : undefined;
-  const statusRow = familyId => one('SELECT * FROM family_statuses WHERE family_id=?', familyId) || { family_id: familyId, status: 'active', note: '', updated_at: '', revision: 0, notice: '', notice_at: '' };
+  const statusRow = familyId => one('SELECT * FROM family_statuses WHERE family_id=?', familyId) || { family_id: familyId, status: 'active', note: '', updated_at: '', revision: 0, notice: '', notice_at: '', notice_video: '', notice_link: '', notice_link_note: '' };
   // A link already shown to a customer (Đã gửi) is not handed out again; a link of a replaced
   // owner (retired) is never handed out.
   const inviteState = invite => { if (invite.retired_at) return 'retired'; const state = inviteHolder(inviteRefs(invite.id)).state; return state === 'ready' && invite.sent_at ? 'sent' : state; };
@@ -94,16 +96,81 @@ export function initLookup(db, { fail, email, text, calendarDate, log }) {
   }
   // Lời nhắn mẫu: the shop's own reusable messages, picked in Thông báo cho khách and Đổi trạng thái.
   // One lookup_settings row per message (message_template:01…), never part of the public shop settings.
-  function messageTemplates() { return all("SELECT value FROM lookup_settings WHERE name LIKE 'message_template:%' ORDER BY name").map(r => r.value); }
+  // A template holds the message and, for Lỗi ngoại lệ, a note and a link customers copy and a guide video:
+  // rows message_template:NN (text), …:NN:video, …:NN:link, …:NN:note.
+  const templateFields = { video: 'video', link: 'link', note: 'link_note' };
+  function messageTemplates() {
+    const out = new Map();
+    for (const row of all("SELECT name,value FROM lookup_settings WHERE name LIKE 'message_template:%' ORDER BY name")) {
+      const [, n, field] = row.name.split(':'); if (!out.has(n)) out.set(n, { text: '', video: '', link: '', link_note: '' });
+      out.get(n)[field ? templateFields[field] : 'text'] = row.value;
+    }
+    return [...out.values()].map(t => ({ ...t, video: mediaReady(t.video) ? t.video : '' }));
+  }
+  function noticeParts(data) {
+    const video = data.video ? mediaId(data.video) : ''; if (data.video && !mediaReady(video)) fail('Video chưa tải xong hoặc đã bị xóa. Chọn lại video.');
+    return { text: text(data.text ?? data.notice, 1000), video: video || '', link: noticeLink(data.link), link_note: text(data.link_note, 1000) };
+  }
+  function noticeLink(value) {
+    const result = text(value, 500); if (!result) return '';
+    let url; try { url = new URL(result); } catch { fail('Link cho khách cần bắt đầu bằng https:// hoặc http://'); }
+    if (!['https:', 'http:'].includes(url.protocol) || url.username || url.password) fail('Link cho khách cần bắt đầu bằng https:// hoặc http://');
+    return result;
+  }
   function saveMessageTemplates(data) {
     if (!Array.isArray(data.templates) || data.templates.length > 20) fail('Tối đa 20 lời nhắn mẫu.');
-    const list = data.templates.map(t => text(t, 1000)).filter(Boolean);
+    const list = data.templates.map(t => noticeParts(typeof t === 'string' ? { text: t } : t || {})).filter(t => t.text || t.video || t.link || t.link_note);
     return atomic('message_templates_save', () => {
       run("DELETE FROM lookup_settings WHERE name LIKE 'message_template:%'");
-      list.forEach((value, i) => run('INSERT INTO lookup_settings(name,value) VALUES (?,?)', 'message_template:' + String(i + 1).padStart(2, '0'), value));
+      list.forEach((t, i) => {
+        const n = 'message_template:' + String(i + 1).padStart(2, '0');
+        run('INSERT INTO lookup_settings(name,value) VALUES (?,?)', n, t.text);
+        for (const [field, key] of Object.entries(templateFields)) if (t[key]) run('INSERT INTO lookup_settings(name,value) VALUES (?,?)', n + ':' + field, t[key]);
+      });
       log(`Cá nhân: sửa lời nhắn mẫu (${list.length} mẫu)`);
       return { ok: true, templates: list };
     });
+  }
+
+  // ---- Video hướng dẫn: uploaded in base64 pieces of 768 KB, kept as DATA_DIR/media/<id>.video ----
+  const MEDIA_MAX = 80 * 1024 * 1024, MEDIA_CHUNK = 786432;
+  const mediaId = id => typeof id === 'string' && /^[a-f0-9]{32}$/.test(id) ? id : null;
+  const mediaPath = (id, part = false) => path.join(mediaDir, id + (part ? '.part' : '.video'));
+  function mediaReady(id) { id = mediaId(id); return !!id && !!one('SELECT id FROM media WHERE id=? AND ready=1', id) && existsSync(mediaPath(id)); }
+  function mediaFile(id) { id = mediaId(id); const row = id && one('SELECT * FROM media WHERE id=? AND ready=1', id); if (!row || !existsSync(mediaPath(id))) return null; return { path: mediaPath(id), size: statSync(mediaPath(id)).size, mime: row.mime || 'video/mp4' }; }
+  // Videos no notice or template uses are removed a day later (the shop may still be writing).
+  function mediaCleanup() {
+    const used = new Set([...all("SELECT notice_video AS id FROM family_statuses WHERE notice_video<>''"), ...all("SELECT value AS id FROM lookup_settings WHERE name LIKE 'message_template:%:video'")].map(r => r.id));
+    const old = new Date(Date.now() - 86400000).toISOString();
+    for (const row of all('SELECT id FROM media WHERE created_at<?', old)) if (!used.has(row.id)) { rmSync(mediaPath(row.id), { force: true }); rmSync(mediaPath(row.id, true), { force: true }); run('DELETE FROM media WHERE id=?', row.id); }
+  }
+  function mediaStart(data) {
+    const name = text(data.name, 200) || 'video', size = data.size, type = String(data.type || '').toLowerCase();
+    if (!Number.isSafeInteger(size) || size <= 0) fail('File video trống.');
+    if (size > MEDIA_MAX) fail('Video tối đa 80 MB. Cắt ngắn hoặc giảm chất lượng rồi tải lại.');
+    if (!/\.(mp4|mov|m4v|webm)$/i.test(name) && !/^video\/(mp4|quicktime|webm|x-m4v)$/.test(type)) fail('Chỉ nhận video MP4, MOV hoặc WebM.');
+    mediaCleanup(); mkdirSync(mediaDir, { recursive: true });
+    const id = randomBytes(16).toString('hex'); writeFileSync(mediaPath(id, true), Buffer.alloc(0));
+    run('INSERT INTO media(id,name,size,received,ready,created_at) VALUES (?,?,?,0,0,?)', id, name, size, now());
+    return { id, chunk: MEDIA_CHUNK };
+  }
+  function mediaChunk(rawId, data) {
+    const id = mediaId(rawId), row = id && one('SELECT * FROM media WHERE id=? AND ready=0', id); if (!row) fail('Không tìm thấy lượt tải video. Chọn lại file.', 404);
+    if (data.offset !== row.received) fail('Lượt tải bị lệch. Chọn lại file.', 409);
+    const bytes = Buffer.from(String(data.data || ''), 'base64');
+    if (!bytes.length || bytes.length > MEDIA_CHUNK || row.received + bytes.length > row.size) fail('Phần video không hợp lệ.');
+    appendFileSync(mediaPath(id, true), bytes); run('UPDATE media SET received=? WHERE id=?', row.received + bytes.length, id);
+    return { ok: true, received: row.received + bytes.length };
+  }
+  function mediaFinish(rawId) {
+    const id = mediaId(rawId), row = id && one('SELECT * FROM media WHERE id=? AND ready=0', id); if (!row) fail('Không tìm thấy lượt tải video. Chọn lại file.', 404);
+    if (row.received !== row.size) fail('Video chưa tải xong.', 409);
+    const head = Buffer.alloc(12), fd = openSync(mediaPath(id, true), 'r'); readSync(fd, head, 0, 12, 0); closeSync(fd);
+    const webm = head.readUInt32BE(0) === 0x1A45DFA3, mp4 = head.subarray(4, 8).toString('latin1') === 'ftyp';
+    if (!webm && !mp4) { rmSync(mediaPath(id, true), { force: true }); run('DELETE FROM media WHERE id=?', id); fail('File không phải video MP4, MOV hoặc WebM.'); }
+    renameSync(mediaPath(id, true), mediaPath(id)); run('UPDATE media SET ready=1,mime=? WHERE id=?', webm ? 'video/webm' : 'video/mp4', id);
+    log(`Cá nhân: tải video hướng dẫn ${row.name}`);
+    return { ok: true, id, name: row.name, size: row.size, url: '/api/lookup/media/' + id };
   }
   function saveSettings(data) {
     const values = { shop_name: text(data.shop_name, 100), contact_url: contactUrl(data.contact_url), contact_label: text(data.contact_label, 60), help_text: text(data.help_text, 500), short_domain: shortDomain(data.short_domain), zalo_url: contactUrl(data.zalo_url), facebook_url: contactUrl(data.facebook_url) };
@@ -393,12 +460,14 @@ export function initLookup(db, { fail, email, text, calendarDate, log }) {
   // the shop clears it. Independent of the status note, which Fix lỗi rewrites by itself.
   function saveNotice(familyId, data) {
     const family = activeFamily(familyId); if (!family) fail('Không tìm thấy Family đang hoạt động.', 404);
-    const notice = text(data.notice, 1000), at = notice ? now() : '';
+    // Lỗi ngoại lệ = the notice carries a note and/or a link for customers to copy and/or a guide video.
+    const p = noticeParts(data), set = !!(p.text || p.video || p.link || p.link_note), at = set ? now() : '';
+    const values = [p.text, at, p.video, p.link, p.link_note];
     const old = one('SELECT * FROM family_statuses WHERE family_id=?', family.id);
-    if (old) run('UPDATE family_statuses SET notice=?,notice_at=?,revision=revision+1 WHERE family_id=?', notice, at, family.id);
-    else run("INSERT INTO family_statuses(family_id,status,note,updated_at,revision,notice,notice_at) VALUES (?,'active','',?,1,?,?)", family.id, now(), notice, at);
-    log(`Cá nhân: ${notice ? 'đặt' : 'gỡ'} thông báo cho khách ${family.name}`);
-    return { ok: true, notice, notice_at: at };
+    if (old) run('UPDATE family_statuses SET notice=?,notice_at=?,notice_video=?,notice_link=?,notice_link_note=?,revision=revision+1 WHERE family_id=?', ...values, family.id);
+    else run("INSERT INTO family_statuses(family_id,status,note,updated_at,revision,notice,notice_at,notice_video,notice_link,notice_link_note) VALUES (?,'active','',?,1,?,?,?,?,?)", family.id, now(), ...values);
+    log(`Cá nhân: ${set ? 'đặt' : 'gỡ'} thông báo cho khách ${family.name}${p.video || p.link || p.link_note ? ' (lỗi ngoại lệ' + (p.video ? ', kèm video' : '') + ')' : ''}`);
+    return { ok: true, notice: p.text, notice_at: at, notice_video: p.video, notice_link: p.link, notice_link_note: values[4] };
   }
   function saveStatus(familyId, data) {
     const family = activeFamily(familyId); if (!family) fail('Không tìm thấy Family đang hoạt động.', 404);
@@ -657,7 +726,8 @@ export function initLookup(db, { fail, email, text, calendarDate, log }) {
     });
     return {
       lookup_supported: true, lookup_settings: settings(),
-      family_statuses: all('SELECT family_id,status,note,updated_at,revision,notice,notice_at FROM family_statuses'),
+      family_statuses: all('SELECT family_id,status,note,updated_at,revision,notice,notice_at,notice_video,notice_link,notice_link_note FROM family_statuses'),
+      media: all('SELECT id,name,size FROM media WHERE ready=1'),
       message_templates: messageTemplates(),
       invites, moves, lookup_codes: Object.fromEntries(all('SELECT DISTINCT email FROM members').map(r => [r.email, codeFor(r.email, key)])),
       invite_mails: all('SELECT id,family_id,email,created_at,auto_assign FROM invite_mails ORDER BY id'), invite_base_email: inviteMailInbox,
@@ -709,7 +779,7 @@ export function initLookup(db, { fail, email, text, calendarDate, log }) {
       }
       const waiting = !allocated && !move && joinable(member) && status.status === 'active', problem = latestReport(member.id);
       const view = move && openMoveStates.includes(move.state) ? 'move' : problemStatuses.includes(status.status) ? 'incident' : problem?.state === 'open' ? 'reported' : waiting ? 'waiting' : period.expiry_status === 'expired' ? 'expired' : 'normal';
-      return { member_ref: member.id, problem, family_name: member.family_name, plan_months: member.plan_months, expires_at: member.expires_at, ...period, membership_status: member.membership_status, status: status.status, status_note: status.note, status_updated_at: status.updated_at, notice: status.notice || '', notice_at: status.notice_at || '', view, move };
+      return { member_ref: member.id, problem, family_name: member.family_name, plan_months: member.plan_months, expires_at: member.expires_at, ...period, membership_status: member.membership_status, status: status.status, status_note: status.note, status_updated_at: status.updated_at, notice: status.notice || '', notice_at: status.notice_at || '', notice_video: mediaReady(status.notice_video) ? '/api/lookup/media/' + status.notice_video : '', notice_link: status.notice_link || '', notice_link_note: status.notice_link_note || '', view, move };
     });
     return { email: address, today: current, shop: settings(), items };
   }
@@ -809,5 +879,5 @@ export function initLookup(db, { fail, email, text, calendarDate, log }) {
     return { ok: true };
   }
 
-  return { deleteInvites, saveNotice, saveMessageTemplates, setHolder, autoAssign, assignFamilyLinks, saveRecipients, todoList, saveTodo, deleteTodo, adminState, settings, saveSettings, rotateCode, generateInviteMails, deleteInviteMails, markInviteSent, handOver, issueStatus, ownerReplaced, saveStatus, customerProblem, handleReport, connectTelegram, testTelegram, disconnectTelegram, saveInvite, deleteInvite, bulkMove, updateMove, result, verify, sessionEmail, logout, customerOpen, customerJoined, customerReport };
+  return { mediaStart, mediaChunk, mediaFinish, mediaFile, deleteInvites, saveNotice, saveMessageTemplates, setHolder, autoAssign, assignFamilyLinks, saveRecipients, todoList, saveTodo, deleteTodo, adminState, settings, saveSettings, rotateCode, generateInviteMails, deleteInviteMails, markInviteSent, handOver, issueStatus, ownerReplaced, saveStatus, customerProblem, handleReport, connectTelegram, testTelegram, disconnectTelegram, saveInvite, deleteInvite, bulkMove, updateMove, result, verify, sessionEmail, logout, customerOpen, customerJoined, customerReport };
 }

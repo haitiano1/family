@@ -137,6 +137,14 @@ main { padding-top: 22px; padding-bottom: 32px; display: flex; flex-direction: c
 .shop-notice-icon svg { width: 19px; height: 19px; }
 .shop-notice p { color: var(--ink); font-size: 15px; white-space: pre-line; overflow-wrap: anywhere; }
 .shop-notice .sub { color: var(--warn-ink); }
+.shop-notice .video-link { min-height: 44px; }
+.copy-box { display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 6px 10px; padding: 10px 12px; border: 1px solid var(--warn-line); border-radius: 12px; background: var(--card); }
+.copy-label { grid-column: 1 / -1; color: var(--warn-ink); font-size: 12px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; }
+.copy-value { min-width: 0; color: var(--ink); font-size: 14px; line-height: 1.45; white-space: pre-line; overflow-wrap: anywhere; }
+.copy-box.link .copy-value { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 13px; color: var(--blue-dark); }
+.copy-btn { min-height: 44px; padding: 0 14px; white-space: nowrap; align-self: start; }
+.copy-btn.done { border-color: var(--go-line); background: var(--go-tint); color: var(--go-deep); }
+@media (max-width: 420px) { .copy-box { grid-template-columns: 1fr; } .copy-btn { width: 100%; } }
 
 /* What to do: numbered actions inside the current step */
 .todo { list-style: none; margin: 0; padding: 0; display: grid; gap: 14px; counter-reset: todo; }
@@ -177,6 +185,7 @@ main { padding-top: 22px; padding-bottom: 32px; display: flex; flex-direction: c
 .video-close { flex: none; width: 40px; height: 40px; border: 1px solid var(--line); border-radius: 999px; background: var(--card); color: var(--ink); font-size: 16px; cursor: pointer; }
 .video-box video { display: block; width: 100%; max-height: calc(100vh - 150px); border-radius: 12px; background: #000; aspect-ratio: 9 / 16; object-fit: contain; }
 .video-box .sub { text-align: center; }
+.video-box.free video { aspect-ratio: auto; min-height: 200px; }
 /* Đăng nhập đúng Gmail: the address to join with, hard to miss. */
 .todo .must-mail { padding: 10px 12px; border: 1px solid var(--stop-line); border-radius: 12px; background: var(--stop-tint); color: #d1242b; font-size: 17px; font-weight: 800; text-align: center; overflow-wrap: anywhere; }
 

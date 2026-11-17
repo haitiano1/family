@@ -15,19 +15,98 @@ export const reportLabels = { twelve_months: 'Google báo chỉ được đổi 
 // Lời nhắn mẫu: the shop's own messages (Cài đặt tra cứu → Lời nhắn mẫu). Nothing is filled in by itself:
 // tapping a template puts it in the message box, and the box's text can be kept as a new template.
 const shortText = t => t.length > 42 ? t.slice(0, 40).trimEnd() + '…' : t;
+// A template: { text, video, link, link_note } — the last three make a Lỗi ngoại lệ.
+const tplText = t => typeof t === 'string' ? t : t?.text || '';
+const tplExtra = t => !!(t && typeof t === 'object' && (t.video || t.link || t.link_note));
+const tplLabel = t => (shortText(tplText(t)) || (t.link ? 'Link: ' + shortText(t.link) : 'Video hướng dẫn')) + (tplExtra(t) ? ' ★' : '');
 export function templatePicker(ctx, target) {
   const list = ctx.state.message_templates || [];
-  return `<div class="template-pick" data-template-target="${target}"><span class="template-label">Lời nhắn mẫu:</span>${list.length ? list.map((t, i) => `<button type="button" class="template-chip" data-template-use="${i}" title="${ctx.escape(t)}">${ctx.escape(shortText(t))}</button>`).join('') : '<span class="subtext-inline">Chưa có mẫu.</span>'}<button type="button" class="template-link" data-template-save>+ Lưu nội dung này làm mẫu</button><button type="button" class="template-link" data-action="message-templates">Sửa mẫu</button></div>`;
+  return `<div class="template-pick" data-template-target="${target}"><span class="template-label">Lời nhắn mẫu:</span>${list.length ? list.map((t, i) => `<button type="button" class="template-chip${tplExtra(t) ? ' is-extra' : ''}" data-template-use="${i}" title="${ctx.escape(tplText(t) + (tplExtra(t) ? ' · Lỗi ngoại lệ (ghi chú / link / video)' : ''))}">${ctx.escape(tplLabel(t))}</button>`).join('') : '<span class="subtext-inline">Chưa có mẫu.</span>'}<button type="button" class="template-link" data-template-save>+ Lưu nội dung này làm mẫu</button><button type="button" class="template-link" data-action="message-templates">Sửa mẫu</button></div>`;
+}
+// The Lỗi ngoại lệ part of a form (notice dialog, template manager): note and link customers copy, guide video.
+const formExtra = form => form?.querySelector('[data-exception]');
+function readExtra(form) {
+  const on = formExtra(form); if (!on || !on.checked) return { video: '', link: '', link_note: '' };
+  return { video: form.querySelector('[data-video-field] input[type=hidden]')?.value || '', link: form.querySelector('[name=link]')?.value.trim() || '', link_note: form.querySelector('[name=link_note]')?.value.trim() || '' };
+}
+function fillExtra(ctx, form, t) {
+  const on = formExtra(form); if (!on) return;
+  on.checked = tplExtra(t); on.dispatchEvent(new Event('change', { bubbles: true }));
+  const link = form.querySelector('[name=link]'), note = form.querySelector('[name=link_note]'), video = form.querySelector('[data-video-field]');
+  if (link) link.value = t?.link || ''; if (note) note.value = t?.link_note || ''; if (video) video.outerHTML = videoField(ctx, 'video', t?.video || '');
+}
+const sizeText = n => n >= 1048576 ? (n / 1048576).toFixed(1).replace('.', ',') + ' MB' : Math.max(1, Math.round(n / 1024)) + ' KB';
+export function videoField(ctx, name, id) {
+  const media = id ? (ctx.state.media || []).find(m => m.id === id) : null;
+  return `<div class="video-field" data-video-field><input type="hidden" name="${name}" value="${media ? media.id : ''}"><div class="video-current">${media ? `<span class="video-name">${ctx.escape(media.name)} · ${sizeText(media.size)}</span><a class="template-link" href="/api/lookup/media/${media.id}" target="_blank" rel="noopener">Xem thử</a><button type="button" class="template-link" data-video-clear>Bỏ video</button>` : '<span class="subtext-inline">Chưa có video.</span>'}</div><label class="video-pick secondary link-button tiny"><input type="file" accept="video/mp4,video/quicktime,video/webm,.mp4,.mov,.m4v,.webm" data-video-upload> ${media ? 'Đổi video' : 'Chọn video để tải lên'}</label><span class="video-progress" aria-live="polite"></span></div>`;
+}
+// Ready-made Lỗi ngoại lệ: Google's household check fails while the customer is away (from the shop's travel guide video).
+export const PRESET_TEMPLATES = [{
+  label: 'Khách đi du lịch (lỗi hộ gia đình)',
+  text: `Google đang báo tài khoản của bạn không ở cùng hộ gia đình với chủ nhóm (thường do bạn đang đi du lịch hoặc ở nơi khác). Làm theo 6 bước sau, có video hướng dẫn bên dưới:
+1. Mở tab ẩn danh (Chrome: ⋮ → Thẻ ẩn danh mới · Safari: nút tab → Riêng tư).
+2. Bấm Copy link bên dưới, dán vào tab ẩn danh và mở.
+3. Đăng nhập đúng Gmail đang bị mất Premium.
+4. Câu "sống cùng hộ gia đình": chọn Có. Câu tiếp theo: tick "Tôi đang đi du lịch". Trang tiếng Anh thì chọn Yes và dòng có chữ "travel".
+5. Bấm Copy ghi chú bên dưới, dán nguyên văn vào ô "Có điều gì khác chúng tôi cần biết không?", rồi tick "Tôi đồng ý".
+6. Bấm Gửi và chờ email trả lời (thường trong 24 giờ). Có email rồi mà vẫn chưa có Premium thì nhắn shop để shop mời lại.`,
+  link: 'https://support.google.com/youtube/contact/familyplan_support',
+  link_note: 'I am part of the same household as the Family Manager. We live together at the same home address. I am currently traveling, so I am using YouTube from a different location for a short time. This may have caused the household check to fail, but I confirm that I live in the same household and I am a legitimate member of this Family Group. Please restore my YouTube Premium family membership. Thank you.',
+}];
+export function exceptionFields(ctx, values = {}) {
+  const on = !!(values.video || values.link || values.link_note);
+  return `<label class="check-field exception-toggle"><input type="checkbox" data-exception${on ? ' checked' : ''}> <span><strong>Lỗi ngoại lệ</strong> — khách thấy cách xử lý ở trên, kèm <strong>ghi chú</strong> và <strong>link</strong> có nút Copy, và <strong>video hướng dẫn</strong>.</span></label>
+    <div class="exception-fields"${on ? '' : ' hidden'}>
+      <div class="form-field"><label>Ghi chú cho khách copy</label><textarea name="link_note" maxlength="1000" rows="3" placeholder="Ví dụ: nội dung khách cần dán khi Google hỏi">${ctx.escape(values.link_note || '')}</textarea></div>
+      <div class="form-field"><label>Link cho khách copy</label><input name="link" type="text" inputmode="url" autocomplete="off" maxlength="500" placeholder="https://…" value="${ctx.escape(values.link || '')}"></div>
+      <div class="form-field"><label>Video hướng dẫn</label>${videoField(ctx, 'video', values.video || '')}<p class="subtext">MP4, MOV hoặc WebM, tối đa 80 MB. Quay bằng iPhone nên chọn Camera → Định dạng → <strong>Tương thích nhất</strong> để máy Android cũng xem được.</p></div>
+    </div>`;
+}
+async function uploadVideo(ctx, input) {
+  const file = input.files?.[0]; if (!file) return;
+  const field = input.closest('[data-video-field]'), progress = field.querySelector('.video-progress'), submit = document.querySelector('#modal-form button[type=submit]');
+  if (file.size > 80 * 1024 * 1024) { ctx.toast('Video tối đa 80 MB. Cắt ngắn hoặc giảm chất lượng rồi tải lại.'); input.value = ''; return; }
+  if (submit) submit.disabled = true; input.disabled = true; progress.textContent = 'Đang tải video… 0%';
+  try {
+    const start = await ctx.post('media', { name: file.name, size: file.size, type: file.type });
+    for (let offset = 0; offset < file.size; offset += start.chunk) {
+      const bytes = new Uint8Array(await file.slice(offset, offset + start.chunk).arrayBuffer()); let bin = '';
+      for (let i = 0; i < bytes.length; i += 32768) bin += String.fromCharCode(...bytes.subarray(i, i + 32768));
+      await ctx.post(`media/${start.id}/chunk`, { offset, data: btoa(bin) });
+      progress.textContent = `Đang tải video… ${Math.round((offset + bytes.length) / file.size * 100)}%`;
+    }
+    const done = await ctx.post(`media/${start.id}/finish`, {});
+    ctx.state.media = [...(ctx.state.media || []), { id: done.id, name: done.name, size: done.size }];
+    field.outerHTML = videoField(ctx, field.querySelector('input[type=hidden]').name, done.id);
+    ctx.toast('Đã tải video lên. Bấm Lưu để gắn vào thông báo.');
+  } catch (error) { progress.textContent = ''; input.disabled = false; input.value = ''; ctx.toast(error.message); }
+  finally { if (submit) submit.disabled = false; }
 }
 export function initMessageTemplates(ctx) {
+  document.addEventListener('change', event => {
+    if (event.target.matches?.('[data-video-upload]')) { uploadVideo(ctx, event.target); return; }
+    if (event.target.matches?.('[data-exception]')) { const box = event.target.closest('form, .template-block')?.querySelector('.exception-fields'); if (box) box.hidden = !event.target.checked; }
+  });
   document.addEventListener('click', async event => {
+    const preset = event.target.closest('[data-template-preset]');
+    if (preset) {
+      const p = PRESET_TEMPLATES[Number(preset.dataset.templatePreset)], rows = [...document.querySelectorAll('#modal-form [data-template-row]')];
+      const row = rows.find(r => !r.querySelector('[data-tpl-text]').value.trim() && !readExtra(r).video && !readExtra(r).link && !readExtra(r).link_note);
+      if (!row) { ctx.toast('Hết ô mẫu trống. Xoá bớt một mẫu, Lưu, rồi mở lại.'); return; }
+      row.querySelector('[data-tpl-text]').value = p.text; fillExtra(ctx, row, { ...p, video: '' });
+      row.scrollIntoView({ block: 'start', behavior: 'smooth' }); ctx.toast('Đã điền mẫu. Chọn video hướng dẫn của bạn rồi bấm Lưu.');
+      return;
+    }
+    const clear = event.target.closest('[data-video-clear]');
+    if (clear) { const field = clear.closest('[data-video-field]'); field.outerHTML = videoField(ctx, field.querySelector('input[type=hidden]').name, ''); return; }
     const use = event.target.closest('[data-template-use]'), save = event.target.closest('[data-template-save]');
     if (!use && !save) return;
     const pick = event.target.closest('.template-pick'), box = pick && document.getElementById(pick.dataset.templateTarget); if (!box) return;
-    const list = ctx.state.message_templates || [];
-    if (use) { box.value = list[Number(use.dataset.templateUse)] || ''; box.focus(); return; }
-    const value = box.value.trim(); if (!value) { ctx.toast('Viết lời nhắn vào ô trước rồi mới lưu làm mẫu.'); box.focus(); return; }
-    if (list.includes(value)) { ctx.toast('Lời nhắn này đã có trong mẫu.'); return; }
+    const list = ctx.state.message_templates || [], form = box.closest('form');
+    if (use) { const t = list[Number(use.dataset.templateUse)]; box.value = tplText(t); fillExtra(ctx, form, t); box.focus(); return; }
+    const value = { text: box.value.trim(), ...readExtra(form) };
+    if (!value.text && !value.video && !value.link && !value.link_note) { ctx.toast('Viết lời nhắn vào ô trước rồi mới lưu làm mẫu.'); box.focus(); return; }
+    if (list.some(t => tplText(t) === value.text && (t.video || '') === value.video && (t.link || '') === value.link && (t.link_note || '') === value.link_note)) { ctx.toast('Mẫu này đã có.'); return; }
     save.disabled = true;
     try {
       const saved = await ctx.patch('message-templates', { templates: [...list, value] });
@@ -275,7 +354,8 @@ function telegramCard(ctx) {
 // Customer-facing status, shown inside the Family info card: badge, message line, button, and the incident callout.
 // Thông báo cho khách: the shop's own message for one Family, shown on top of the lookup page.
 export function noticeLine(ctx, status) {
-  return status.notice ? `<p class="family-notice-line"><span class="badge amber">Thông báo cho khách</span> ${ctx.escape(status.notice)} <span class="subtext-inline">· ${ctx.date(status.notice_at)}</span></p>` : '';
+  const extra = status.notice_video || status.notice_link || status.notice_link_note;
+  return status.notice || extra ? `<p class="family-notice-line"><span class="badge amber">Thông báo cho khách</span>${extra ? '<span class="badge red">Lỗi ngoại lệ</span>' : ''} ${ctx.escape(status.notice || '')}${status.notice_video ? ' <span class="subtext-inline">· có video</span>' : ''}${status.notice_link ? ' <span class="subtext-inline">· có link</span>' : ''} <span class="subtext-inline">· ${ctx.date(status.notice_at)}</span></p>` : '';
 }
 export function familyStatusParts(ctx, family) {
   if (!ctx.state.lookup_supported) return { badge: '', line: '', action: '', callout: '' };
@@ -284,7 +364,7 @@ export function familyStatusParts(ctx, family) {
   return {
     badge: `<span class="badge ${statusColors[status.status]}" title="Trạng thái khách thấy khi tra cứu">${escape(familyStatusLabels[status.status])}</span>`,
     line: `<p>Lời nhắn theo trạng thái: ${status.note ? escape(status.note) : 'Chưa có'}${status.updated_at ? ` <span class="subtext-inline">· cập nhật ${ctx.date(status.updated_at)}</span>` : ''}</p>` + noticeLine(ctx, status),
-    action: btn('family-notice', status.notice ? 'Sửa thông báo' : 'Thông báo cho khách', 'secondary', `data-id="${family.id}"`) + btn('family-status', 'Đổi trạng thái', 'secondary', `data-id="${family.id}"`),
+    action: btn('family-notice', status.notice || status.notice_video || status.notice_link || status.notice_link_note ? 'Sửa thông báo' : 'Thông báo cho khách', 'secondary', `data-id="${family.id}"`) + btn('family-status', 'Đổi trạng thái', 'secondary', `data-id="${family.id}"`),
     callout: problem(status.status) && members.length ? `<div class="notice lookup-callout"><div><strong>Nhóm đang có sự cố.</strong> Đã có Gmail chủ mới thì vào Fix lỗi → Đã fix → Đổi sang Gmail chủ mới: ${members.length} khách giữ nguyên trong Family này và tự nhận link mới khi tra cứu. Muốn dồn khách sang Family khác thì bấm nút bên cạnh.</div>${btn('move-open', 'Chuyển khách sang nhóm mới', 'primary', `data-id="${family.id}"`)}</div>` : ''
   };
 }
@@ -474,11 +554,12 @@ export async function handleLookupAction(ctx, action, button) {
     return true;
   }
   if (action === 'message-templates') {
-    const list = ctx.state.message_templates || [], rows = [...list, '', ''].slice(0, Math.max(20, list.length));
-    ctx.modal('Lời nhắn mẫu', '<p class="subtext">Mỗi ô là một mẫu, dùng cho <strong>Thông báo cho khách</strong> và <strong>Đổi trạng thái</strong>: bấm mẫu là chữ vào ô, không có gì tự điền. Xoá hết chữ trong ô để bỏ mẫu đó. Tối đa 20 mẫu.</p>'
-      + rows.slice(0, list.length + 2).map((t, i) => `<div class="form-field"><label for="field-tpl-${i}">Mẫu ${i + 1}${i >= list.length ? ' (mới)' : ''}</label><textarea id="field-tpl-${i}" name="tpl_${String(i).padStart(2, '0')}" maxlength="1000" rows="3" placeholder="Ví dụ: Nhóm đang bị Google khoá thanh toán, shop xử lý trong hôm nay. Bạn chưa cần làm gì.">${ctx.escape(t)}</textarea></div>`).join(''),
-      async data => {
-        const templates = Object.keys(data).filter(k => k.startsWith('tpl_')).sort().map(k => String(data[k]).trim()).filter(Boolean);
+    const list = (ctx.state.message_templates || []).map(t => typeof t === 'string' ? { text: t } : t), rows = [...list, {}, {}].slice(0, Math.max(list.length + 2, 2)).slice(0, 20);
+    ctx.modal('Lời nhắn mẫu', '<p class="subtext">Mỗi mẫu dùng cho <strong>Thông báo cho khách</strong> và <strong>Đổi trạng thái</strong>: bấm mẫu là nội dung vào ô, không có gì tự điền. Tick <strong>Lỗi ngoại lệ</strong> để mẫu có thêm ghi chú, link và video cho khách. Xoá hết nội dung để bỏ mẫu. Tối đa 20 mẫu.</p>'
+      + `<div class="template-pick preset-pick"><span class="template-label">Mẫu có sẵn:</span>${PRESET_TEMPLATES.map((p, i) => `<button type="button" class="template-chip is-extra" data-template-preset="${i}">+ ${ctx.escape(p.label)}</button>`).join('')}<span class="subtext-inline">Bấm để điền vào mẫu trống, rồi chọn video và Lưu.</span></div>`
+      + rows.map((t, i) => `<fieldset class="template-block" data-template-row><legend>Mẫu ${i + 1}${i >= list.length ? ' (mới)' : ''}</legend><div class="form-field"><label for="field-tpl-${i}">Lời nhắn / cách xử lý</label><textarea id="field-tpl-${i}" data-tpl-text maxlength="1000" rows="3" placeholder="Ví dụ: Nhóm đang bị Google khoá thanh toán, shop xử lý trong hôm nay. Bạn chưa cần làm gì.">${ctx.escape(t.text || '')}</textarea></div>${exceptionFields(ctx, t)}</fieldset>`).join(''),
+      async () => {
+        const templates = [...document.querySelectorAll('#modal-form [data-template-row]')].map(row => ({ text: row.querySelector('[data-tpl-text]').value.trim(), ...readExtra(row) })).filter(t => t.text || t.video || t.link || t.link_note);
         const saved = await ctx.patch('message-templates', { templates });
         ctx.toast(`Đã lưu ${saved.templates.length} lời nhắn mẫu.`);
       });
@@ -488,12 +569,14 @@ export async function handleLookupAction(ctx, action, button) {
     const family = state.families.find(f => f.id === id); if (!family) return ctx.toast('Family đã thay đổi. Tải lại trang.'), true;
     const status = familyStatus(state, id);
     ctx.modal('Thông báo cho khách · ' + family.name,
-      `<div class="form-field"><label for="field-notice">Thông báo cho khách trong Family này</label><textarea id="field-notice" name="notice" maxlength="1000" rows="5" placeholder="Ví dụ: Nhóm đang bị Google khoá thanh toán, shop xử lý trong hôm nay. Bạn chưa cần làm gì, có link mới shop sẽ báo tại đây.">${ctx.escape(status.notice || '')}</textarea></div>`
+      `<div class="form-field"><label for="field-notice">Thông báo / cách xử lý cho khách trong Family này</label><textarea id="field-notice" name="notice" maxlength="1000" rows="5" placeholder="Ví dụ: Nhóm đang bị Google khoá thanh toán, shop xử lý trong hôm nay. Bạn chưa cần làm gì, có link mới shop báo tại đây.">${ctx.escape(status.notice || '')}</textarea></div>`
+      + exceptionFields(ctx, { video: status.notice_video, link: status.notice_link, link_note: status.notice_link_note })
       + templatePicker(ctx, 'field-notice')
-      + '<p class="subtext">Khách trong Family này tra cứu sẽ thấy khung <strong>Thông báo từ shop</strong> ở đầu trang, cho đến khi bạn gỡ. Không ảnh hưởng trạng thái nhóm hay lời nhắn theo trạng thái. Xoá hết chữ rồi Lưu để gỡ thông báo.</p>',
-      async data => {
-        const saved = await ctx.patch(`families/${id}/notice`, { notice: data.notice });
-        ctx.toast(saved.notice ? 'Đã đăng thông báo. Khách trong Family này thấy ngay khi tra cứu.' : 'Đã gỡ thông báo cho khách.');
+      + '<p class="subtext">Chỉ khách trong Family này thấy khung <strong>Thông báo từ shop</strong> ở đầu trang tra cứu, cho đến khi bạn gỡ. Không ảnh hưởng trạng thái nhóm hay lời nhắn theo trạng thái. Xoá hết chữ, bỏ tick Lỗi ngoại lệ rồi Lưu để gỡ thông báo.</p>',
+      async () => {
+        const form = document.getElementById('modal-form'), extra = readExtra(form);
+        const saved = await ctx.patch(`families/${id}/notice`, { notice: form.querySelector('[name=notice]').value, ...extra });
+        ctx.toast(saved.notice || saved.notice_video || saved.notice_link || saved.notice_link_note ? `Đã đăng thông báo${saved.notice_video || saved.notice_link || saved.notice_link_note ? ' (lỗi ngoại lệ)' : ''}. Khách trong Family này thấy ngay khi tra cứu.` : 'Đã gỡ thông báo cho khách.');
       });
     return true;
   }
