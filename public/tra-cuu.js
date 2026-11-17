@@ -149,7 +149,7 @@ function flowOf(item) {
   const current = item.view === 'reported' ? 1 : move?.invite_url ? 3 : 2, linkLater = item.view === 'move' && !move?.invite_url;
   return {
     current, n: 4, yours: current === 3,
-    title: current === 3 ? 'Bạn thao tác: vào nhóm mới' : current === 1 ? 'Shop đang kiểm tra nhóm của bạn' : linkLater ? 'Shop đang tạo link riêng cho bạn' : 'Hải đang chuẩn bị nhóm mới, phiền bạn đợi xíuuuu ^^',
+    title: current === 3 ? 'Bạn thao tác: vào nhóm mới' : current === 1 ? 'Shop đang kiểm tra nhóm của bạn' : linkLater ? 'Shop đang tạo link riêng cho bạn' : 'Shop đang chuẩn bị nhóm mới, bạn đợi xíu rồi load lại trang nhé',
     sub: current === 3 ? 'Làm 3 bước ở mục Bạn thao tác để vào nhóm mới, mất khoảng 1 phút.'
       : current === 1 ? 'Shop đã nhận báo lỗi của bạn. Kết quả kiểm tra sẽ hiện ngay tại đây.'
       : linkLater ? 'Nhóm mới đã sẵn sàng. Link riêng của bạn sẽ hiện ngay tại đây.'
