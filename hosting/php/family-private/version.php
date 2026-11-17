@@ -1,1 +1,1 @@
-<?php return ['version'=>'0.32.19','schema'=>8,'protocol'=>1];
+<?php return ['version'=>'0.32.20','schema'=>8,'protocol'=>1];

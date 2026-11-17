@@ -97,15 +97,15 @@ export function initLookup(db, { fail, email, text, calendarDate, log, mediaDir 
   // Lời nhắn mẫu: the shop's own reusable messages, picked in Thông báo cho khách and Đổi trạng thái.
   // One lookup_settings row per message (message_template:01…), never part of the public shop settings.
   // A template holds the message and, for Lỗi ngoại lệ, a note and a link customers copy and a guide video:
-  // rows message_template:NN (text), …:NN:video, …:NN:link, …:NN:note.
-  const templateFields = { video: 'video', link: 'link', note: 'link_note' };
+  // rows message_template:NN (text), …:NN:video, …:NN:link, …:NN:note, …:NN:name (label on the button).
+  const templateFields = { video: 'video', link: 'link', note: 'link_note', name: 'name' };
   // Built-in guide videos a notice can use without uploading (shipped with the app).
   const BUILTIN_VIDEOS = { travel: '/api/lookup/guide-video/travel' };
   const videoUrl = id => BUILTIN_VIDEOS[id] || (mediaReady(id) ? '/api/lookup/media/' + mediaId(id) : '');
   function messageTemplates() {
     const out = new Map();
     for (const row of all("SELECT name,value FROM lookup_settings WHERE name LIKE 'message_template:%' ORDER BY name")) {
-      const [, n, field] = row.name.split(':'); if (!out.has(n)) out.set(n, { text: '', video: '', link: '', link_note: '' });
+      const [, n, field] = row.name.split(':'); if (!out.has(n)) out.set(n, { text: '', video: '', link: '', link_note: '', name: '' });
       out.get(n)[field ? templateFields[field] : 'text'] = row.value;
     }
     return [...out.values()].map(t => ({ ...t, video: videoUrl(t.video) ? t.video : '' }));
@@ -122,7 +122,7 @@ export function initLookup(db, { fail, email, text, calendarDate, log, mediaDir 
   }
   function saveMessageTemplates(data) {
     if (!Array.isArray(data.templates) || data.templates.length > 20) fail('Tối đa 20 lời nhắn mẫu.');
-    const list = data.templates.map(t => noticeParts(typeof t === 'string' ? { text: t } : t || {})).filter(t => t.text || t.video || t.link || t.link_note);
+    const list = data.templates.map(t => typeof t === 'string' ? { text: t } : t || {}).map(t => ({ ...noticeParts(t), name: text(t.name, 60) })).filter(t => t.text || t.video || t.link || t.link_note);
     return atomic('message_templates_save', () => {
       run("DELETE FROM lookup_settings WHERE name LIKE 'message_template:%'");
       list.forEach((t, i) => {

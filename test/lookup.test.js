@@ -789,8 +789,8 @@ test('Thông báo kèm video và link: upload in pieces, customers of that Famil
     assert.equal(item.notice_video, '/api/lookup/media/' + up.id); assert.equal(item.notice_link, 'https://example.com/fix?a=1'); assert.equal(item.notice_link_note, 'Mở link bằng Gmail đang dùng YouTube.');
     // A video-only notice counts; templates keep video, link and note.
     assert.equal((await a(`families/${fam.id}/notice`, 'PATCH', { video: up.id })).notice_video, up.id);
-    const tpl = (await a('message-templates', 'PATCH', { templates: [{ text: 'Mẫu lỗi', video: up.id, link: 'https://example.com/a', link_note: 'Ghi chú' }, { text: '', link: 'https://example.com/b' }] })).templates;
-    assert.deepEqual(tpl, [{ text: 'Mẫu lỗi', video: up.id, link: 'https://example.com/a', link_note: 'Ghi chú' }, { text: '', video: '', link: 'https://example.com/b', link_note: '' }]);
+    const tpl = (await a('message-templates', 'PATCH', { templates: [{ text: 'Mẫu lỗi', video: up.id, link: 'https://example.com/a', link_note: 'Ghi chú' }, { text: '', link: 'https://example.com/b', name: ' Chỉ link ' }] })).templates;
+    assert.deepEqual(tpl, [{ text: 'Mẫu lỗi', video: up.id, link: 'https://example.com/a', link_note: 'Ghi chú', name: '' }, { text: '', video: '', link: 'https://example.com/b', link_note: '', name: 'Chỉ link' }]);
     assert.deepEqual((await a('state')).message_templates, tpl);
     // Built-in video (Khách đi du lịch): no upload, served with the app.
     assert.equal((await a(`families/${fam.id}/notice`, 'PATCH', { notice: 'Đi du lịch', video: 'travel' })).notice_video, 'travel');
