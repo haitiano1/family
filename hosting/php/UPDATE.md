@@ -1,3 +1,7 @@
+# 0.32.22 — Sửa chữ trang tra cứu
+
+Dùng **Cập nhật một chạm**.
+
 # 0.32.21 — Gỡ thông báo một chạm
 
 Dùng **Cập nhật một chạm**.
