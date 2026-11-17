@@ -1,4 +1,4 @@
-# 0.32.22 — Sửa chữ bước Đang xử lý
+# 0.32.22 — Sửa chữ trang tra cứu
 
 Dùng **Cập nhật một chạm**.
 

@@ -215,7 +215,7 @@ function calmCard(item) {
   const expired = item.view === 'expired', open = problemOpen === item.member_ref, handled = item.problem?.state === 'handled';
   return `<section class="card status ${expired ? 'stop' : 'done'}">
       <div class="status-meta"><span class="live">${expired ? 'Hết hạn' : 'Đang hoạt động'}</span></div>
-      <h1>${expired ? `Gói đã hết hạn ${Math.abs(item.days_left)} ngày` : 'Premium đang hoạt động'}</h1>
+      <h1>${expired ? `Gói đã hết hạn ${Math.abs(item.days_left)} ngày` : 'Shop chưa ghi nhận lỗi từ nhóm này'}</h1>
       <p class="status-sub">${expired ? 'Gia hạn xong, thông tin mới hiện ngay trên trang này.' : 'Nhóm của bạn hoạt động bình thường. Bạn không cần làm gì thêm.'}</p>
     </section>`
     + (handled ? note('Shop đã xử lý báo lỗi của bạn' + (item.problem.handled_at ? ' lúc ' + time(item.problem.handled_at) : ''), item.problem.handled_note || 'Mở lại YouTube để kiểm tra. Vẫn lỗi thì báo lại cho shop.', 'green') : '')

@@ -1,1 +1,1 @@
-**Sửa chữ trang tra cứu**: bước Đang xử lý (đang chuẩn bị nhóm mới) giờ ghi “Shop đang chuẩn bị nhóm mới, bạn đợi xíu rồi load lại trang nhé”. Gồm Gỡ thông báo một chạm (0.32.21). Dùng Cập nhật một chạm.
+**Sửa chữ trang tra cứu**: bước Đang xử lý (đang chuẩn bị nhóm mới) giờ ghi “Shop đang chuẩn bị nhóm mới, bạn đợi xíu rồi load lại trang nhé”; khi nhóm bình thường, dòng in đậm ghi “Shop chưa ghi nhận lỗi từ nhóm này”. Gồm Gỡ thông báo một chạm (0.32.21). Dùng Cập nhật một chạm.
