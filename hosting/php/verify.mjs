@@ -44,10 +44,10 @@ async function fixture(database,writable=false){
  }else execFileSync('python3',['-c',"import zipfile,sys;zipfile.ZipFile(sys.argv[1]).extractall(sys.argv[2])",root+'/downloads/family-hostinger.zip',folder]);
  execFileSync('python3',['-c',"import os,sys;[(os.chmod(b,0o755),[os.chmod(os.path.join(b,f),0o644) for f in fs]) for b,ds,fs in os.walk(sys.argv[1])]",folder]);
  if(writable){chmodSync(folder+'/family-private',0o777);chmodSync(folder+'/public_html',0o777);}
- // Uploaded guide videos: on hosting PHP runs as the account owner; here Apache needs a writable folder.
+ // Uploaded guide videos: on hosting PHP runs as the account owner; here Apache gets a writable media mount even when family-private is read-only.
  mkdirSync(folder+'/family-private/media');chmodSync(folder+'/family-private/media',0o777);
  const db=database || 'f_test_'+id;if(!database)sql('CREATE DATABASE '+db+' CHARACTER SET utf8mb4 COLLATE utf8mb4_bin');
- docker('run','-d','--name',name,'--network',network,'-p','127.0.0.1::80','-e','FAMILY_ALLOW_HTTP=1','-v',folder+'/public_html:/var/www/html:'+(writable?'rw':'ro'),'-v',folder+'/family-private:/var/www/family-private:'+(writable?'rw':'ro'),'family-php-test:8.3');containers.push(name);if(writable)writableContainers.add(name);
+ docker('run','-d','--name',name,'--network',network,'-p','127.0.0.1::80','-e','FAMILY_ALLOW_HTTP=1','-v',folder+'/public_html:/var/www/html:'+(writable?'rw':'ro'),'-v',folder+'/family-private:/var/www/family-private:'+(writable?'rw':'ro'),'-v',folder+'/family-private/media:/var/www/family-private/media:rw','family-php-test:8.3');containers.push(name);if(writable)writableContainers.add(name);
  let base='http://127.0.0.1:'+port(name),cookie='';
  function config(origin=base){writeFileSync(folder+'/family-private/config.php',`<?php return ['public_origin'=>'${origin}','db_host'=>'${mysql}','db_port'=>3306,'db_name'=>'${db}','db_user'=>'root','db_password'=>'${password}','access_password'=>'${password}'];`);chmodSync(folder+'/family-private/config.php',0o644);}
  config();
