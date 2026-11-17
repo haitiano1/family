@@ -1,3 +1,7 @@
+# 0.32.23 — Máy tính hiện đủ mục menu
+
+Dùng **Cập nhật một chạm**.
+
 # 0.32.22 — Sửa chữ trang tra cứu
 
 Dùng **Cập nhật một chạm**.
