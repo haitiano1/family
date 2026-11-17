@@ -1,3 +1,7 @@
+# 0.32.19 — Lỗi ngoại lệ: ghi chú, link và video cho khách
+
+Dùng **Cập nhật một chạm**. Bản này thêm bảng `media` và 3 cột vào bảng trạng thái Family; web tự tạo khi chạy lần đầu, dữ liệu cũ giữ nguyên. Video bạn tải lên nằm trong thư mục `family-private/media/` (web tự tạo; Cập nhật một chạm không đụng tới). Video có sẵn của mẫu **Khách đi du lịch** đi kèm bản cập nhật (`family-private/guide-video-travel.php`), không cần tải lên. Video bạn tự tải **không** nằm trong file sao lưu JSON: chuyển host thì chép cả thư mục `media`, hoặc tải video lên lại.
+
 # 0.32.18 — Link đã xóa không bị thêm lại
 
 Dùng **Cập nhật một chạm**. Bản này thêm 1 bảng nhỏ ghi link đã xóa; web tự tạo khi chạy lần đầu.

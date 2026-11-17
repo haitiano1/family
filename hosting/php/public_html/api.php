@@ -23,6 +23,7 @@ try {
         accessCookie($c);reply(['ok'=>true]);
     }
     if(isset(LOOKUP_GUIDE_VIDEOS[$route])&&in_array($method,['GET','HEAD'],true))lookupGuideVideo(LOOKUP_GUIDE_VIDEOS[$route]);
+    if(preg_match('~^/api/lookup/media/([a-f0-9]{32})$~D',$route,$mediaMatch)&&in_array($method,['GET','HEAD'],true))lookupServeMedia($mediaMatch[1]);
     if(str_starts_with($route,'/api/lookup/'))lookupRequest(db($c),$c,$route,$method);
     if(!authorized($c))fail('Nhập mật khẩu truy cập để mở dữ liệu.',401);
     if($route==='/api/access/close'&&$method==='POST'){accessCookie($c,true);reply(['ok'=>true]);}
@@ -30,6 +31,7 @@ try {
     if(str_starts_with($route,'/api/sheets'))sheetsRequest($db,$c,$route,$method);
     if($route==='/api/vault/sheets-sync'&&$method==='POST')sheetsVaultRequest($db,$c);
     if(str_starts_with($route,'/api/vault/'))vaultRequest($db,$c,$route,$method);
+    if(str_starts_with($route,'/api/media'))lookupMediaRequest($db,$route,$method);
     if($route==='/api/state'||(!in_array($method,['GET','HEAD'],true)))beginAudit($db,auditAction($method,$route),$route==='/api/state'?'Hệ thống':'Cá nhân');
     lookupAdminRequest($db,$route,$method);
     if($route==='/api/statistics'&&$method==='GET')reply(renewalStatistics($db,$_GET));

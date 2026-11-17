@@ -136,7 +136,8 @@ function initializeSchema(PDO $db): void {
 // 7 (0.32.0): invite_mails.auto_assign, Gen mail for a Family with no link yet hands links to customers.
 // 8 (0.32.16): family_statuses.notice/notice_at, Thông báo cho khách of one Family.
 // 9 (0.32.18): deleted_invites, links the shop deleted so Lấy link mời does not bring them back.
-const FAMILY_LOOKUP_SCHEMA_VERSION=9;
+// 10 (0.32.19): media + family_statuses.notice_video/notice_link/notice_link_note, Lỗi ngoại lệ with a guide video.
+const FAMILY_LOOKUP_SCHEMA_VERSION=10;
 function ensureLookupSchema(PDO $db): void {
     $row=one($db,"SELECT value FROM app_meta WHERE name='lookup_schema'");
     if(($row['value']??'')===(string)FAMILY_LOOKUP_SCHEMA_VERSION)return;
@@ -148,6 +149,9 @@ function ensureLookupSchema(PDO $db): void {
     $statusColumns=array_column(all($db,'SHOW COLUMNS FROM family_statuses'),'Field');
     if(!in_array('notice',$statusColumns,true))$db->exec("ALTER TABLE family_statuses ADD COLUMN notice VARCHAR(1000) NOT NULL DEFAULT ''");
     if(!in_array('notice_at',$statusColumns,true))$db->exec("ALTER TABLE family_statuses ADD COLUMN notice_at VARCHAR(30) NOT NULL DEFAULT ''");
+    if(!in_array('notice_video',$statusColumns,true))$db->exec("ALTER TABLE family_statuses ADD COLUMN notice_video VARCHAR(32) NOT NULL DEFAULT ''");
+    if(!in_array('notice_link',$statusColumns,true))$db->exec("ALTER TABLE family_statuses ADD COLUMN notice_link VARCHAR(500) NOT NULL DEFAULT ''");
+    if(!in_array('notice_link_note',$statusColumns,true))$db->exec("ALTER TABLE family_statuses ADD COLUMN notice_link_note VARCHAR(1000) NOT NULL DEFAULT ''");
     if(!in_array('recipients',array_column(all($db,'SHOW COLUMNS FROM family_invites'),'Field'),true))$db->exec("ALTER TABLE family_invites ADD COLUMN recipients VARCHAR(3000) NOT NULL DEFAULT ''");
     q($db,"INSERT IGNORE INTO lookup_settings(name,value) VALUES ('code_salt',?)",[bin2hex(random_bytes(32))]);
     q($db,"INSERT INTO app_meta(name,value) VALUES ('lookup_schema',?) ON DUPLICATE KEY UPDATE value=VALUES(value)",[(string)FAMILY_LOOKUP_SCHEMA_VERSION]);

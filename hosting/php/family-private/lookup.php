@@ -60,7 +60,7 @@ function lookupActiveFamily(PDO $db,mixed $id): array|false {
     return one($db,"SELECT f.*,a.email AS manager_email FROM families f JOIN accounts a ON a.id=f.manager_id WHERE f.id=? AND f.archived_at=''",[$id]);
 }
 function lookupStatusRow(PDO $db,int $familyId): array {
-    return one($db,'SELECT * FROM family_statuses WHERE family_id=?',[$familyId])?:['family_id'=>$familyId,'status'=>'active','note'=>'','updated_at'=>'','revision'=>0,'notice'=>'','notice_at'=>''];
+    return one($db,'SELECT * FROM family_statuses WHERE family_id=?',[$familyId])?:['family_id'=>$familyId,'status'=>'active','note'=>'','updated_at'=>'','revision'=>0,'notice'=>'','notice_at'=>'','notice_video'=>'','notice_link'=>'','notice_link_note'=>''];
 }
 
 function lookupSettings(PDO $db): array {
@@ -83,15 +83,95 @@ function lookupShortDomain(mixed $value): string {
 }
 // Lời nhắn mẫu: the shop's own reusable messages, picked in Thông báo cho khách and Đổi trạng thái.
 // One lookup_settings row per message (message_template:01…), never part of the public shop settings.
-function lookupMessageTemplates(PDO $db): array {return array_column(all($db,"SELECT value FROM lookup_settings WHERE name LIKE 'message_template:%' ORDER BY name"),'value');}
+// A template holds the message and, for Lỗi ngoại lệ, a note and a link customers copy and a guide video:
+// rows message_template:NN (text), …:NN:video, …:NN:link, …:NN:note.
+const LOOKUP_TEMPLATE_FIELDS=['video'=>'video','link'=>'link','note'=>'link_note'];
+// Built-in guide videos a notice can use without uploading (shipped with the app).
+const LOOKUP_BUILTIN_VIDEOS=['travel'=>'/api/lookup/guide-video/travel'];
+function lookupVideoUrl(PDO $db,string $id): string {return LOOKUP_BUILTIN_VIDEOS[$id]??(lookupMediaReady($db,$id)?'/api/lookup/media/'.$id:'');}
+function lookupMessageTemplates(PDO $db): array {
+    $out=[];
+    foreach(all($db,"SELECT name,value FROM lookup_settings WHERE name LIKE 'message_template:%' ORDER BY name") as $row){
+        $parts=explode(':',$row['name']);$n=$parts[1]??'';$out[$n]??=['text'=>'','video'=>'','link'=>'','link_note'=>''];
+        $out[$n][isset($parts[2])?(LOOKUP_TEMPLATE_FIELDS[$parts[2]]??'text'):'text']=$row['value'];
+    }
+    return array_values(array_map(fn($t)=>[...$t,'video'=>lookupVideoUrl($db,$t['video'])!==''?$t['video']:''],$out));
+}
+function lookupNoticeLink(mixed $value): string {
+    $url=text($value,500);if($url==='')return '';$u=parse_url($url);
+    if(!is_array($u)||!in_array(strtolower($u['scheme']??''),['http','https'],true)||empty($u['host'])||isset($u['user'])||isset($u['pass']))fail('Link cho khách cần bắt đầu bằng https:// hoặc http://');
+    return $url;
+}
+function lookupNoticeParts(PDO $db,array $d): array {
+    $video=is_string($d['video']??null)?$d['video']:'';if($video!==''&&lookupVideoUrl($db,$video)==='')fail('Video chưa tải xong hoặc đã bị xóa. Chọn lại video.');
+    return ['text'=>text($d['text']??($d['notice']??''),1000),'video'=>$video,'link'=>lookupNoticeLink($d['link']??''),'link_note'=>text($d['link_note']??'',1000)];
+}
 function lookupSaveMessageTemplates(PDO $db,array $d): array {
     $in=$d['templates']??null;if(!is_array($in)||!array_is_list($in)||count($in)>20)fail('Tối đa 20 lời nhắn mẫu.');
-    $list=array_values(array_filter(array_map(fn($t)=>text($t,1000),$in),fn($t)=>$t!==''));
+    $list=array_values(array_filter(array_map(fn($t)=>lookupNoticeParts($db,is_array($t)?$t:['text'=>$t]),$in),fn($t)=>$t['text']!==''||$t['video']!==''||$t['link']!==''||$t['link_note']!==''));
     return transaction($db,function()use($db,$list){
         q($db,"DELETE FROM lookup_settings WHERE name LIKE 'message_template:%'");
-        foreach($list as $i=>$value)q($db,'INSERT INTO lookup_settings(name,value) VALUES (?,?)',['message_template:'.str_pad((string)($i+1),2,'0',STR_PAD_LEFT),$value]);
+        foreach($list as $i=>$t){
+            $n='message_template:'.str_pad((string)($i+1),2,'0',STR_PAD_LEFT);q($db,'INSERT INTO lookup_settings(name,value) VALUES (?,?)',[$n,$t['text']]);
+            foreach(LOOKUP_TEMPLATE_FIELDS as $field=>$key)if($t[$key]!=='')q($db,'INSERT INTO lookup_settings(name,value) VALUES (?,?)',[$n.':'.$field,$t[$key]]);
+        }
         logEntry($db,'Cá nhân: sửa lời nhắn mẫu ('.count($list).' mẫu)');return ['ok'=>true,'templates'=>$list];
     });
+}
+// ---- Video hướng dẫn: uploaded in base64 pieces of 768 KB, kept as family-private/media/<id>.video ----
+const LOOKUP_MEDIA_MAX=83886080,LOOKUP_MEDIA_CHUNK=786432;
+function lookupMediaPath(string $id,bool $part=false): string {return __DIR__.'/media/'.$id.($part?'.part':'.video');}
+function lookupMediaId(mixed $id): ?string {return is_string($id)&&preg_match('/^[a-f0-9]{32}$/D',$id)?$id:null;}
+function lookupMediaReady(PDO $db,mixed $id): bool {$id=lookupMediaId($id);return $id!==null&&(bool)one($db,'SELECT id FROM media WHERE id=? AND ready=1',[$id])&&is_file(lookupMediaPath($id));}
+// Videos no notice or template uses are removed a day later (the shop may still be writing).
+function lookupMediaCleanup(PDO $db): void {
+    $used=array_flip(array_merge(array_column(all($db,"SELECT notice_video AS id FROM family_statuses WHERE notice_video<>''"),'id'),array_column(all($db,"SELECT value AS id FROM lookup_settings WHERE name LIKE 'message_template:%:video'"),'id')));
+    foreach(all($db,'SELECT id FROM media WHERE created_at<?',[gmdate('Y-m-d\TH:i:s.000\Z',time()-86400)]) as $row)if(!isset($used[$row['id']])){@unlink(lookupMediaPath($row['id']));@unlink(lookupMediaPath($row['id'],true));q($db,'DELETE FROM media WHERE id=?',[$row['id']]);}
+}
+function lookupMediaRequest(PDO $db,string $route,string $method): void {
+    if($method!=='POST')return;
+    if($route==='/api/media'){
+        $d=body();$name=text($d['name']??'',200)?:'video';$size=$d['size']??null;$type=strtolower(is_string($d['type']??null)?$d['type']:'');
+        if(!is_int($size)||$size<=0)fail('File video trống.');
+        if($size>LOOKUP_MEDIA_MAX)fail('Video tối đa 80 MB. Cắt ngắn hoặc giảm chất lượng rồi tải lại.');
+        if(!preg_match('/\.(mp4|mov|m4v|webm)$/iD',$name)&&!preg_match('~^video/(mp4|quicktime|webm|x-m4v)$~D',$type))fail('Chỉ nhận video MP4, MOV hoặc WebM.');
+        lookupMediaCleanup($db);if(!is_dir(__DIR__.'/media')&&!@mkdir(__DIR__.'/media',0755,true))fail('Không tạo được thư mục lưu video trên hosting.',500);
+        $id=bin2hex(random_bytes(16));if(@file_put_contents(lookupMediaPath($id,true),'')===false)fail('Không ghi được video lên hosting.',500);
+        q($db,'INSERT INTO media(id,name,mime,size,received,ready,created_at) VALUES (?,?,?,?,0,0,?)',[$id,$name,'',$size,lookupNow()]);
+        reply(['id'=>$id,'chunk'=>LOOKUP_MEDIA_CHUNK],201);
+    }
+    if(preg_match('~^/api/media/([a-f0-9]{32})/(chunk|finish)$~D',$route,$p)){
+        $row=one($db,'SELECT * FROM media WHERE id=? AND ready=0',[$p[1]]);if(!$row)fail('Không tìm thấy lượt tải video. Chọn lại file.',404);
+        if($p[2]==='chunk'){
+            $d=body(1200000);if(($d['offset']??null)!==(int)$row['received'])fail('Lượt tải bị lệch. Chọn lại file.',409);
+            $bytes=base64_decode(is_string($d['data']??null)?$d['data']:'',true);
+            if($bytes===false||$bytes===''||strlen($bytes)>LOOKUP_MEDIA_CHUNK||(int)$row['received']+strlen($bytes)>(int)$row['size'])fail('Phần video không hợp lệ.');
+            if(@file_put_contents(lookupMediaPath($p[1],true),$bytes,FILE_APPEND|LOCK_EX)===false)fail('Không ghi được video lên hosting.',500);
+            q($db,'UPDATE media SET received=? WHERE id=?',[(int)$row['received']+strlen($bytes),$p[1]]);reply(['ok'=>true,'received'=>(int)$row['received']+strlen($bytes)]);
+        }
+        if((int)$row['received']!==(int)$row['size'])fail('Video chưa tải xong.',409);
+        $head=(string)@file_get_contents(lookupMediaPath($p[1],true),false,null,0,12);$webm=substr($head,0,4)==="\x1A\x45\xDF\xA3";$mp4=substr($head,4,4)==='ftyp';
+        if(!$webm&&!$mp4){@unlink(lookupMediaPath($p[1],true));q($db,'DELETE FROM media WHERE id=?',[$p[1]]);fail('File không phải video MP4, MOV hoặc WebM.');}
+        if(!@rename(lookupMediaPath($p[1],true),lookupMediaPath($p[1])))fail('Không lưu được video trên hosting.',500);
+        q($db,'UPDATE media SET ready=1,mime=? WHERE id=?',[$webm?'video/webm':'video/mp4',$p[1]]);logEntry($db,'Cá nhân: tải video hướng dẫn '.$row['name']);
+        reply(['ok'=>true,'id'=>$p[1],'name'=>$row['name'],'size'=>(int)$row['size'],'url'=>'/api/lookup/media/'.$p[1]]);
+    }
+}
+// Public: the video of a notice, streamed with byte ranges (no database needed: only finished uploads exist as .video).
+function lookupServeMedia(string $id): never {
+    $file=lookupMediaPath($id);if(!is_file($file))fail('Không tìm thấy video.',404);
+    $size=filesize($file);$start=0;$end=$size-1;$head=(string)@file_get_contents($file,false,null,0,4);
+    if(preg_match('/^bytes=(\d*)-(\d*)$/D',(string)($_SERVER['HTTP_RANGE']??''),$m)&&($m[1]!==''||$m[2]!=='')){
+        if($m[1]==='')$start=max(0,$size-(int)$m[2]);else{$start=(int)$m[1];if($m[2]!=='')$end=min($end,(int)$m[2]);}
+        if($start>$end){http_response_code(416);header("Content-Range: bytes */$size");exit;}
+        http_response_code(206);header("Content-Range: bytes $start-$end/$size");
+    }
+    while(ob_get_level())ob_end_clean();
+    header('Content-Type: '.($head==="\x1A\x45\xDF\xA3"?'video/webm':'video/mp4'));header('Accept-Ranges: bytes');header('Content-Length: '.($end-$start+1));
+    if(($_SERVER['REQUEST_METHOD']??'GET')==='HEAD')exit;
+    $fp=fopen($file,'rb');fseek($fp,$start);$left=$end-$start+1;
+    while($left>0&&!feof($fp)){$chunk=fread($fp,min(65536,$left));if($chunk===false)break;echo $chunk;flush();$left-=strlen($chunk);}
+    fclose($fp);exit;
 }
 function lookupSaveSettings(PDO $db,array $d): array {
     $values=['shop_name'=>text($d['shop_name']??'',100),'contact_url'=>lookupContactUrl($d['contact_url']??''),'contact_label'=>text($d['contact_label']??'',60),'help_text'=>text($d['help_text']??'',500),'short_domain'=>lookupShortDomain($d['short_domain']??''),'zalo_url'=>lookupContactUrl($d['zalo_url']??''),'facebook_url'=>lookupContactUrl($d['facebook_url']??'')];
@@ -196,11 +276,13 @@ function lookupGenerateInviteMails(PDO $db,int $familyId,array $d): array {
 // the shop clears it. Independent of the status note, which Fix lỗi rewrites by itself.
 function lookupSaveNotice(PDO $db,int $familyId,array $d): array {
     $f=lookupActiveFamily($db,$familyId);if(!$f)fail('Không tìm thấy Family đang hoạt động.',404);
-    $notice=text($d['notice']??'',1000);$at=$notice!==''?lookupNow():'';
-    if(one($db,'SELECT id FROM family_statuses WHERE family_id=?',[$f['id']]))q($db,'UPDATE family_statuses SET notice=?,notice_at=?,revision=revision+1 WHERE family_id=?',[$notice,$at,$f['id']]);
-    else q($db,"INSERT INTO family_statuses(family_id,status,note,updated_at,revision,notice,notice_at) VALUES (?,'active','',?,1,?,?)",[$f['id'],lookupNow(),$notice,$at]);
-    logEntry($db,'Cá nhân: '.($notice!==''?'đặt':'gỡ')." thông báo cho khách {$f['name']}");
-    return ['ok'=>true,'notice'=>$notice,'notice_at'=>$at];
+    // Lỗi ngoại lệ = the notice carries a note and/or a link for customers to copy and/or a guide video.
+    $p=lookupNoticeParts($db,$d);$set=$p['text']!==''||$p['video']!==''||$p['link']!==''||$p['link_note']!=='';$at=$set?lookupNow():'';
+    $values=[$p['text'],$at,$p['video'],$p['link'],$p['link_note']];$extra=$p['video']!==''||$p['link']!==''||$p['link_note']!=='';
+    if(one($db,'SELECT id FROM family_statuses WHERE family_id=?',[$f['id']]))q($db,'UPDATE family_statuses SET notice=?,notice_at=?,notice_video=?,notice_link=?,notice_link_note=?,revision=revision+1 WHERE family_id=?',[...$values,$f['id']]);
+    else q($db,"INSERT INTO family_statuses(family_id,status,note,updated_at,revision,notice,notice_at,notice_video,notice_link,notice_link_note) VALUES (?,'active','',?,1,?,?,?,?,?)",[$f['id'],lookupNow(),...$values]);
+    logEntry($db,'Cá nhân: '.($set?'đặt':'gỡ')." thông báo cho khách {$f['name']}".($extra?' (lỗi ngoại lệ'.($p['video']!==''?', kèm video':'').')':''));
+    return ['ok'=>true,'notice'=>$p['text'],'notice_at'=>$at,'notice_video'=>$p['video'],'notice_link'=>$p['link'],'notice_link_note'=>$p['link_note']];
 }
 function lookupSaveStatus(PDO $db,int $familyId,array $d): array {
     $f=lookupActiveFamily($db,$familyId);if(!$f)fail('Không tìm thấy Family đang hoạt động.',404);
@@ -721,7 +803,7 @@ function lookupAdminState(PDO $db): array {
     $codes=[];foreach(all($db,'SELECT DISTINCT email FROM members') as $r)$codes[$r['email']]=lookupCodeFor($db,$r['email'],$salt);
     // Gmail import needs the Google Sheet connection (same Apps Script). Plain query: no DDL inside the state audit.
     $gmail=false;$mailbox='';try{$gmail=(bool)one($db,"SELECT name FROM family_sheet_state WHERE name='config'");$row=one($db,"SELECT value FROM family_sheet_state WHERE name='gmail_mailbox'");$mailbox=$row?(string)json_decode($row['value'],true):'';}catch(Throwable $e){}
-    return ['lookup_supported'=>true,'gmail_import'=>$gmail,'gmail_mailbox'=>$mailbox,'invite_base_email'=>LOOKUP_INVITE_MAIL_INBOX,'invite_mails'=>array_map(fn($r)=>[...$r,'id'=>(int)$r['id'],'family_id'=>(int)$r['family_id'],'auto_assign'=>(int)$r['auto_assign']],all($db,'SELECT id,family_id,email,created_at,auto_assign FROM invite_mails ORDER BY id')),'lookup_settings'=>lookupSettings($db),'family_statuses'=>all($db,'SELECT family_id,status,note,updated_at,revision,notice,notice_at FROM family_statuses'),'message_templates'=>lookupMessageTemplates($db),'invites'=>$invites,'moves'=>$moves,'lookup_codes'=>(object)$codes,
+    return ['lookup_supported'=>true,'gmail_import'=>$gmail,'gmail_mailbox'=>$mailbox,'invite_base_email'=>LOOKUP_INVITE_MAIL_INBOX,'invite_mails'=>array_map(fn($r)=>[...$r,'id'=>(int)$r['id'],'family_id'=>(int)$r['family_id'],'auto_assign'=>(int)$r['auto_assign']],all($db,'SELECT id,family_id,email,created_at,auto_assign FROM invite_mails ORDER BY id')),'lookup_settings'=>lookupSettings($db),'family_statuses'=>all($db,'SELECT family_id,status,note,updated_at,revision,notice,notice_at,notice_video,notice_link,notice_link_note FROM family_statuses'),'media'=>array_map(fn($m)=>[...$m,'size'=>(int)$m['size']],all($db,'SELECT id,name,size FROM media WHERE ready=1')),'message_templates'=>lookupMessageTemplates($db),'invites'=>$invites,'moves'=>$moves,'lookup_codes'=>(object)$codes,
         // Open reports, and the ones handled in the last week for context.
         'customer_reports'=>array_map(fn($r)=>[...$r,'id'=>(int)$r['id'],'member_id'=>$r['member_id']===null?null:(int)$r['member_id'],'family_id'=>$r['family_id']===null?null:(int)$r['family_id'],'revision'=>(int)$r['revision']],all($db,"SELECT * FROM customer_reports WHERE handled_at='' OR handled_at>? ORDER BY id DESC LIMIT 300",[gmdate('Y-m-d\TH:i:s.000\Z',time()-604800)])),
         'problem_reasons'=>LOOKUP_PROBLEM_REASONS,'telegram'=>lookupTelegramState($db),'todos'=>lookupTodoList($db)];
@@ -765,7 +847,7 @@ function lookupResult(PDO $db,string $address): array {
         }
         $waiting=!$allocated&&!$move&&lookupJoinable($m)&&$status['status']==='active';$problem=lookupLatestReport($db,(int)$m['id']);
         $view=$move&&in_array($move['state'],LOOKUP_OPEN_STATES,true)?'move':(in_array($status['status'],LOOKUP_PROBLEM_STATUSES,true)?'incident':(($problem['state']??'')==='open'?'reported':($waiting?'waiting':($period['expiry_status']==='expired'?'expired':'normal'))));
-        $items[]=['member_ref'=>(int)$m['id'],'problem'=>$problem,'family_name'=>$m['family_name'],'plan_months'=>(int)$m['plan_months'],'expires_at'=>$m['expires_at'],...$period,'membership_status'=>$m['membership_status'],'status'=>$status['status'],'status_note'=>$status['note'],'notice'=>(string)($status['notice']??''),'notice_at'=>(string)($status['notice_at']??''),'status_updated_at'=>$status['updated_at'],'view'=>$view,'move'=>$move];
+        $items[]=['member_ref'=>(int)$m['id'],'problem'=>$problem,'family_name'=>$m['family_name'],'plan_months'=>(int)$m['plan_months'],'expires_at'=>$m['expires_at'],...$period,'membership_status'=>$m['membership_status'],'status'=>$status['status'],'status_note'=>$status['note'],'notice'=>(string)($status['notice']??''),'notice_at'=>(string)($status['notice_at']??''),'notice_video'=>lookupVideoUrl($db,(string)($status['notice_video']??'')),'notice_link'=>(string)($status['notice_link']??''),'notice_link_note'=>(string)($status['notice_link_note']??''),'status_updated_at'=>$status['updated_at'],'view'=>$view,'move'=>$move];
     }
     return ['email'=>$address,'today'=>today(),'shop'=>lookupSettings($db),'items'=>$items];
 }
@@ -841,7 +923,7 @@ function lookupCookie(array $c,string $token,int $age): void {
 // Guide videos on the lookup page (rời nhóm, vào nhóm). One-click update ships only code files, so each
 // MP4 travels as base64 inside family-private/guide-video*.php (made by scripts/package-php.py).
 // Byte ranges let phones start and seek the video.
-const LOOKUP_GUIDE_VIDEOS=['/api/lookup/guide-video'=>'guide-video.php','/api/lookup/guide-video/join'=>'guide-video-join.php'];
+const LOOKUP_GUIDE_VIDEOS=['/api/lookup/guide-video'=>'guide-video.php','/api/lookup/guide-video/join'=>'guide-video-join.php','/api/lookup/guide-video/travel'=>'guide-video-travel.php'];
 function lookupGuideVideo(string $name): never {
     $file=__DIR__.'/'.$name;$data=is_file($file)?base64_decode((string)(require $file),true):false;
     if(!is_string($data)||$data==='')fail('Không tìm thấy.',404);
@@ -937,6 +1019,7 @@ function lookupAdminRequest(PDO $db,string $route,string $method): void {
 }
 function lookupAuditAction(string $method,string $route): string {
     if($route==='/api/invites/delete'||preg_match('~^/api/families/\d+/invites/delete$~D',$route))return 'Xóa link mời';
+    if(str_starts_with($route,'/api/media'))return 'Tải video hướng dẫn';
     if(preg_match('~^/api/families/\d+/notice$~D',$route))return 'Sửa thông báo cho khách';
     if(preg_match('~^/api/families/\d+/status$~D',$route))return 'Sửa trạng thái Family';
     if(preg_match('~^/api/families/\d+/invites$~D',$route))return 'Thêm link mời';

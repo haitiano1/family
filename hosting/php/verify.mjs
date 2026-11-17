@@ -44,8 +44,10 @@ async function fixture(database,writable=false){
  }else execFileSync('python3',['-c',"import zipfile,sys;zipfile.ZipFile(sys.argv[1]).extractall(sys.argv[2])",root+'/downloads/family-hostinger.zip',folder]);
  execFileSync('python3',['-c',"import os,sys;[(os.chmod(b,0o755),[os.chmod(os.path.join(b,f),0o644) for f in fs]) for b,ds,fs in os.walk(sys.argv[1])]",folder]);
  if(writable){chmodSync(folder+'/family-private',0o777);chmodSync(folder+'/public_html',0o777);}
+ // Uploaded guide videos: on hosting PHP runs as the account owner; here Apache gets a writable media mount even when family-private is read-only.
+ mkdirSync(folder+'/family-private/media');chmodSync(folder+'/family-private/media',0o777);
  const db=database || 'f_test_'+id;if(!database)sql('CREATE DATABASE '+db+' CHARACTER SET utf8mb4 COLLATE utf8mb4_bin');
- docker('run','-d','--name',name,'--network',network,'-p','127.0.0.1::80','-e','FAMILY_ALLOW_HTTP=1','-v',folder+'/public_html:/var/www/html:'+(writable?'rw':'ro'),'-v',folder+'/family-private:/var/www/family-private:'+(writable?'rw':'ro'),'family-php-test:8.3');containers.push(name);if(writable)writableContainers.add(name);
+ docker('run','-d','--name',name,'--network',network,'-p','127.0.0.1::80','-e','FAMILY_ALLOW_HTTP=1','-v',folder+'/public_html:/var/www/html:'+(writable?'rw':'ro'),'-v',folder+'/family-private:/var/www/family-private:'+(writable?'rw':'ro'),'-v',folder+'/family-private/media:/var/www/family-private/media:rw','family-php-test:8.3');containers.push(name);if(writable)writableContainers.add(name);
  let base='http://127.0.0.1:'+port(name),cookie='';
  function config(origin=base){writeFileSync(folder+'/family-private/config.php',`<?php return ['public_origin'=>'${origin}','db_host'=>'${mysql}','db_port'=>3306,'db_name'=>'${db}','db_user'=>'root','db_password'=>'${password}','access_password'=>'${password}'];`);chmodSync(folder+'/family-private/config.php',0o644);}
  config();
@@ -752,7 +754,7 @@ test('PHP lookup page: Family status, invite pool, bulk move, Gmail + code sign-
  await a('invites/'+invite.id+'/sent','PATCH',{sent:true,revision:state.invites.find(i=>i.id===invite.id).revision},409);assert.ok((await a('journal')).entries.some(e=>e.action==='Đánh dấu link đã gửi'));
  const fresh=await a('backup');assert.equal(fresh.version,10);assert.equal(fresh.tables.invite_mails.length,3);assert.ok(fresh.tables.family_invites.every(i=>'sent_at' in i));
  sql(`ALTER TABLE ${f.db}.family_invites DROP COLUMN sent_at, DROP COLUMN retired_at`);sql(`DROP TABLE ${f.db}.invite_mails`);sql(`UPDATE ${f.db}.app_meta SET value='1' WHERE name='lookup_schema'`);
- state=await a('state');assert.equal(state.invite_mails.length,0);assert.ok(state.invites.every(i=>i.sent_at===''&&i.retired_at===''));assert.equal(sql(`SELECT value FROM ${f.db}.app_meta WHERE name='lookup_schema'`),'9');
+ state=await a('state');assert.equal(state.invite_mails.length,0);assert.ok(state.invites.every(i=>i.sent_at===''&&i.retired_at===''));assert.equal(sql(`SELECT value FROM ${f.db}.app_meta WHERE name='lookup_schema'`),'10');
  // Fix lỗi on the owner mail marks the Family Bị quét; completing the case puts it back to active.
  const issue=await a('issues','POST',{family_id:next.id,target_type:'manager',title:'Mail chủ bị quét'},201);state=await a('state');const auto=state.family_statuses.find(x=>x.family_id===next.id);assert.equal(auto.status,'scanned');assert.equal(auto.note,'');
  const opened=state.issues.find(x=>x.id===issue.id);await a('issues/'+issue.id,'PATCH',{revision:opened.revision,status:'done',resolution:'keep'});state=await a('state');assert.equal(state.family_statuses.find(x=>x.family_id===next.id).status,'active');
@@ -771,8 +773,21 @@ test('PHP lookup page: Family status, invite pool, bulk move, Gmail + code sign-
  assert.equal((await a('state')).family_statuses.find(x=>x.family_id===next.id).notice,tb.notice);assert.equal((await lookup('me','GET',undefined,200,dmLook.cookie)).body.items[0].notice,tb.notice);
  assert.equal((await a('families/'+next.id+'/notice','PATCH',{notice:''})).notice,'');
  // Lời nhắn mẫu: kept in order, blanks dropped, private to the shop.
- assert.deepEqual((await a('message-templates','PATCH',{templates:[' Mẫu A ','','Mẫu B']})).templates,['Mẫu A','Mẫu B']);assert.deepEqual((await a('state')).message_templates,['Mẫu A','Mẫu B']);
+ const tplAB=[{text:'Mẫu A',video:'',link:'',link_note:''},{text:'Mẫu B',video:'',link:'',link_note:''}];assert.deepEqual((await a('message-templates','PATCH',{templates:[' Mẫu A ','','Mẫu B']})).templates,tplAB);assert.deepEqual((await a('state')).message_templates,tplAB);
  assert.equal(JSON.stringify((await lookup('info')).body).includes('Mẫu A'),false);await a('message-templates','PATCH',{templates:Array(21).fill('x')},400);
+ // Lỗi ngoại lệ: a video uploaded in pieces, served with ranges, shown with the link and note to that Family's customers.
+ const vid=Buffer.concat([Buffer.from([0,0,0,24]),Buffer.from('ftypmp42'),Buffer.alloc(786432+500,9)]);const upv=await a('media','POST',{name:'loi.mp4',size:vid.length,type:'video/mp4'},201);
+ for(let o=0;o<vid.length;o+=upv.chunk)await a('media/'+upv.id+'/chunk','POST',{offset:o,data:vid.subarray(o,o+upv.chunk).toString('base64')});
+ const doneV=await a('media/'+upv.id+'/finish','POST',{});const gotV=await fetch(f.base+doneV.url);assert.equal(gotV.status,200);assert.ok(Buffer.from(await gotV.arrayBuffer()).equals(vid));
+ const rangeV=await fetch(f.base+doneV.url,{headers:{Range:'bytes=4-11'}});assert.equal(rangeV.status,206);assert.equal(Buffer.from(await rangeV.arrayBuffer()).toString('latin1'),'ftypmp42');
+ await a('families/'+next.id+'/notice','PATCH',{notice:'Cách xử lý',video:upv.id,link:'https://example.com/fix',link_note:'Ghi chú copy'});
+ const exItem=(await lookup('me','GET',undefined,200,dmLook.cookie)).body.items[0];assert.equal(exItem.notice_video,doneV.url);assert.equal(exItem.notice_link,'https://example.com/fix');assert.equal(exItem.notice_link_note,'Ghi chú copy');
+ assert.deepEqual((await a('message-templates','PATCH',{templates:[{text:'M',video:upv.id,link:'https://example.com/a',link_note:'N'}]})).templates,[{text:'M',video:upv.id,link:'https://example.com/a',link_note:'N'}]);
+ // Built-in video (Khách đi du lịch): no upload; the MP4 ships as base64 PHP.
+ await a('families/'+next.id+'/notice','PATCH',{notice:'Đi du lịch',video:'travel'});assert.equal((await lookup('me','GET',undefined,200,dmLook.cookie)).body.items[0].notice_video,'/api/lookup/guide-video/travel');
+ assert.equal((await a('message-templates','PATCH',{templates:[{text:'Du lịch',video:'travel'}]})).templates[0].video,'travel');await a('families/'+next.id+'/notice','PATCH',{video:'khong-co'},400);
+ if(process.env.FAMILY_PHP_SOURCE_ONLY!=='1'){const tv=await fetch(f.base+'/api/lookup/guide-video/travel');assert.equal(tv.status,200);assert.equal((await tv.arrayBuffer()).byteLength,readFileSync(root+'/public/huong-dan-di-du-lich.mp4').length);}
+ await a('families/'+next.id+'/notice','PATCH',{notice:''});
  // Xóa nhiều link mời: ticked links of the Family go in one step.
  const bulk1=await a('families/'+next.id+'/invites','POST',{label:'shop+bulk1@gmail.com',url:'https://families.google.com/join/promo/php-bulk1'},201),bulk2=await a('families/'+next.id+'/invites','POST',{label:'shop+bulk2@gmail.com',url:'https://families.google.com/join/promo/php-bulk2'},201);
  const bulkDel=await a('families/'+next.id+'/invites/delete','POST',{ids:[bulk1.id,bulk2.id]});assert.equal(bulkDel.deleted,2);assert.deepEqual(bulkDel.skipped,[]);assert.ok(!(await a('state')).invites.some(i=>i.id===bulk1.id||i.id===bulk2.id));

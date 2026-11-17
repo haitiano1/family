@@ -33,7 +33,7 @@ function toast(text,delay=6000) { $('#toast').textContent=text;$('#toast').style
 async function api(path,options={}) {
   const response=await fetch('/api/'+path,{...options,headers:{'Content-Type':'application/json','X-Fam-Request':'1'}});
   if (response.status===401) {location.replace('/access');throw new Error('Cần mở lại bằng mật khẩu truy cập.');}
-  const data=await response.json();if (!response.ok) throw new Error(data.error||'Không thể thực hiện yêu cầu.');if(options.method&&!['GET','HEAD'].includes(options.method)&&!path.startsWith('sheets/')&&!path.startsWith('vault/')&&path!=='issues/order'&&!path.endsWith('/import/preview'))queueSheetSync();return data;
+  const data=await response.json();if (!response.ok) throw new Error(data.error||'Không thể thực hiện yêu cầu.');if(options.method&&!['GET','HEAD'].includes(options.method)&&!path.startsWith('sheets/')&&!path.startsWith('vault/')&&!path.startsWith('media')&&path!=='issues/order'&&!path.endsWith('/import/preview'))queueSheetSync();return data;
 }
 const post=(path,data)=>api(path,{method:'POST',body:JSON.stringify(data)});
 const patch=(path,data)=>api(path,{method:'PATCH',body:JSON.stringify(data)});

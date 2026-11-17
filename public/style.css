@@ -925,3 +925,23 @@ td[data-column="family"] .subtext { margin-top: 1px; }
 .check-field { display: flex; align-items: flex-start; gap: 10px; margin: 2px 0 12px; padding: 10px 12px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface-soft); font-size: 13px; line-height: 1.5; cursor: pointer; }
 .check-field input { flex: none; width: 18px; height: 18px; margin-top: 1px; accent-color: var(--blue); }
 .check-field em { display: block; font-style: normal; color: var(--muted); }
+
+/* 0.32.19 Lỗi ngoại lệ: ghi chú, link và video cho khách */
+.template-chip.is-extra { border-color: #f1b5b5; background: var(--red-soft); color: #a22d31; }
+.preset-pick { margin: 0 0 14px; padding: 10px 12px; border: 1px dashed var(--border-strong); border-radius: 12px; }
+.exception-toggle { border-color: #f1b5b5; background: var(--red-soft); }
+.exception-toggle strong:first-child { color: #a22d31; }
+.exception-fields { margin: -4px 0 12px; padding: 4px 12px 12px; border: 1px solid #f1b5b5; border-top: 0; border-radius: 0 0 12px 12px; }
+.exception-fields[hidden] { display: none; }
+.exception-fields .form-field label { margin-top: 12px; }
+.template-block { margin: 0 0 14px; padding: 4px 12px 2px; border: 1px solid var(--border); border-radius: 12px; }
+.template-block legend { padding: 0 6px; font-size: 13px; font-weight: 700; }
+.template-block .form-field label { margin-top: 8px; }
+.video-field { display: grid; gap: 8px; padding: 10px 12px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface); }
+.video-current { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; font-size: 13px; }
+.video-name { font-weight: 650; overflow-wrap: anywhere; }
+.video-pick { position: relative; justify-self: start; cursor: pointer; }
+.video-pick input { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; }
+.video-pick:has(input:disabled) { opacity: .55; pointer-events: none; }
+.video-progress { font-size: 12px; font-weight: 650; color: var(--blue-dark); }
+.video-progress:empty { display: none; }

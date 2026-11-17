@@ -1,6 +1,6 @@
 import http from 'node:http';
 import { initDatabase } from './database.js';
-import { readFileSync } from 'node:fs';
+import { readFileSync, createReadStream } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 import { initOtherProducts } from './other-products.js';
@@ -38,7 +38,7 @@ const issues=initIssues(db,{fail,text,email,log,familyStatus:(familyId,event)=>l
 const transferMember=initTransfers(db,{fail,email,log});
 const vaultRoute=initVault(db,{fail,email,text,commonPassword:process.env.ACCESS_PASSWORD||'',secure:access.enabled});
 const archive = initArchive(db, { fail,log });
-const lookup=initLookup(db,{fail,email,text,calendarDate,log});
+const lookup=initLookup(db,{fail,email,text,calendarDate,log,mediaDir:path.join(dir,'media')});
 await withAudit(db,'Tự động lưu trữ',()=>archive.sweep(),'Hệ thống');
 let requestQueue=Promise.resolve();
 const housekeeper = setInterval(() => { requestQueue=requestQueue.then(()=>withAudit(db,'Tự động lưu trữ',()=>archive.sweep(),'Hệ thống')).catch(()=>console.error('Archive sweep failed. Retry on the next interval.')); },60000); housekeeper.unref();
@@ -58,8 +58,17 @@ const lookupCookie=(res,token,age)=>res.setHeader('Set-Cookie',`fam_lookup=${tok
 async function lookupRequest(req,res,url){
   const route=url.pathname;
   if(req.method==='GET'&&route==='/api/lookup/info')return send(res,200,{shop:lookup.settings()});
-  const guide={'/api/lookup/guide-video':'huong-dan-roi-nhom.mp4','/api/lookup/guide-video/join':'huong-dan-vao-nhom.mp4'}[route];
-  if((req.method==='GET'||req.method==='HEAD')&&guide){ // Guide videos (rời nhóm, vào nhóm), with byte ranges for phones.
+  if((req.method==='GET'||req.method==='HEAD')&&/^\/api\/lookup\/media\/[a-f0-9]{32}$/.test(route)){ // Video hướng dẫn of a notice, with byte ranges.
+    const file=lookup.mediaFile(route.split('/')[4]);if(!file)return send(res,404,{error:'Không tìm thấy video.'});
+    const m=/^bytes=(\d*)-(\d*)$/.exec(req.headers.range||'');let start=0,end=file.size-1,status=200;const head={'Content-Type':file.mime,'Accept-Ranges':'bytes','Cache-Control':'no-store'};
+    if(m&&(m[1]||m[2])){if(m[1]==='')start=Math.max(0,file.size-Number(m[2]));else{start=Number(m[1]);if(m[2])end=Math.min(end,Number(m[2]));}
+      if(start>end){res.writeHead(416,{'Content-Range':`bytes */${file.size}`});return res.end();}
+      status=206;head['Content-Range']=`bytes ${start}-${end}/${file.size}`;}
+    res.writeHead(status,{...head,'Content-Length':end-start+1});if(req.method==='HEAD')return res.end();
+    return createReadStream(file.path,{start,end}).pipe(res);
+  }
+  const guide={'/api/lookup/guide-video':'huong-dan-roi-nhom.mp4','/api/lookup/guide-video/join':'huong-dan-vao-nhom.mp4','/api/lookup/guide-video/travel':'huong-dan-di-du-lich.mp4'}[route];
+  if((req.method==='GET'||req.method==='HEAD')&&guide){ // Guide videos (rời nhóm, vào nhóm, đi du lịch), with byte ranges for phones.
     const video=readFileSync(path.join(root,'public',guide)),size=video.length,m=/^bytes=(\d*)-(\d*)$/.exec(req.headers.range||'');
     let start=0,end=size-1,status=200;const head={'Content-Type':'video/mp4','Accept-Ranges':'bytes','Cache-Control':'no-store'};
     if(m&&(m[1]||m[2])){if(m[1]==='')start=Math.max(0,size-Number(m[2]));else{start=Number(m[1]);if(m[2])end=Math.min(end,Number(m[2]));}
@@ -123,6 +132,9 @@ async function handle(req, res) {
     if(['PATCH','DELETE'].includes(req.method)&&/^\/api\/invites\/\d+$/.test(url.pathname)){const id=Number(url.pathname.split('/')[3]);return send(res,200,req.method==='PATCH'?lookup.saveInvite(null,id,await body(req)):lookup.deleteInvite(id,await body(req)));}
     if(req.method==='POST'&&url.pathname==='/api/moves')return send(res,200,lookup.bulkMove(await body(req)));
     if(req.method==='PATCH'&&/^\/api\/moves\/\d+$/.test(url.pathname))return send(res,200,lookup.updateMove(Number(url.pathname.split('/')[3]),await body(req)));
+    if(req.method==='POST'&&url.pathname==='/api/media')return send(res,201,lookup.mediaStart(await body(req)));
+    if(req.method==='POST'&&/^\/api\/media\/[a-f0-9]{32}\/chunk$/.test(url.pathname))return send(res,200,lookup.mediaChunk(url.pathname.split('/')[3],await body(req)));
+    if(req.method==='POST'&&/^\/api\/media\/[a-f0-9]{32}\/finish$/.test(url.pathname))return send(res,200,lookup.mediaFinish(url.pathname.split('/')[3]));
     if(req.method==='PATCH'&&url.pathname==='/api/message-templates')return send(res,200,lookup.saveMessageTemplates(await body(req)));
     if(req.method==='PATCH'&&url.pathname==='/api/lookup-settings')return send(res,200,lookup.saveSettings(await body(req)));
     if(req.method==='POST'&&url.pathname==='/api/lookup-codes')return send(res,200,lookup.rotateCode(await body(req)));
@@ -274,11 +286,11 @@ async function handle(req, res) {
 }
 const server=http.createServer(async(req,res)=>{
   let path;
-  try{path=new URL(req.url,'http://localhost').pathname;if(!['GET','HEAD'].includes(req.method)&&path.startsWith('/api/'))req.famBody=await body(req,path==='/api/restore'?32000000:path==='/api/issues/order'?262144:path.startsWith('/api/import/')||path.startsWith('/api/other-products/import/')||path.startsWith('/api/vault/import')?2000000:path.startsWith('/api/vault/')?32768:16384);}
+  try{path=new URL(req.url,'http://localhost').pathname;if(!['GET','HEAD'].includes(req.method)&&path.startsWith('/api/'))req.famBody=await body(req,path==='/api/restore'?32000000:path==='/api/issues/order'?262144:path.startsWith('/api/import/')||path.startsWith('/api/other-products/import/')||path.startsWith('/api/vault/import')?2000000:path.startsWith('/api/vault/')?32768:path.startsWith('/api/media/')?1200000:16384);}
   catch(error){return send(res,error.status||400,{error:error.message});}
   requestQueue=requestQueue.then(async()=>{
     // Lookup sign-in keeps its attempt counter even when the answer is an error, so it is not rolled back by the audit scope.
-    const audited=path==='/api/state'||(!['GET','HEAD'].includes(req.method)&&path.startsWith('/api/')&&!path.startsWith('/api/access')&&!path.startsWith('/api/vault/')&&!['/api/lookup/verify','/api/lookup/logout'].includes(path));
+    const audited=path==='/api/state'||(!['GET','HEAD'].includes(req.method)&&path.startsWith('/api/')&&!path.startsWith('/api/access')&&!path.startsWith('/api/vault/')&&!path.startsWith('/api/media')&&!['/api/lookup/verify','/api/lookup/logout'].includes(path));
     if(!audited)return handle(req,res);
     beginAudit(db,auditAction(req.method,path),path==='/api/state'?'Hệ thống':path.startsWith('/api/lookup/')?'Khách tra cứu':'Cá nhân');res.famCapture=true;
     try{await handle(req,res);const pending=res.famPending;if(!pending)throw Error('Missing response');if(pending.status>=400)cancelAudit(db);else finishAudit(db);res.famCapture=false;send(res,pending.status,pending.value);}
