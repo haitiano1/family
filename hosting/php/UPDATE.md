@@ -1,3 +1,7 @@
+# 0.32.21 — Gỡ thông báo một chạm
+
+Dùng **Cập nhật một chạm**.
+
 # 0.32.20 — Lời nhắn mẫu gọn, xoá nhanh
 
 Dùng **Cập nhật một chạm**.

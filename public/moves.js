@@ -24,18 +24,19 @@ const linkHost = url => String(url || '').replace(/^https?:\/\/(www\.)?/, '').sp
 const presetOf = t => PRESET_TEMPLATES.find(p => t?.link === p.link && (t?.link_note === p.link_note || t?.video === p.video));
 const tplName = t => shortText(typeof t === 'string' ? firstLine(t) : t?.name || presetOf(t)?.label || firstLine(t?.text) || (tplExtra(t) ? 'Lỗi ngoại lệ' + (t.link ? ' · ' + linkHost(t.link) : '') : '') || 'Mẫu');
 const tplSame = (a, b) => tplText(a) === tplText(b) && ['video', 'link', 'link_note'].every(k => (a?.[k] || '') === (b?.[k] || ''));
-const presetSaved = (list, p) => list.some(t => (t.link || '') === p.link && (t.link_note || '') === p.link_note);
+const presetSaved = (list, p) => list.some(t => presetOf(t) === p);
 // Picker above the message box: saved templates as buttons (× deletes, asks once), "Mẫu có sẵn" only while not saved,
 // and "+ Lưu nội dung đang viết" asks for a short name inline.
-export function templatePicker(ctx, target, presets = false, current = null) {
-  const list = ctx.state.message_templates || [], { escape } = ctx;
+// mode 'notice': every template plus ready-made ones; 'status': plain messages only (no link/note/video there).
+export function templatePicker(ctx, target, mode = 'notice', current = null) {
+  const list = ctx.state.message_templates || [], { escape } = ctx, presets = mode === 'notice';
   const suggest = presets ? PRESET_TEMPLATES.map((p, i) => [p, i]).filter(([p]) => !presetSaved(list, p)) : [];
-  const chips = list.map((t, i) => {
+  const chips = list.map((t, i) => [t, i]).filter(([t]) => mode !== 'status' || (tplText(t) && !tplExtra(t))).map(([t, i]) => {
     const extra = tplExtra(t), active = !!current && tplSame(t, current);
     const tip = (extra ? 'Lỗi ngoại lệ' + (t.video ? ' · có video' : '') + (t.link ? ' · có link' : '') + (t.link_note ? ' · có ghi chú' : '') + '\n' : '') + tplText(t);
     return `<span class="tpl-chip${extra ? ' is-extra' : ''}${active ? ' is-active' : ''}"><button type="button" class="tpl-use" data-template-use="${i}" title="${escape(tip)}" aria-pressed="${active}">${extra ? `<span class="tpl-badge${t.video ? ' has-video' : ''}" aria-hidden="true"></span>` : ''}<span class="tpl-name">${escape(tplName(t))}</span></button><button type="button" class="tpl-del" data-template-del="${i}" title="Xoá mẫu" aria-label="Xoá mẫu ${escape(tplName(t))}">×</button></span>`;
   }).join('');
-  return `<div class="tpl-picker" data-template-target="${target}" data-presets="${presets ? 1 : ''}">`
+  return `<div class="tpl-picker" data-template-target="${target}" data-mode="${mode}">`
     + `<div class="tpl-head"><span class="tpl-title">Lời nhắn mẫu</span><span class="tpl-tools"><button type="button" class="tpl-tool" data-template-save>+ Lưu nội dung đang viết</button><button type="button" class="tpl-tool" data-action="message-templates">Quản lý mẫu</button></span></div>`
     + `<div class="tpl-list">${chips || '<span class="tpl-empty">Chưa có mẫu. Viết nội dung rồi bấm “+ Lưu nội dung đang viết”.</span>'}</div>`
     + (suggest.length ? `<div class="tpl-suggest"><span class="tpl-suggest-label">Mẫu có sẵn</span>${suggest.map(([p, i]) => `<button type="button" class="tpl-preset" data-template-preset="${i}" title="Điền sẵn cách xử lý, link, ghi chú và video hướng dẫn">+ ${escape(p.label)}</button>`).join('')}</div>` : '')
@@ -120,6 +121,14 @@ export function initMessageTemplates(ctx) {
     if (event.target.matches?.('[data-exception]')) { const box = event.target.closest('form, .template-block')?.querySelector('.exception-fields'); if (box) box.hidden = !event.target.checked; }
   });
   document.addEventListener('click', async event => {
+    const clearField = event.target.closest('[data-clear-field]');
+    if (clearField) { event.preventDefault(); const box = document.getElementById(clearField.dataset.clearField); if (box) { box.value = ''; box.dispatchEvent(new Event('input', { bubbles: true })); box.focus(); } clearField.remove(); return; }
+    const remove = event.target.closest('[data-notice-remove]');
+    if (remove) { // empty everything and save: the notice is gone for customers
+      const form = remove.closest('form'); form.querySelector('[name=notice]').value = '';
+      const on = formExtra(form); if (on?.checked) { on.checked = false; on.dispatchEvent(new Event('change', { bubbles: true })); }
+      form.requestSubmit(form.querySelector('button[type=submit]')); return;
+    }
     const builtin = event.target.closest('[data-video-builtin]');
     if (builtin) { const field = builtin.closest('[data-video-field]'); field.outerHTML = videoField(ctx, field.querySelector('input[type=hidden]').name, builtin.dataset.videoBuiltin); return; }
     const preset = event.target.closest('[data-template-preset]');
@@ -139,10 +148,11 @@ export function initMessageTemplates(ctx) {
     const box = document.getElementById(pick.dataset.templateTarget); if (!box) return;
     const list = ctx.state.message_templates || [], form = box.closest('form');
     const current = () => ({ text: box.value.trim(), ...readExtra(form) });
-    const redraw = value => { const html = templatePicker(ctx, pick.dataset.templateTarget, !!pick.dataset.presets, value); pick.outerHTML = html; };
+    const redraw = value => { const html = templatePicker(ctx, pick.dataset.templateTarget, pick.dataset.mode, value); pick.outerHTML = html; };
     const use = event.target.closest('[data-template-use]');
     if (use) {
-      const t = list[Number(use.dataset.templateUse)]; box.value = tplText(t); fillExtra(ctx, form, t);
+      // A ready-made template saved without its steps gets them back, so customers are not left with only a link.
+      const t = list[Number(use.dataset.templateUse)]; box.value = tplText(t) || (presetOf(t) && form.querySelector('[data-exception]') ? presetOf(t).text : ''); fillExtra(ctx, form, t);
       pick.querySelectorAll('.tpl-chip').forEach(c => { const on = c.contains(use); c.classList.toggle('is-active', on); c.querySelector('.tpl-use').setAttribute('aria-pressed', on); });
       box.focus(); return;
     }
@@ -420,6 +430,7 @@ function telegramCard(ctx) {
 
 // Customer-facing status, shown inside the Family info card: badge, message line, button, and the incident callout.
 // Thông báo cho khách: the shop's own message for one Family, shown on top of the lookup page.
+const noticeOn = status => !!(status.notice || status.notice_video || status.notice_link || status.notice_link_note);
 export function noticeLine(ctx, status) {
   const extra = status.notice_video || status.notice_link || status.notice_link_note;
   return status.notice || extra ? `<p class="family-notice-line"><span class="badge amber">Thông báo cho khách</span>${extra ? '<span class="badge red">Lỗi ngoại lệ</span>' : ''} ${ctx.escape(status.notice || '')}${status.notice_video ? ' <span class="subtext-inline">· có video</span>' : ''}${status.notice_link ? ' <span class="subtext-inline">· có link</span>' : ''} <span class="subtext-inline">· ${ctx.date(status.notice_at)}</span></p>` : '';
@@ -431,7 +442,7 @@ export function familyStatusParts(ctx, family) {
   return {
     badge: `<span class="badge ${statusColors[status.status]}" title="Trạng thái khách thấy khi tra cứu">${escape(familyStatusLabels[status.status])}</span>`,
     line: `<p>Lời nhắn theo trạng thái: ${status.note ? escape(status.note) : 'Chưa có'}${status.updated_at ? ` <span class="subtext-inline">· cập nhật ${ctx.date(status.updated_at)}</span>` : ''}</p>` + noticeLine(ctx, status),
-    action: btn('family-notice', status.notice || status.notice_video || status.notice_link || status.notice_link_note ? 'Sửa thông báo' : 'Thông báo cho khách', 'secondary', `data-id="${family.id}"`) + btn('family-status', 'Đổi trạng thái', 'secondary', `data-id="${family.id}"`),
+    action: btn('family-notice', noticeOn(status) ? 'Sửa thông báo' : 'Thông báo cho khách', 'secondary', `data-id="${family.id}"`) + (noticeOn(status) ? btn('family-notice-off', 'Gỡ thông báo', 'danger', `data-id="${family.id}" title="Khách không còn thấy thông báo này"`) : '') + btn('family-status', 'Đổi trạng thái', 'secondary', `data-id="${family.id}"`),
     callout: problem(status.status) && members.length ? `<div class="notice lookup-callout"><div><strong>Nhóm đang có sự cố.</strong> Đã có Gmail chủ mới thì vào Fix lỗi → Đã fix → Đổi sang Gmail chủ mới: ${members.length} khách giữ nguyên trong Family này và tự nhận link mới khi tra cứu. Muốn dồn khách sang Family khác thì bấm nút bên cạnh.</div>${btn('move-open', 'Chuyển khách sang nhóm mới', 'primary', `data-id="${family.id}"`)}</div>` : ''
   };
 }
@@ -494,9 +505,9 @@ export function lookupPage(ctx) {
     + `<section class="card"><h2>Cách dùng</h2><ol class="lookup-steps"><li>Gửi mỗi khách link tra cứu riêng (menu … của khách → <strong>Copy link tra cứu</strong>), ví dụ lúc bán hoặc gia hạn.</li><li>Khi mail chủ bị quét: <strong>Fix lỗi → Báo lỗi</strong>. Family tự thành Bị quét và khách thấy lời nhắn.</li><li>Có Gmail chủ mới: <strong>Đã fix → Đổi sang Gmail chủ mới</strong>, chọn số mail mời. Khách ở lại Family và chờ link của chủ mới.</li><li>Mời các mail vừa tạo từ Gmail chủ mới, rồi bấm <strong>Lấy link mời</strong>${state.gmail_import ? '' : ' (cần kết nối Google Sheet; hoặc <strong>+ Thêm link mời</strong> để dán tay)'}.</li><li>Khách mở link tra cứu, nhập Gmail để thấy link vào nhóm mới; theo dõi tiến độ tại đây.</li></ol></section>`;
 }
 
-function statusFields(ctx, family, status) {
+function statusFields(ctx, family, status, picker = '') {
   const { escape } = ctx;
-  return `<div class="form-field"><label for="field-status">Trạng thái nhóm</label><select id="field-status" name="status">${Object.entries(familyStatusLabels).map(([key, text]) => `<option value="${key}" ${key === status.status ? 'selected' : ''}>${escape(text)}</option>`).join('')}</select></div><div class="form-field"><label for="field-note">Lời nhắn theo trạng thái (hiện trong tiến trình xử lý)</label><textarea id="field-note" name="note" maxlength="1000" rows="5">${escape(status.note)}</textarea></div><p class="subtext">Khách chỉ thấy tên Family, trạng thái và lời nhắn này. Không hiện mail chủ hoặc khách khác.</p>`;
+  return `<div class="form-field"><label for="field-status">Trạng thái nhóm</label><select id="field-status" name="status">${Object.entries(familyStatusLabels).map(([key, text]) => `<option value="${key}" ${key === status.status ? 'selected' : ''}>${escape(text)}</option>`).join('')}</select></div>${picker}<div class="form-field"><label for="field-note">Lời nhắn theo trạng thái (hiện trong tiến trình xử lý)${status.note ? ' <button type="button" class="tpl-tool label-tool" data-clear-field="field-note">Xoá lời nhắn</button>' : ''}</label><textarea id="field-note" name="note" maxlength="1000" rows="5">${escape(status.note)}</textarea></div><p class="subtext">Khách chỉ thấy tên Family, trạng thái và lời nhắn này. Không hiện mail chủ hoặc khách khác.</p>`;
 }
 // Gõ mail đã mời, để trống link: read the shop Gmail (same as Lấy link mời); the newest invitation to that
 // mail is filed under this Family whoever sent it.
@@ -632,14 +643,26 @@ export async function handleLookupAction(ctx, action, button) {
       });
     return true;
   }
+  if (action === 'family-notice-off') {
+    if (!button.dataset.armed) { // first tap asks, second tap removes
+      button.dataset.armed = '1'; const label = button.textContent; button.textContent = 'Bấm lần nữa để gỡ'; button.classList.add('armed');
+      setTimeout(() => { if (button.isConnected) { delete button.dataset.armed; button.textContent = label; button.classList.remove('armed'); } }, 3000);
+      return true;
+    }
+    button.disabled = true;
+    try { await ctx.patch(`families/${id}/notice`, { notice: '' }); ctx.toast('Đã gỡ thông báo. Khách không còn thấy.'); await ctx.refresh(); }
+    catch (error) { button.disabled = false; ctx.toast(error.message); }
+    return true;
+  }
   if (action === 'family-notice') {
     const family = state.families.find(f => f.id === id); if (!family) return ctx.toast('Family đã thay đổi. Tải lại trang.'), true;
     const status = familyStatus(state, id);
     ctx.modal('Thông báo cho khách · ' + family.name,
-      templatePicker(ctx, 'field-notice', true, { text: status.notice || '', video: status.notice_video || '', link: status.notice_link || '', link_note: status.notice_link_note || '' })
+      templatePicker(ctx, 'field-notice', 'notice', { text: status.notice || '', video: status.notice_video || '', link: status.notice_link || '', link_note: status.notice_link_note || '' })
       + `<div class="form-field"><label for="field-notice">Thông báo / cách xử lý cho khách trong Family này</label><textarea id="field-notice" name="notice" maxlength="1000" rows="5" placeholder="Ví dụ: Nhóm đang bị Google khoá thanh toán, shop xử lý trong hôm nay. Bạn chưa cần làm gì, có link mới shop báo tại đây.">${ctx.escape(status.notice || '')}</textarea></div>`
       + exceptionFields(ctx, { video: status.notice_video, link: status.notice_link, link_note: status.notice_link_note })
-      + '<p class="subtext">Chỉ khách trong Family này thấy khung <strong>Thông báo từ shop</strong> ở đầu trang tra cứu, cho đến khi bạn gỡ. Không ảnh hưởng trạng thái nhóm hay lời nhắn theo trạng thái. Xoá hết chữ, bỏ tick Lỗi ngoại lệ rồi Lưu để gỡ thông báo.</p>',
+      + '<p class="subtext">Chỉ khách trong Family này thấy khung <strong>Thông báo từ shop</strong> ở đầu trang tra cứu, cho đến khi bạn gỡ. Không ảnh hưởng trạng thái nhóm hay lời nhắn theo trạng thái.</p>'
+      + (noticeOn(status) ? `<div class="notice-remove"><div><strong>Hết lỗi rồi?</strong> Gỡ để khách không còn thấy thông báo này.</div><button type="button" class="danger" data-notice-remove>Gỡ thông báo</button></div>` : ''),
       async () => {
         const form = document.getElementById('modal-form'), extra = readExtra(form);
         const saved = await ctx.patch(`families/${id}/notice`, { notice: form.querySelector('[name=notice]').value, ...extra });
@@ -650,7 +673,7 @@ export async function handleLookupAction(ctx, action, button) {
   if (action === 'family-status') {
     const family = state.families.find(f => f.id === id); if (!family) return ctx.toast('Family đã thay đổi. Tải lại trang.'), true;
     const status = familyStatus(state, id);
-    ctx.modal('Trạng thái cho khách · ' + family.name, statusFields(ctx, family, status) + templatePicker(ctx, 'field-note', false, { text: status.note || '' }), async data => {
+    ctx.modal('Trạng thái cho khách · ' + family.name, statusFields(ctx, family, status, templatePicker(ctx, 'field-note', 'status', { text: status.note || '' })), async data => {
       await ctx.patch(`families/${id}/status`, { status: data.status, note: data.note, revision: status.revision });
       ctx.toast('Đã lưu trạng thái nhóm. Khách thấy ngay trên trang tra cứu.');
     });
