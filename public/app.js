@@ -286,7 +286,7 @@ window.addEventListener('scroll',()=>scrollPositions.set(visibleRoute,window.scr
 window.addEventListener('hashchange',()=>{visibleRoute=location.hash;draw();window.scrollTo(0,scrollPositions.get(visibleRoute)||0);});
 window.addEventListener('pageshow',event=>{if(event.persisted)draw();});
 async function sync() {
-  if (document.querySelector('dialog[open],.more-actions[open],.header-more[open],.nav-more[open]')||draggedIssue!==null) return;
+  if (document.querySelector('dialog[open],.more-actions[open],.header-more[open],.nav-more.open')||draggedIssue!==null) return;
   try {await refresh(false);if (!['INPUT','SELECT','TEXTAREA'].includes(document.activeElement.tagName))draw();}
   catch(error){toast('Không thể cập nhật: '+error.message);}
 }
@@ -536,6 +536,10 @@ document.addEventListener('keydown',event=>{if(event.key==='Escape')document.que
 // Menus remain native details controls for mouse, touch and keyboard access.
 document.addEventListener('click',event=>{
   if(event.target.closest('.skip-link')){event.preventDefault();$('#main').focus();$('#main').scrollIntoView({block:'start'});}
-  document.querySelectorAll('.header-more[open],.nav-more[open]').forEach(menu=>{if(!menu.contains(event.target)||event.target.closest('[data-action],a'))menu.open=false;});
+  document.querySelectorAll('.header-more[open]').forEach(menu=>{if(!menu.contains(event.target)||event.target.closest('[data-action],a'))menu.open=false;});
+  // Thêm (phones only; on a computer every page is listed in the sidebar)
+  const more=document.querySelector('.nav-more'),toggle=event.target.closest('.nav-more-toggle');
+  if(more&&(toggle||(more.classList.contains('open')&&(!more.contains(event.target)||event.target.closest('a')))))navMore(toggle?!more.classList.contains('open'):false);
 });
-document.addEventListener('keydown',event=>{if(event.key==='Escape')document.querySelectorAll('.header-more[open],.nav-more[open]').forEach(menu=>{menu.open=false;menu.querySelector('summary').focus();});});
+function navMore(open){const more=document.querySelector('.nav-more');if(!more)return;more.classList.toggle('open',open);more.querySelector('.nav-more-toggle').setAttribute('aria-expanded',String(open));}
+document.addEventListener('keydown',event=>{if(event.key==='Escape'){document.querySelectorAll('.header-more[open]').forEach(menu=>{menu.open=false;menu.querySelector('summary').focus();});if(document.querySelector('.nav-more.open')){navMore(false);document.querySelector('.nav-more-toggle').focus();}}});
