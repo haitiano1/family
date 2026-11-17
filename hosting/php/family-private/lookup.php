@@ -84,15 +84,15 @@ function lookupShortDomain(mixed $value): string {
 // Lời nhắn mẫu: the shop's own reusable messages, picked in Thông báo cho khách and Đổi trạng thái.
 // One lookup_settings row per message (message_template:01…), never part of the public shop settings.
 // A template holds the message and, for Lỗi ngoại lệ, a note and a link customers copy and a guide video:
-// rows message_template:NN (text), …:NN:video, …:NN:link, …:NN:note.
-const LOOKUP_TEMPLATE_FIELDS=['video'=>'video','link'=>'link','note'=>'link_note'];
+// rows message_template:NN (text), …:NN:video, …:NN:link, …:NN:note, …:NN:name (label on the button).
+const LOOKUP_TEMPLATE_FIELDS=['video'=>'video','link'=>'link','note'=>'link_note','name'=>'name'];
 // Built-in guide videos a notice can use without uploading (shipped with the app).
 const LOOKUP_BUILTIN_VIDEOS=['travel'=>'/api/lookup/guide-video/travel'];
 function lookupVideoUrl(PDO $db,string $id): string {return LOOKUP_BUILTIN_VIDEOS[$id]??(lookupMediaReady($db,$id)?'/api/lookup/media/'.$id:'');}
 function lookupMessageTemplates(PDO $db): array {
     $out=[];
     foreach(all($db,"SELECT name,value FROM lookup_settings WHERE name LIKE 'message_template:%' ORDER BY name") as $row){
-        $parts=explode(':',$row['name']);$n=$parts[1]??'';$out[$n]??=['text'=>'','video'=>'','link'=>'','link_note'=>''];
+        $parts=explode(':',$row['name']);$n=$parts[1]??'';$out[$n]??=['text'=>'','video'=>'','link'=>'','link_note'=>'','name'=>''];
         $out[$n][isset($parts[2])?(LOOKUP_TEMPLATE_FIELDS[$parts[2]]??'text'):'text']=$row['value'];
     }
     return array_values(array_map(fn($t)=>[...$t,'video'=>lookupVideoUrl($db,$t['video'])!==''?$t['video']:''],$out));
@@ -108,7 +108,7 @@ function lookupNoticeParts(PDO $db,array $d): array {
 }
 function lookupSaveMessageTemplates(PDO $db,array $d): array {
     $in=$d['templates']??null;if(!is_array($in)||!array_is_list($in)||count($in)>20)fail('Tối đa 20 lời nhắn mẫu.');
-    $list=array_values(array_filter(array_map(fn($t)=>lookupNoticeParts($db,is_array($t)?$t:['text'=>$t]),$in),fn($t)=>$t['text']!==''||$t['video']!==''||$t['link']!==''||$t['link_note']!==''));
+    $list=array_values(array_filter(array_map(fn($t)=>[...lookupNoticeParts($db,is_array($t)?$t:['text'=>$t]),'name'=>is_array($t)?text($t['name']??'',60):''],$in),fn($t)=>$t['text']!==''||$t['video']!==''||$t['link']!==''||$t['link_note']!==''));
     return transaction($db,function()use($db,$list){
         q($db,"DELETE FROM lookup_settings WHERE name LIKE 'message_template:%'");
         foreach($list as $i=>$t){

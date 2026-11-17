@@ -773,7 +773,7 @@ test('PHP lookup page: Family status, invite pool, bulk move, Gmail + code sign-
  assert.equal((await a('state')).family_statuses.find(x=>x.family_id===next.id).notice,tb.notice);assert.equal((await lookup('me','GET',undefined,200,dmLook.cookie)).body.items[0].notice,tb.notice);
  assert.equal((await a('families/'+next.id+'/notice','PATCH',{notice:''})).notice,'');
  // Lời nhắn mẫu: kept in order, blanks dropped, private to the shop.
- const tplAB=[{text:'Mẫu A',video:'',link:'',link_note:''},{text:'Mẫu B',video:'',link:'',link_note:''}];assert.deepEqual((await a('message-templates','PATCH',{templates:[' Mẫu A ','','Mẫu B']})).templates,tplAB);assert.deepEqual((await a('state')).message_templates,tplAB);
+ const tplAB=[{text:'Mẫu A',video:'',link:'',link_note:'',name:''},{text:'Mẫu B',video:'',link:'',link_note:'',name:''}];assert.deepEqual((await a('message-templates','PATCH',{templates:[' Mẫu A ','','Mẫu B']})).templates,tplAB);assert.deepEqual((await a('state')).message_templates,tplAB);
  assert.equal(JSON.stringify((await lookup('info')).body).includes('Mẫu A'),false);await a('message-templates','PATCH',{templates:Array(21).fill('x')},400);
  // Lỗi ngoại lệ: a video uploaded in pieces, served with ranges, shown with the link and note to that Family's customers.
  const vid=Buffer.concat([Buffer.from([0,0,0,24]),Buffer.from('ftypmp42'),Buffer.alloc(786432+500,9)]);const upv=await a('media','POST',{name:'loi.mp4',size:vid.length,type:'video/mp4'},201);
@@ -782,7 +782,7 @@ test('PHP lookup page: Family status, invite pool, bulk move, Gmail + code sign-
  const rangeV=await fetch(f.base+doneV.url,{headers:{Range:'bytes=4-11'}});assert.equal(rangeV.status,206);assert.equal(Buffer.from(await rangeV.arrayBuffer()).toString('latin1'),'ftypmp42');
  await a('families/'+next.id+'/notice','PATCH',{notice:'Cách xử lý',video:upv.id,link:'https://example.com/fix',link_note:'Ghi chú copy'});
  const exItem=(await lookup('me','GET',undefined,200,dmLook.cookie)).body.items[0];assert.equal(exItem.notice_video,doneV.url);assert.equal(exItem.notice_link,'https://example.com/fix');assert.equal(exItem.notice_link_note,'Ghi chú copy');
- assert.deepEqual((await a('message-templates','PATCH',{templates:[{text:'M',video:upv.id,link:'https://example.com/a',link_note:'N'}]})).templates,[{text:'M',video:upv.id,link:'https://example.com/a',link_note:'N'}]);
+ assert.deepEqual((await a('message-templates','PATCH',{templates:[{text:'M',video:upv.id,link:'https://example.com/a',link_note:'N',name:'Tên'}]})).templates,[{text:'M',video:upv.id,link:'https://example.com/a',link_note:'N',name:'Tên'}]);
  // Built-in video (Khách đi du lịch): no upload; the MP4 ships as base64 PHP.
  await a('families/'+next.id+'/notice','PATCH',{notice:'Đi du lịch',video:'travel'});assert.equal((await lookup('me','GET',undefined,200,dmLook.cookie)).body.items[0].notice_video,'/api/lookup/guide-video/travel');
  assert.equal((await a('message-templates','PATCH',{templates:[{text:'Du lịch',video:'travel'}]})).templates[0].video,'travel');await a('families/'+next.id+'/notice','PATCH',{video:'khong-co'},400);
