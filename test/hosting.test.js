@@ -11,7 +11,7 @@ test('Public hosting requires HTTPS and private access; password changes revoke 
   assert.equal(h.allowedOrigin('https://family.example.com'),true);assert.equal(h.allowedOrigin('http://family.example.com'),false);
   assert.equal(h.login('wrong').status,401);
   const cookie=h.login('abcdefg').cookie;
-  assert.match(cookie,/Secure; SameSite=Strict/);assert.match(cookie,/HttpOnly/);
+  assert.match(cookie,/Secure; SameSite=Lax/);assert.match(cookie,/HttpOnly/);
   assert.equal(h.authorized({headers:{cookie}}),true);
   assert.equal(h.authorized({headers:{cookie:cookie.replace(/\.[a-f0-9]+;/,'.bad;')}}),false);
   assert.equal(hosting({PUBLIC_ORIGIN:'https://family.example.com',ACCESS_PASSWORD:'new-pass'}).authorized({headers:{cookie}}),false);

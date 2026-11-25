@@ -38,9 +38,11 @@ function authorized(array $c): bool {
     if (!is_string($token) || !preg_match('/^(\d{13})\.([a-f0-9]{64})$/D',$token,$parts)) return false;
     return (float)$parts[1]>microtime(true)*1000 && hash_equals(hash_hmac('sha256',$parts[1],accessKey($c)),$parts[2]);
 }
+// SameSite=Lax: Android opens a home-screen icon like a link from another app, and a Strict cookie is left out of
+// that first request, so the password was asked at every launch. Writes still need X-Fam-Request and a same Origin.
 function accessCookie(array $c,bool $close=false): void {
     $expires=(string)(int)floor(microtime(true)*1000+30*86400000);
-    setcookie('fam_access',$close?'':$expires.'.'.hash_hmac('sha256',$expires,accessKey($c)),['expires'=>$close?1:time()+30*86400,'path'=>'/','secure'=>$c['secure'],'httponly'=>true,'samesite'=>'Strict']);
+    setcookie('fam_access',$close?'':$expires.'.'.hash_hmac('sha256',$expires,accessKey($c)),['expires'=>$close?1:time()+30*86400,'path'=>'/','secure'=>$c['secure'],'httponly'=>true,'samesite'=>'Lax']);
 }
 function db(array $c): PDO {
     try {$db=new PDO('mysql:host='.$c['db_host'].';port='.($c['db_port']??3306).';dbname='.$c['db_name'].';charset=utf8mb4',$c['db_user'],$c['db_password'],[PDO::ATTR_ERRMODE=>PDO::ERRMODE_EXCEPTION,PDO::ATTR_DEFAULT_FETCH_MODE=>PDO::FETCH_ASSOC,PDO::ATTR_EMULATE_PREPARES=>false]);}

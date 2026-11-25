@@ -21,7 +21,7 @@ try{
         if(!is_array($data)||!is_string($data['password']??null))throw new FamilyUpdateError('Nhập mật khẩu truy cập website.');
         $updater=new FamilyUpdater(dirname(__DIR__).'/family-private',__DIR__,$c);$updater->unlock($data['password']);
         $expiry=(string)(int)(microtime(true)*1000+30*86400000);$cookie=$expiry.'.'.hash_hmac('sha256',$expiry,hash('sha256',"family-hosting-session\0".$c['access_password'],true));
-        setcookie('fam_access',$cookie,['expires'=>time()+30*86400,'path'=>'/','secure'=>!$test,'httponly'=>true,'samesite'=>'Strict']);
+        setcookie('fam_access',$cookie,['expires'=>time()+30*86400,'path'=>'/','secure'=>!$test,'httponly'=>true,'samesite'=>'Lax']);
         $updater->status();echo json_encode(['ok'=>true]);exit;
     }
     $cookie=$_COOKIE['fam_access']??'';$parts=[];
