@@ -1,3 +1,9 @@
+// Signed in already but the first request came without the cookie (some Android launchers and browsers):
+// a same-origin request carries it, so check once and go straight into the app.
+(()=>{let recent=false;try{recent=Date.now()-Number(sessionStorage.getItem('fam-access-auto')||0)<30000;}catch{}
+  if(!recent)fetch('/',{redirect:'manual',cache:'no-store',credentials:'same-origin'}).then(response=>{if(!response.ok||response.type==='opaqueredirect')return;
+    try{sessionStorage.setItem('fam-access-auto',String(Date.now()));}catch{} // at most once per 30 s, never a loop
+    location.replace('/'+location.hash);}).catch(()=>{});})();
 document.querySelector('#access-form').addEventListener('submit',async event=>{
   event.preventDefault();const button=event.submitter;button.disabled=true;
   try {

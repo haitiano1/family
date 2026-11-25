@@ -1,3 +1,7 @@
+# 0.32.24 — Android không hỏi mật khẩu mỗi lần mở
+
+Dùng **Cập nhật một chạm**. Không đổi dữ liệu.
+
 # 0.32.23 — Máy tính hiện đủ mục menu
 
 Dùng **Cập nhật một chạm**.

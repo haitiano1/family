@@ -28,7 +28,8 @@ export function hosting(env = process.env) {
       if (attempts>=30) return {status:429,error:'Đã thử quá nhiều lần. Vui lòng đợi 10 phút.'};
       if (typeof value !== 'string' || !equal(createHash('sha256').update(value).digest('hex'),createHash('sha256').update(password).digest('hex'))) {attempts++;return {status:401,error:'Mật khẩu truy cập không đúng.'};}
       const expires=String(Date.now()+30*86400000);
-      return {cookie:`fam_access=${expires}.${sign(expires)}; HttpOnly; Secure; SameSite=Strict; Path=/; Max-Age=2592000`};
+      // Lax: an Android home-screen launch counts as coming from another app and would drop a Strict cookie.
+      return {cookie:`fam_access=${expires}.${sign(expires)}; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=2592000`};
     }
   };
 }
