@@ -101,7 +101,12 @@ check(lookupAdminState($db)['gmail_import']===true,'Gmail import offered once th
 beginAudit($db,'Dữ liệu giả');$ten=saveFamilyRecord($db,null,['name'=>'Family 10','manager_email'=>'owner10@example.com'])['id'];finishAudit();
 $gmailReply=['ok'=>true,'invites'=>[]];$gmailSend=function(array $request)use(&$gmailReply){check($request===['action'=>'read','scope'=>'invites'],'read-only Gmail request');return $gmailReply;};
 $gmail=fn()=>sheetsGmailInvites($db,$c,$gmailSend);
-$mail=fn(string $to,string $url,array $emails,string $at)=>['id'=>md5($to.$url),'to'=>$to,'date'=>substr($at,0,10),'sent_at'=>$at,'url'=>$url,'emails'=>$emails];
+// Mail dates are written for early November 2026; they move forward with the clock so invites stay inside the
+// 14-day window Lấy link mời reads (whole days, so the order and the dates checked below keep their meaning).
+$shiftDays=max(0,intdiv(time()-strtotime('2026-11-08T00:00:00Z'),86400));
+$day=fn(string $d)=>gmdate('Y-m-d',strtotime($d.'T00:00:00Z')+$shiftDays*86400);
+$when=fn(string $at)=>gmdate('Y-m-d\TH:i:s.000\Z',strtotime($at)+$shiftDays*86400);
+$mail=fn(string $to,string $url,array $emails,string $at)=>['id'=>md5($to.$url),'to'=>$to,'date'=>substr($when($at),0,10),'sent_at'=>$when($at),'url'=>$url,'emails'=>$emails];
 $invite=fn(int $family,string $label)=>one($db,'SELECT * FROM family_invites WHERE family_id=? AND label=? ORDER BY id DESC LIMIT 1',[$family,$label]);
 $gmailReply=['ok'=>false,'code'=>'request'];check(str_contains(fails($gmail,409,'old Apps Script')->getMessage(),'capQuyenGmail'),'old script asks for the new Code.gs');
 $gmailReply=['ok'=>false,'code'=>'gmail_permission'];check(str_contains(fails($gmail,502,'no Gmail permission')->getMessage(),'capQuyenGmail'),'permission hint');
@@ -117,13 +122,13 @@ $gmailReply=['ok'=>true,'invites'=>[
 ]];
 $r=$gmail();check($r['found']===5&&$r['added']===2&&$r['updated']===0&&$r['families']===['Family 09','Family 10'],'two links filed: '.json_encode($r));
 check($r['unmatched']===['shop+f99s1@gmail.com','shop+f04s1@gmail.com']&&$r['unmatched_count']===2,'unknown and archived owners reported');
-$i1=$invite($b,'shop+f09s1@gmail.com');check($i1['url']==='https://families.google.com/join/promo/a1'&&$i1['sent_on']==='2026-11-03','newest mail per Gmail wins');check($invite($ten,'shop+f10s1@gmail.com')['url']==='https://families.google.com/join/promo/b1','filed under the inviting owner');
+$i1=$invite($b,'shop+f09s1@gmail.com');check($i1['url']==='https://families.google.com/join/promo/a1'&&$i1['sent_on']===$day('2026-11-03'),'newest mail per Gmail wins');check($invite($ten,'shop+f10s1@gmail.com')['url']==='https://families.google.com/join/promo/b1','filed under the inviting owner');
 check(!one($db,"SELECT id FROM family_invites WHERE url LIKE '%evil%' OR url LIKE '%/c1' OR url LIKE '%/d1'"),'nothing else stored');
 check(str_contains(json_encode(all($db,'SELECT action,message FROM audit_events'),JSON_UNESCAPED_UNICODE),'Lấy link mời từ Gmail'),'journal');
 $r=$gmail();check($r['added']===0&&$r['updated']===0&&$r['unchanged']===2,'repeat import changes nothing');
 // Google sent a new invitation to the same Gmail: the unused link is replaced in place.
 $gmailReply['invites'][]=$mail('shop+f09s1@gmail.com','https://families.google.com/join/promo/a2',['owner09@example.com'],'2026-11-04T08:00:00.000Z');
-$r=$gmail();check($r['updated']===1&&$r['added']===0,'newer mail updates the ready link');$i2=$invite($b,'shop+f09s1@gmail.com');check($i2['id']===$i1['id']&&$i2['url']==='https://families.google.com/join/promo/a2'&&(int)$i2['revision']===(int)$i1['revision']+1&&$i2['sent_on']==='2026-11-04','same invite, new link');
+$r=$gmail();check($r['updated']===1&&$r['added']===0,'newer mail updates the ready link');$i2=$invite($b,'shop+f09s1@gmail.com');check($i2['id']===$i1['id']&&$i2['url']==='https://families.google.com/join/promo/a2'&&(int)$i2['revision']===(int)$i1['revision']+1&&$i2['sent_on']===$day('2026-11-04'),'same invite, new link');
 // A link a customer joined with stays; the new mail becomes another link. An assigned link is replaced so the customer sees it.
 $moveTo=function(int $member,int $inviteId)use($db,$b,$ten){$m=one($db,'SELECT * FROM members WHERE id=?',[$member]);$i=one($db,'SELECT revision FROM family_invites WHERE id=?',[$inviteId]);return lookupBulkMove($db,['from_family_id'=>$b,'to_family_id'=>$ten,'expected_manager_email'=>'owner10@example.com','assignments'=>[['member_id'=>$member,'revision'=>(int)$m['renewal_revision'],'expected_email'=>$m['email'],'invite_id'=>$inviteId,'invite_revision'=>(int)$i['revision']]]]);};
 $bao=(int)one($db,'SELECT id FROM members WHERE email=?',['quocbao@example.com'])['id'];$used=$invite($ten,'shop+f10s1@gmail.com');$moveTo($bao,(int)$used['id']);
@@ -135,7 +140,7 @@ $nam=(int)one($db,'SELECT id FROM members WHERE email=?',['hoangnam@example.com'
 $gmailReply['invites'][]=$mail('shop+f10s1@gmail.com','https://families.google.com/join/promo/b3',['owner10@example.com'],'2026-11-04T10:00:00.000Z');
 $r=$gmail();check($r['updated']===1,'assigned link replaced');$item=lookupResult($db,'hoangnam@example.com')['items'][0];check($item['move']['invite_url']==='https://families.google.com/join/promo/b3','customer sees the new link');
 // A link pasted by hand with a later date is not overwritten by an older mail.
-beginAudit($db,'Dữ liệu giả');lookupSaveInvite($db,$b,null,['label'=>'shop+f09s3@gmail.com','url'=>'https://families.google.com/join/promo/manual','sent_on'=>'2026-11-04']);finishAudit();
+beginAudit($db,'Dữ liệu giả');lookupSaveInvite($db,$b,null,['label'=>'shop+f09s3@gmail.com','url'=>'https://families.google.com/join/promo/manual','sent_on'=>$day('2026-11-04')]);finishAudit();
 $gmailReply['invites'][]=$mail('shop+f09s3@gmail.com','https://families.google.com/join/promo/older',['owner09@example.com'],'2026-11-02T09:00:00.000Z');
 $r=$gmail();check($r['updated']===0&&$invite($b,'shop+f09s3@gmail.com')['url']==='https://families.google.com/join/promo/manual','newer manual link kept');
 $gmailReply=['ok'=>true,'invites'=>'oops'];fails($gmail,502,'malformed reply');
@@ -201,7 +206,7 @@ $gmailReply=['ok'=>true,'invites'=>[
 ]];
 $r=$gmail();check($r['wanted']===null&&$r['added']===0&&in_array('shop+qj1@gmail.com',$r['unmatched'],true),'without a request an unknown sender stays unmatched');
 $r=$wantGmail(['to'=>'S.hop+QJ1@gmail.com','family_id'=>$ten]);$q=one($db,'SELECT * FROM family_invites WHERE id=?',[$r['wanted']]);
-check($q&&(int)$q['family_id']===$ten&&$q['label']==='shop+qj1@gmail.com'&&$q['url']==='https://families.google.com/join/promo/q1'&&$q['sent_on']==='2026-11-06'&&$r['added']===1,'requested mail filed under that Family: '.json_encode($r));
+check($q&&(int)$q['family_id']===$ten&&$q['label']==='shop+qj1@gmail.com'&&$q['url']==='https://families.google.com/join/promo/q1'&&$q['sent_on']===$day('2026-11-06')&&$r['added']===1,'requested mail filed under that Family: '.json_encode($r));
 check($r['unmatched']===['shop+qj2@gmail.com'],'other unknown mails stay unmatched');
 $r=$wantGmail(['to'=>'shop+qj1@gmail.com','family_id'=>$ten]);check($r['wanted']===(int)$q['id']&&$r['added']===0&&$r['updated']===0,'asking again finds the same link');
 check($wantGmail(['to'=>'shop+none@gmail.com','family_id'=>$ten])['wanted']===null,'no mail, nothing found');
@@ -234,7 +239,7 @@ $r=$gmail();check($r['skipped_deleted']===0,'restored link is a normal link agai
 // ---- Đã fix · Đổi sang mail mới keeps customers in the same Family ----
 beginAudit($db,'Dữ liệu giả');$s16=saveFamilyRecord($db,null,['name'=>'Family 16','manager_email'=>'owner16@example.com'])['id'];finishAudit();
 foreach(['p1@example.com'=>'active','p2@example.com'=>'invited'] as $address=>$state)q($db,"INSERT INTO members(family_id,email,customer_name,expires_at,plan_months,membership_status) VALUES (?,?,?,?,1,?)",[$s16,$address,'Khách '.$address,'2020-01-01',$state]);
-beginAudit($db,'Dữ liệu giả');$oldLink=lookupSaveInvite($db,$s16,null,['label'=>'shop+f16old@gmail.com','url'=>'https://families.google.com/join/promo/f16old','sent_on'=>'2026-11-01'])['id'];finishAudit();
+beginAudit($db,'Dữ liệu giả');$oldLink=lookupSaveInvite($db,$s16,null,['label'=>'shop+f16old@gmail.com','url'=>'https://families.google.com/join/promo/f16old','sent_on'=>$day('2026-11-01')])['id'];finishAudit();
 sleep(1);beginAudit($db,'Báo lỗi thử');$c16=saveIssue($db,null,['family_id'=>$s16,'target_type'=>'manager','title'=>'  '])['id'];finishAudit();sleep(1);check(one($db,'SELECT title FROM issues WHERE id=?',[$c16])['title']==='Bị quét','an empty title means Bị quét');
 $o16=one($db,'SELECT * FROM issues WHERE id=?',[$c16]);
 try{beginAudit($db,'Fix thử');saveIssue($db,$c16,['revision'=>(int)$o16['revision'],'status'=>'done','resolution'=>'replace','replacement_email'=>'owner16-new@example.com','expected_email'=>'owner16@example.com','invite_count'=>6]);finishAudit();check(false,'six mails refused');}catch(FamilyError $e){finishAudit(false);check($e->status===400,'six mails refused');}
@@ -261,7 +266,7 @@ check($p2['move']['invite_url']!==''&&$p2['move']['invite_url']!==$p1['move']['i
 beginAudit($db,'Dữ liệu giả');$s17=saveFamilyRecord($db,null,['name'=>'Family 17','manager_email'=>'owner17@example.com'])['id'];$s18=saveFamilyRecord($db,null,['name'=>'Family 18','manager_email'=>'owner18@example.com'])['id'];finishAudit();
 q($db,"INSERT INTO members(family_id,email,customer_name,expires_at,plan_months,membership_status) VALUES (?,?,?,?,1,'active')",[$s17,'p3@example.com','Khách 3','2099-01-01']);
 q($db,"INSERT INTO vault_items(payload,revision,created_at,updated_at,family_id) VALUES ('opaque',0,?,?,?)",[stamp(),stamp(),$s18]);
-beginAudit($db,'Dữ liệu giả');$donorLink=lookupSaveInvite($db,$s18,null,['label'=>'shop+f18a@gmail.com','url'=>'https://families.google.com/join/promo/f18a','sent_on'=>'2026-11-05'])['id'];lookupGenerateInviteMails($db,$s18,['count'=>1]);finishAudit();
+beginAudit($db,'Dữ liệu giả');$donorLink=lookupSaveInvite($db,$s18,null,['label'=>'shop+f18a@gmail.com','url'=>'https://families.google.com/join/promo/f18a','sent_on'=>$day('2026-11-05')])['id'];lookupGenerateInviteMails($db,$s18,['count'=>1]);finishAudit();
 sleep(1);beginAudit($db,'Báo lỗi thử');$c17=saveIssue($db,null,['family_id'=>$s17,'target_type'=>'manager','title'=>'Bị quét'])['id'];finishAudit();
 $o17=one($db,'SELECT * FROM issues WHERE id=?',[$c17]);
 beginAudit($db,'Fix thử');$r17=saveIssue($db,$c17,['revision'=>(int)$o17['revision'],'status'=>'done','resolution'=>'replace','replacement_email'=>'owner18@example.com','expected_email'=>'owner17@example.com']);finishAudit();
