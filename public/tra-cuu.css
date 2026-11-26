@@ -278,3 +278,6 @@ fieldset { margin: 0; padding: 0; border: 0; min-width: 0; display: grid; gap: 1
 .btn.alert:hover { background: #d23c41; }
 .btn.alert svg { width: 20px; height: 20px; flex: none; }
 .actions .btn.alert { flex: 1 1 100%; }
+
+/* Trang người bán (kiem-tra.html): one neutral line instead of the shop's contact buttons */
+.seller-help { margin: 4px 0 0; padding: 12px 14px; border-radius: 12px; background: var(--blue-tint); color: var(--blue-ink); font-weight: 600; }

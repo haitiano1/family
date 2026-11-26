@@ -119,6 +119,12 @@ test('incident flow: status, invite pool, bulk move with one link per customer, 
     await c('verify', 'POST', { email: 'minhanh@example.com', code: 'AAAAAA' }, 401);
     await c('verify', 'POST', { email: 'minhanh@example.com', code: '12' }, 400);
     await f.call('lookup/verify', 'POST', { email: 'minhanh@example.com', code: state.lookup_codes['minhanh@example.com'] }, 403, { 'X-Fam-Request': '' });
+    // Seller page (kiem-tra.html): same lookup, no shop settings in any answer.
+    const seller = f.customer(), sellerHead = { 'X-Fam-Page': 'seller' };
+    assert.deepEqual((await seller('info', 'GET', undefined, 200, sellerHead)).shop, {});
+    const sellerResult = await seller('verify', 'POST', { email: 'minhanh@example.com', code: state.lookup_codes['minhanh@example.com'] }, 200, sellerHead);
+    assert.deepEqual(sellerResult.shop, {}); assert.ok(sellerResult.items.length);
+    assert.deepEqual((await seller('me', 'GET', undefined, 200, sellerHead)).shop, {}); assert.ok((await seller('me')).shop);
     let result = await c('verify', 'POST', { email: ' MinhAnh@Example.com ', code: state.lookup_codes['minhanh@example.com'].toLowerCase() });
     assert.match(c.cookie(), /^fam_lookup=[a-f0-9]{64}$/);
     assert.equal(result.items.length, 1);
@@ -284,6 +290,9 @@ test('hosted mode keeps admin APIs behind the access password while the lookup p
     for (const image of ['/huong-dan-roi-nhom.png', '/huong-dan-khong-co-nhom.png']) { const r = await fetch(f.base + image); assert.equal(r.status, 200); assert.match(r.headers.get('content-type'), /^image\/png/); }
     const c = f.customer();
     assert.ok((await c('info')).shop);
+    const sellerPage = await fetch(f.base + '/kiem-tra.html'); assert.equal(sellerPage.status, 200); const sellerHtml = await sellerPage.text();
+    assert.match(sellerHtml, /data-page="seller"/); assert.doesNotMatch(sellerHtml, /Fix lỗi Youtube Premium|icon-192/);
+    const sellerJoin = await fetch(f.base + '/api/lookup/guide-video/join-seller'); assert.equal(sellerJoin.status, 200); assert.ok((await sellerJoin.arrayBuffer()).byteLength > 100000);
     const response = await f.call('lookup/verify', 'POST', { email: 'nobody@example.com', code: 'AAAAAA' }, 401);
     assert.equal(response.response.headers.get('set-cookie'), null);
     await f.call('lookup/verify', 'POST', { email: 'nobody@example.com', code: 'AAAAAA' }, 403, { Origin: 'https://foreign.example' });

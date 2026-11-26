@@ -1,3 +1,7 @@
+# 0.32.25 — Trang tra cứu cho khách của CTV
+
+Dùng **Cập nhật một chạm**. Không đổi dữ liệu. Thêm `public_html/kiem-tra.html` và video `family-private/guide-video-join-seller.php`.
+
 # 0.32.24 — Android không hỏi mật khẩu mỗi lần mở
 
 Dùng **Cập nhật một chạm**. Không đổi dữ liệu.

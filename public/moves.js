@@ -201,6 +201,12 @@ const codeOf = (state, address) => state.lookup_codes?.[address] || '';
 // Short link the shop sends: https://domain/?K7P2QX (older #ma= links keep working).
 // With a path (beeflix.vn/haiytb) the code follows directly: beeflix.vn/haiytb?K7P2QX.
 const personalLink = (state, code) => { const base = state.lookup_settings?.short_domain || location.origin; return /^https?:\/\/[^/]+\/./.test(base) ? `${base}?${code}` : `${base}/?${code}`; };
+// Seller page for resellers' customers: same lookup with nothing about the shop (no name, no contacts).
+export const sellerPageUrl = () => location.origin + '/kiem-tra.html';
+export function sellerMessage(state, member) {
+  const code = codeOf(state, member.email); if (!code) return '';
+  return `Link tra cứu: ${sellerPageUrl()}?${code}\nGmail: ${member.email} · Mã tra cứu: ${code}\nKhi YouTube Premium có vấn đề, mở link bằng Chrome hoặc Safari để xem tình trạng nhóm và nhận link vào nhóm mới.`;
+}
 export function lookupMessage(state, member) {
   const code = codeOf(state, member.email); if (!code) return '';
   return `Link tra cứu Family của bạn: ${personalLink(state, code)}\nGmail: ${member.email} · Mã tra cứu: ${code}\nKhi YouTube Premium có vấn đề, mở link bằng Chrome hoặc Safari để xem tình trạng nhóm và nhận link vào nhóm mới.`;
@@ -289,7 +295,7 @@ export function familyStatusBadge(ctx, familyId) {
 }
 export function customerLookupAction(ctx, member) {
   const message = lookupMessage(ctx.state, member);
-  return message ? ctx.copyButton(message, 'link tra cứu của khách', 'Copy link tra cứu') + ctx.btn('lookup-rotate', 'Đổi mã tra cứu', 'secondary tiny', `data-email="${ctx.escape(member.email)}"`) : '';
+  return message ? ctx.copyButton(message, 'link tra cứu của khách', 'Copy link tra cứu') + ctx.copyButton(sellerMessage(ctx.state, member), 'link tra cứu cho khách của CTV (không có thông tin shop)', 'Copy link CTV') + ctx.btn('lookup-rotate', 'Đổi mã tra cứu', 'secondary tiny', `data-email="${ctx.escape(member.email)}"`) : '';
 }
 
 const readyInvites = (state, familyId) => (state.invites || []).filter(i => i.family_id === familyId && i.holder_state === 'ready');
@@ -502,7 +508,7 @@ export function lookupPage(ctx) {
     + fold('lookup-moves', false, 'Link đã giao cho khách', [[waiting.length, 'chờ link', 'amber'], [handed.length, 'đã nhận link', 'green'], [moves.length - open.length, 'đã xong / cần xem', '']], moves.length ? moveTable(ctx, moves, true) + '<p class="subtext fold-help">Mới nhất trước. Khách chờ link sẽ tự nhận khi có link Sẵn sàng.</p>' : '<p class="muted">Chưa có khách nhận link.</p>')
     + telegramCard(ctx)
     + `<section class="card"><div class="section-heading"><div><h2>Thông tin hiển thị cho khách</h2><p>Tên shop và link liên hệ xuất hiện trên trang tra cứu.</p></div><div class="row-actions">${btn('message-templates', 'Lời nhắn mẫu', 'secondary')}${btn('lookup-settings', 'Sửa thông tin', 'secondary')}</div></div><div class="list-item"><strong>Tên shop</strong><p>${escape(settings.shop_name || 'Chưa đặt')}</p></div><div class="list-item"><strong>Zalo</strong><p>${settings.zalo_url ? `<a class="contact-link" href="${escape(settings.zalo_url)}" target="_blank" rel="noopener noreferrer">${escape(settings.zalo_url)}</a>` : 'Chưa đặt'}</p></div><div class="list-item"><strong>Facebook</strong><p>${settings.facebook_url ? `<a class="contact-link" href="${escape(settings.facebook_url)}" target="_blank" rel="noopener noreferrer">${escape(settings.facebook_url)}</a>` : 'Chưa đặt'}</p></div><div class="list-item"><strong>Link liên hệ khác</strong><p>${settings.contact_url ? `<a class="contact-link" href="${escape(settings.contact_url)}" target="_blank" rel="noopener noreferrer">${escape(settings.contact_label || settings.contact_url)}</a>` : 'Chưa đặt'}</p></div><div class="list-item"><strong>Ghi chú cho khách</strong><p>${escape(settings.help_text || 'Chưa có')}</p></div></section>`
-    + `<section class="card"><h2>Cách dùng</h2><ol class="lookup-steps"><li>Gửi mỗi khách link tra cứu riêng (menu … của khách → <strong>Copy link tra cứu</strong>), ví dụ lúc bán hoặc gia hạn.</li><li>Khi mail chủ bị quét: <strong>Fix lỗi → Báo lỗi</strong>. Family tự thành Bị quét và khách thấy lời nhắn.</li><li>Có Gmail chủ mới: <strong>Đã fix → Đổi sang Gmail chủ mới</strong>, chọn số mail mời. Khách ở lại Family và chờ link của chủ mới.</li><li>Mời các mail vừa tạo từ Gmail chủ mới, rồi bấm <strong>Lấy link mời</strong>${state.gmail_import ? '' : ' (cần kết nối Google Sheet; hoặc <strong>+ Thêm link mời</strong> để dán tay)'}.</li><li>Khách mở link tra cứu, nhập Gmail để thấy link vào nhóm mới; theo dõi tiến độ tại đây.</li></ol></section>`;
+    + `<section class="card"><h2>Cách dùng</h2><ol class="lookup-steps"><li>Gửi mỗi khách link tra cứu riêng (menu … của khách → <strong>Copy link tra cứu</strong>), ví dụ lúc bán hoặc gia hạn.</li><li>Khi mail chủ bị quét: <strong>Fix lỗi → Báo lỗi</strong>. Family tự thành Bị quét và khách thấy lời nhắn.</li><li>Có Gmail chủ mới: <strong>Đã fix → Đổi sang Gmail chủ mới</strong>, chọn số mail mời. Khách ở lại Family và chờ link của chủ mới.</li><li>Mời các mail vừa tạo từ Gmail chủ mới, rồi bấm <strong>Lấy link mời</strong>${state.gmail_import ? '' : ' (cần kết nối Google Sheet; hoặc <strong>+ Thêm link mời</strong> để dán tay)'}.</li><li>Khách mở link tra cứu, nhập Gmail để thấy link vào nhóm mới; theo dõi tiến độ tại đây.</li><li>Khách của CTV: dùng <strong>Copy link CTV</strong> (menu … của khách). Trang <a href="/kiem-tra.html" target="_blank" rel="noopener">kiem-tra.html</a> tra cứu y như trên nhưng không có tên shop, nút liên hệ hay lời nhắn chung; chỗ cần hỗ trợ ghi <em>Liên hệ với người bán để được hỗ trợ</em>.</li></ol></section>`;
 }
 
 function statusFields(ctx, family, status, picker = '') {
