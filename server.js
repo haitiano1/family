@@ -55,8 +55,11 @@ async function body(req, limit = 16384) {
 const lookupToken=req=>(req.headers.cookie||'').split(';').map(s=>s.trim()).find(s=>s.startsWith('fam_lookup='))?.slice(11)||'';
 const lookupCookie=(res,token,age)=>res.setHeader('Set-Cookie',`fam_lookup=${token}; HttpOnly; SameSite=Strict; Path=/api/lookup; Max-Age=${age}${access.enabled?'; Secure':''}`);
 // Public customer lookup: no access password; a verified Gmail + code opens a one-hour session cookie.
+const sendJson=send;
 async function lookupRequest(req,res,url){
   const route=url.pathname;
+  // Seller page (kiem-tra.html): answers carry no shop settings (name, contacts, short link).
+  const seller=req.headers['x-fam-page']==='seller',send=(r,code,value)=>sendJson(r,code,seller&&value&&typeof value==='object'&&'shop' in value?{...value,shop:{}}:value);
   if(req.method==='GET'&&route==='/api/lookup/info')return send(res,200,{shop:lookup.settings()});
   if((req.method==='GET'||req.method==='HEAD')&&/^\/api\/lookup\/media\/[a-f0-9]{32}$/.test(route)){ // Video hướng dẫn of a notice, with byte ranges.
     const file=lookup.mediaFile(route.split('/')[4]);if(!file)return send(res,404,{error:'Không tìm thấy video.'});
@@ -67,7 +70,7 @@ async function lookupRequest(req,res,url){
     res.writeHead(status,{...head,'Content-Length':end-start+1});if(req.method==='HEAD')return res.end();
     return createReadStream(file.path,{start,end}).pipe(res);
   }
-  const guide={'/api/lookup/guide-video':'huong-dan-roi-nhom.mp4','/api/lookup/guide-video/join':'huong-dan-vao-nhom.mp4','/api/lookup/guide-video/travel':'huong-dan-di-du-lich.mp4'}[route];
+  const guide={'/api/lookup/guide-video':'huong-dan-roi-nhom.mp4','/api/lookup/guide-video/join':'huong-dan-vao-nhom.mp4','/api/lookup/guide-video/travel':'huong-dan-di-du-lich.mp4','/api/lookup/guide-video/join-seller':'huong-dan-vao-nhom-nguoi-ban.mp4'}[route];
   if((req.method==='GET'||req.method==='HEAD')&&guide){ // Guide videos (rời nhóm, vào nhóm, đi du lịch), with byte ranges for phones.
     const video=readFileSync(path.join(root,'public',guide)),size=video.length,m=/^bytes=(\d*)-(\d*)$/.exec(req.headers.range||'');
     let start=0,end=size-1,status=200;const head={'Content-Type':'video/mp4','Accept-Ranges':'bytes','Cache-Control':'no-store'};
@@ -273,7 +276,7 @@ async function handle(req, res) {
       run(`DELETE FROM ${table} WHERE id=?`, id); log(`${actor.username}: xóa hồ sơ nội bộ ${table} #${id}`); return send(res, 200, { ok: true });
     }
     if (req.method === 'GET') {
-      const assets = { '/': ['index.html','text/html'], '/access':['access.html','text/html'], '/access.js':['access.js','text/javascript'], '/app.js': ['app.js','text/javascript'], '/product-import.js':['product-import.js','text/javascript'], '/sync-status.css':['sync-status.css','text/css'], '/sheets.js':['sheets.js','text/javascript'], '/updater.js':['updater.js','text/javascript'], '/statistics.js':['statistics.js','text/javascript'], '/vault.js': ['vault.js','text/javascript'], '/moves.js':['moves.js','text/javascript'],'/todos.js':['todos.js','text/javascript'], '/tra-cuu':['tra-cuu.html','text/html'], '/tra-cuu.html':['tra-cuu.html','text/html'], '/tra-cuu.js':['tra-cuu.js','text/javascript'], '/tra-cuu.css':['tra-cuu.css','text/css'],'/huong-dan-roi-nhom.png':['huong-dan-roi-nhom.png','image/png'],'/huong-dan-khong-co-nhom.png':['huong-dan-khong-co-nhom.png','image/png'], '/vault-sheet.js':['vault-sheet.js','text/javascript'], '/vault-families.js':['../vault-families.js','text/javascript'], '/style.css': ['style.css','text/css'], '/csv.js': ['csv.js','text/javascript'], '/contacts.js':['contacts.js','text/javascript'], '/domain.js': ['../domain.js','text/javascript'], '/manifest.webmanifest':['manifest.webmanifest','application/manifest+json'], '/icon-180.png':['icon-180.png','image/png'], '/icon-192.png':['icon-192.png','image/png'], '/icon-512.png':['icon-512.png','image/png'] };
+      const assets = { '/': ['index.html','text/html'], '/access':['access.html','text/html'], '/access.js':['access.js','text/javascript'], '/app.js': ['app.js','text/javascript'], '/product-import.js':['product-import.js','text/javascript'], '/sync-status.css':['sync-status.css','text/css'], '/sheets.js':['sheets.js','text/javascript'], '/updater.js':['updater.js','text/javascript'], '/statistics.js':['statistics.js','text/javascript'], '/vault.js': ['vault.js','text/javascript'], '/moves.js':['moves.js','text/javascript'],'/todos.js':['todos.js','text/javascript'], '/tra-cuu':['tra-cuu.html','text/html'],'/kiem-tra':['kiem-tra.html','text/html'],'/kiem-tra.html':['kiem-tra.html','text/html'], '/tra-cuu.html':['tra-cuu.html','text/html'], '/tra-cuu.js':['tra-cuu.js','text/javascript'], '/tra-cuu.css':['tra-cuu.css','text/css'],'/huong-dan-roi-nhom.png':['huong-dan-roi-nhom.png','image/png'],'/huong-dan-khong-co-nhom.png':['huong-dan-khong-co-nhom.png','image/png'], '/vault-sheet.js':['vault-sheet.js','text/javascript'], '/vault-families.js':['../vault-families.js','text/javascript'], '/style.css': ['style.css','text/css'], '/csv.js': ['csv.js','text/javascript'], '/contacts.js':['contacts.js','text/javascript'], '/domain.js': ['../domain.js','text/javascript'], '/manifest.webmanifest':['manifest.webmanifest','application/manifest+json'], '/icon-180.png':['icon-180.png','image/png'], '/icon-192.png':['icon-192.png','image/png'], '/icon-512.png':['icon-512.png','image/png'] };
       const asset = assets[url.pathname]; if (!asset) return send(res, 404, { error: 'Không tìm thấy.' });
       res.writeHead(200, { 'Content-Type': asset[1] + '; charset=utf-8', 'Cache-Control': 'no-store', 'Content-Security-Policy': "default-src 'self'; style-src 'self'; script-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'" });
       return res.end(readFileSync(path.join(root, 'public', asset[0])));

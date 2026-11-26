@@ -8,9 +8,14 @@ const time = value => { if (!value) return ''; const parts = Object.fromEntries(
 const statusColors = { active: 'green', checking: 'amber', scanned: 'amber', disabled: 'red' };
 const inApp = /FBAN|FBAV|FB_IAB|FBIOS|Messenger|Instagram|Zalo|Line\//i.test(navigator.userAgent);
 let shop = {}, data = null, problemOpen = null;
+// Seller page (kiem-tra.html, for the shop's resellers): same lookup, but nothing about the shop is fetched or
+// shown; contact lines say to ask the seller, and the server leaves shop settings out of its answers.
+const seller = document.documentElement.dataset.page === 'seller';
+const SELLER_HELP = 'Liên hệ với người bán để được hỗ trợ.';
 
 async function call(path, body) {
-  const options = body === undefined ? { headers: { 'X-Fam-Request': '1' } } : { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Fam-Request': '1' }, body: JSON.stringify(body) };
+  const headers = { 'X-Fam-Request': '1', ...(seller ? { 'X-Fam-Page': 'seller' } : {}) };
+  const options = body === undefined ? { headers } : { method: 'POST', headers: { ...headers, 'Content-Type': 'application/json' }, body: JSON.stringify(body) };
   const response = await fetch('/api/lookup/' + path, options);
   let value = {}; try { value = await response.json(); } catch {}
   if (!response.ok) throw Object.assign(new Error(value.error || 'Không kết nối được. Kiểm tra mạng rồi thử lại.'), { status: response.status });
@@ -35,8 +40,9 @@ const contacts = () => [
 ].filter(Boolean);
 // One inline link (first contact the shop set) or the row of contact buttons with icons.
 const contactLink = (text = 'Nhắn shop', type = 'btn') => { const first = contacts()[0]; return first ? `<a class="${type}" href="${escape(first.href)}" target="_blank" rel="noopener noreferrer">${escape(text)}</a>` : ''; };
-const contactButtons = () => { const list = contacts(); return list.length ? `<div class="contacts">${list.map(c => `<a class="btn contact ${c.key}" href="${escape(c.href)}" target="_blank" rel="noopener noreferrer">${icons[c.key]}<span>${escape(c.text)}</span></a>`).join('')}</div>` : ''; };
+const contactButtons = () => { if (seller) return `<p class="seller-help">${SELLER_HELP}</p>`; const list = contacts(); return list.length ? `<div class="contacts">${list.map(c => `<a class="btn contact ${c.key}" href="${escape(c.href)}" target="_blank" rel="noopener noreferrer">${icons[c.key]}<span>${escape(c.text)}</span></a>`).join('')}</div>` : ''; };
 function footer() {
+  if (seller) { $('#foot').innerHTML = `<p>${SELLER_HELP}</p>`; return; }
   $('#foot').innerHTML = (shop.help_text ? `<p>${escape(shop.help_text)}</p>` : '') + (contacts().length ? `<p>Cần hỗ trợ? Nhắn shop qua</p>${contactButtons()}` : '');
 }
 function show(html, focus = true) {
@@ -57,7 +63,7 @@ function loginView(error = '', email = '', code = codeFromLink()) {
     </form>
   </section>
   <p class="trust">Trang chỉ hiện thông tin của chính bạn. Shop không bao giờ hỏi mật khẩu Gmail.</p>
-  ${contacts().length ? '<p class="muted">Chưa có mã? Nhắn shop để lấy mã ở nút bên dưới.</p>' : ''}`, false);
+  ${seller ? '' : contacts().length ? '<p class="muted">Chưa có mã? Nhắn shop để lấy mã ở nút bên dưới.</p>' : ''}`, false);
   (email ? $('#code') : $('#email')).focus();
 }
 
@@ -91,7 +97,7 @@ const chibi = () => `<svg viewBox="0 0 56 62" aria-hidden="true">
     <path d="M13.6 21.5C13.6 12 20 7 28 7s14.4 5 14.4 14.5z" fill="#ffffff" stroke="#d5dceb" stroke-width="1"/>
     <path d="M40 20.6c4.6-.2 8.4.6 9.6 2.2-2.6 1.2-6.6 1.4-10.6.8z" fill="#2f5bea"/>
     <circle cx="28" cy="7.4" r="1.6" fill="#2f5bea"/>
-    <text x="28" y="19" text-anchor="middle" font-size="10.5" font-weight="900" font-family="system-ui, -apple-system, Segoe UI, Roboto, sans-serif" fill="#e5293b">N</text>
+    ${seller ? '' : '<text x="28" y="19" text-anchor="middle" font-size="10.5" font-weight="900" font-family="system-ui, -apple-system, Segoe UI, Roboto, sans-serif" fill="#e5293b">N</text>'}
     <path class="sweat" d="M43 13c1.2 1.8 1.8 3 1.8 3.8a1.8 1.8 0 0 1-3.6 0c0-.8.6-2 1.8-3.8z" fill="#7cc4ff"/>
   </g>
 </svg>`;
@@ -221,7 +227,7 @@ function calmCard(item) {
     + (handled ? note('Shop đã xử lý báo lỗi của bạn' + (item.problem.handled_at ? ' lúc ' + time(item.problem.handled_at) : ''), item.problem.handled_note || 'Mở lại YouTube để kiểm tra. Vẫn lỗi thì báo lại cho shop.', 'green') : '')
     + planCard(item)
     + (expired
-      ? `<section class="card"><h2>Gia hạn gói</h2><p class="muted">Nhắn shop để chọn gói và thanh toán. Shop xác nhận xong, bạn tải lại trang này.</p>${contactButtons()}${open ? '' : `<button type="button" class="btn alert" data-act="problem-open" data-member="${item.member_ref}">Vẫn đang gia hạn mà mất Premium? Báo cho shop</button>`}</section>`
+      ? `<section class="card"><h2>Gia hạn gói</h2><p class="muted">${seller ? 'Gia hạn xong, bạn tải lại trang này.' : 'Nhắn shop để chọn gói và thanh toán. Shop xác nhận xong, bạn tải lại trang này.'}</p>${contactButtons()}${open ? '' : `<button type="button" class="btn alert" data-act="problem-open" data-member="${item.member_ref}">Vẫn đang gia hạn mà mất Premium? Báo cho shop</button>`}</section>`
       : `<section class="card"><h2>YouTube chưa hiện Premium?</h2><ul class="tips"><li>Kiểm tra YouTube đang đăng nhập đúng ${escape(data.email)}.</li><li>Đăng xuất YouTube rồi đăng nhập lại, đợi vài phút.</li></ul>${open ? '' : `<div class="actions"><button type="button" class="btn alert big" data-act="problem-open" data-member="${item.member_ref}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 2 20h20z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><path d="M12 10v4M12 17v.5" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg>Báo mất Premium cho shop</button></div>`}</section>`)
     + (open ? problemForm(item) : '');
 }
@@ -306,7 +312,8 @@ document.addEventListener('submit', async event => {
   } finally { if (button.isConnected) button.disabled = false; }
 });
 // Video Hướng dẫn rời nhóm in a popup; it plays with sound since the customer tapped to open it.
-const guideVideos = { leave: ['Cách rời nhóm gia đình cũ', '/api/lookup/guide-video'], join: ['Cách vào nhóm mới', '/api/lookup/guide-video/join'] };
+// The join video shows the lookup page; the seller page has its own version without the shop's header.
+const guideVideos = { leave: ['Cách rời nhóm gia đình cũ', '/api/lookup/guide-video'], join: ['Cách vào nhóm mới', seller ? '/api/lookup/guide-video/join-seller' : '/api/lookup/guide-video/join'] };
 function guideVideo(kind, custom) {
   const [title, src] = kind === 'notice' && custom ? [custom === '/api/lookup/guide-video/travel' ? 'Cách lấy lại YouTube Premium' : 'Video hướng dẫn từ shop', custom] : guideVideos[kind] || guideVideos.leave;
   let box = $('#guide-video');
@@ -349,7 +356,7 @@ document.addEventListener('click', async event => {
 });
 window.addEventListener('hashchange', () => { if (!data && codeFromLink() && $('#code')) $('#code').value = codeFromLink(); });
 
-try { shop = (await call('info')).shop || {}; } catch { shop = {}; }
+if (!seller) try { shop = (await call('info')).shop || {}; } catch { shop = {}; }
 // The customer page keeps its own heading; the shop name is still used elsewhere (Telegram, notes).
 footer();
 try { const current = await call('me'); if (current.signed_in === false) loginView(); else render(current, false); }

@@ -63,6 +63,8 @@ function lookupStatusRow(PDO $db,int $familyId): array {
     return one($db,'SELECT * FROM family_statuses WHERE family_id=?',[$familyId])?:['family_id'=>$familyId,'status'=>'active','note'=>'','updated_at'=>'','revision'=>0,'notice'=>'','notice_at'=>'','notice_video'=>'','notice_link'=>'','notice_link_note'=>''];
 }
 
+// Seller page (kiem-tra.html, for resellers' customers): answers carry no shop settings (name, contacts, short link).
+function lookupShopFor(PDO $db): array|object {return ($_SERVER['HTTP_X_FAM_PAGE']??'')==='seller'?(object)[]:lookupSettings($db);}
 function lookupSettings(PDO $db): array {
     $saved=array_column(all($db,'SELECT name,value FROM lookup_settings'),'value','name');$out=[];
     foreach(LOOKUP_SETTING_NAMES as $name)$out[$name]=(string)($saved[$name]??'');return $out;
@@ -849,7 +851,7 @@ function lookupResult(PDO $db,string $address): array {
         $view=$move&&in_array($move['state'],LOOKUP_OPEN_STATES,true)?'move':(in_array($status['status'],LOOKUP_PROBLEM_STATUSES,true)?'incident':(($problem['state']??'')==='open'?'reported':($waiting?'waiting':($period['expiry_status']==='expired'?'expired':'normal'))));
         $items[]=['member_ref'=>(int)$m['id'],'problem'=>$problem,'family_name'=>$m['family_name'],'plan_months'=>(int)$m['plan_months'],'expires_at'=>$m['expires_at'],...$period,'membership_status'=>$m['membership_status'],'status'=>$status['status'],'status_note'=>$status['note'],'notice'=>(string)($status['notice']??''),'notice_at'=>(string)($status['notice_at']??''),'notice_video'=>lookupVideoUrl($db,(string)($status['notice_video']??'')),'notice_link'=>(string)($status['notice_link']??''),'notice_link_note'=>(string)($status['notice_link_note']??''),'status_updated_at'=>$status['updated_at'],'view'=>$view,'move'=>$move];
     }
-    return ['email'=>$address,'today'=>today(),'shop'=>lookupSettings($db),'items'=>$items];
+    return ['email'=>$address,'today'=>today(),'shop'=>lookupShopFor($db),'items'=>$items];
 }
 function lookupBlocked(PDO $db,string $name,int $limit): bool {$r=one($db,'SELECT * FROM lookup_attempts WHERE name=?',[$name]);return $r&&(int)$r['window_end']>lookupMs()&&(int)$r['count']>=$limit;}
 function lookupBump(PDO $db,string $name): void {
@@ -923,7 +925,7 @@ function lookupCookie(array $c,string $token,int $age): void {
 // Guide videos on the lookup page (rời nhóm, vào nhóm). One-click update ships only code files, so each
 // MP4 travels as base64 inside family-private/guide-video*.php (made by scripts/package-php.py).
 // Byte ranges let phones start and seek the video.
-const LOOKUP_GUIDE_VIDEOS=['/api/lookup/guide-video'=>'guide-video.php','/api/lookup/guide-video/join'=>'guide-video-join.php','/api/lookup/guide-video/travel'=>'guide-video-travel.php'];
+const LOOKUP_GUIDE_VIDEOS=['/api/lookup/guide-video'=>'guide-video.php','/api/lookup/guide-video/join'=>'guide-video-join.php','/api/lookup/guide-video/travel'=>'guide-video-travel.php','/api/lookup/guide-video/join-seller'=>'guide-video-join-seller.php'];
 function lookupGuideVideo(string $name): never {
     $file=__DIR__.'/'.$name;$data=is_file($file)?base64_decode((string)(require $file),true):false;
     if(!is_string($data)||$data==='')fail('Không tìm thấy.',404);
@@ -941,7 +943,7 @@ function lookupGuideVideo(string $name): never {
 // transaction so its attempt counter survives an error answer.
 function lookupRequest(PDO $db,array $c,string $route,string $method): never {
     // $db is passed by reference below: the Gmail read may reconnect to MySQL.
-    if($route==='/api/lookup/info'&&$method==='GET')reply(['shop'=>lookupSettings($db)]);
+    if($route==='/api/lookup/info'&&$method==='GET')reply(['shop'=>lookupShopFor($db)]);
     if($route==='/api/lookup/verify'&&$method==='POST'){$r=lookupVerify($db,body(),(string)($_SERVER['REMOTE_ADDR']??''));lookupCookie($c,$r['token'],3600);reply(lookupWithFreshLinks($db,$c,$r['result']));}
     $token=$_COOKIE['fam_lookup']??'';
     if($route==='/api/lookup/logout'&&$method==='POST'){if(is_string($token)&&preg_match('/^[a-f0-9]{64}$/D',$token))q($db,'DELETE FROM lookup_sessions WHERE token_hash=?',[hash('sha256',$token)]);lookupCookie($c,'',0);reply(['ok'=>true]);}

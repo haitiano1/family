@@ -717,6 +717,7 @@ test('PHP lookup page: Family status, invite pool, bulk move, Gmail + code sign-
  for(const asset of ['/tra-cuu.js','/tra-cuu.css','/moves.js','/todos.js','/huong-dan-roi-nhom.png','/huong-dan-khong-co-nhom.png'])assert.equal((await fetch(f.base+asset)).status,200,asset);
  if(process.env.FAMILY_PHP_SOURCE_ONLY!=='1'){const video=await fetch(f.base+'/api/lookup/guide-video');assert.equal(video.status,200);assert.equal(video.headers.get('content-type'),'video/mp4');assert.equal((await video.arrayBuffer()).byteLength,readFileSync(root+'/public/huong-dan-roi-nhom.mp4').length);
   const join=await fetch(f.base+'/api/lookup/guide-video/join');assert.equal(join.status,200);assert.equal((await join.arrayBuffer()).byteLength,readFileSync(root+'/public/huong-dan-vao-nhom.mp4').length);
+  const sellerJoin=await fetch(f.base+'/api/lookup/guide-video/join-seller');assert.equal(sellerJoin.status,200);assert.equal((await sellerJoin.arrayBuffer()).byteLength,readFileSync(root+'/public/huong-dan-vao-nhom-nguoi-ban.mp4').length);
   const part=await fetch(f.base+'/api/lookup/guide-video',{headers:{Range:'bytes=10-19'}});assert.equal(part.status,206);assert.match(part.headers.get('content-range'),/^bytes 10-19\/\d+$/);assert.equal((await part.arrayBuffer()).byteLength,10);}
  const old=await a('families','POST',{name:'Family 04',manager_email:'owner04@example.com'},201),next=await a('families','POST',{name:'Family 09',manager_email:'owner09@example.com'},201);
  const minh=await a('members','POST',{family_id:old.id,email:'minhanh@example.com',customer_name:'Minh Anh',expires_at:'2099-01-01'},201);
@@ -733,6 +734,9 @@ test('PHP lookup page: Family status, invite pool, bulk move, Gmail + code sign-
  state=await a('state');assert.equal(state.members[0].family_id,next.id);assert.equal(state.members[0].membership_status,'invited');assert.equal(state.invites[0].holder_state,'assigned');assert.ok((await a('journal')).entries.some(e=>e.action==='Chuyển Family'));
  const lookup=async(endpoint,method='GET',data,status=200,cookie='')=>{const response=await fetch(f.base+'/api/lookup/'+endpoint,{method,headers:{'Content-Type':'application/json','X-Fam-Request':'1',Connection:'close',...(cookie?{Cookie:cookie}:{})},body:data===undefined?undefined:JSON.stringify(data)});assert.equal(response.status,status,await response.clone().text());return {body:await response.json(),cookie:(response.headers.get('set-cookie')||'').split(';')[0]};};
  assert.deepEqual((await lookup('me')).body,{signed_in:false});assert.ok((await lookup('info')).body.shop);
+ // Seller page (kiem-tra.html): public, and its answers carry no shop settings.
+ const sellerPage=await fetch(f.base+'/kiem-tra.html');assert.equal(sellerPage.status,200);assert.match(await sellerPage.text(),/data-page="seller"/);
+ const sellerInfo=await fetch(f.base+'/api/lookup/info',{headers:{'X-Fam-Page':'seller',Connection:'close'}});assert.deepEqual(await sellerInfo.json(),{shop:{}});
  const short=await fetch(f.base+'/?K7P2QX',{redirect:'manual',headers:{Connection:'close'}});assert.equal(short.status,200);assert.match(await short.text(),/tra-cuu\.js/);assert.equal((await fetch(f.base+'/?K7P2QX&x',{redirect:'manual',headers:{Connection:'close'}})).status,302);
  await lookup('verify','POST',{email:'minhanh@example.com',code:'AAAAAA'},401);
  const signed=await lookup('verify','POST',{email:'MinhAnh@Example.com',code:code.toLowerCase()});assert.match(signed.cookie,/^fam_lookup=[a-f0-9]{64}$/);
